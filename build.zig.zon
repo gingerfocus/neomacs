@@ -1,0 +1,19 @@
+.{
+    .name = "zano",
+    .version = "0.1.0",
+    //.minimum_zig_version = "0.11.0",
+    .dependencies = .{
+        .terminal = .{
+            .url = "https://github.com/gingerfocus/thermit/archive/4a703aeb901a16274539d42ff176867dbda1ef72.tar.gz",
+            .hash = "1220e2510447ece72e357b1c3c3c18547280691bd40331772eb43362825a6a3c67c7",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        // For example...
+        //"LICENSE",
+        "README.md",
+    },
+}

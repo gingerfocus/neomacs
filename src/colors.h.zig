@@ -14,6 +14,6 @@ pub const Custom_Color = extern struct {
     custom_b: c_int = @import("std").mem.zeroes(c_int),
 };
 pub const Color_Arr = extern struct {
-    arr: [*c]Custom_Color = @import("std").mem.zeroes([*c]Custom_Color),
+    arr: *Custom_Color = @import("std").mem.zeroes(*Custom_Color),
     arr_s: usize = @import("std").mem.zeroes(usize),
 };
