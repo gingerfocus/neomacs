@@ -7,6 +7,9 @@
             .url = "https://github.com/gingerfocus/thermit/archive/4a703aeb901a16274539d42ff176867dbda1ef72.tar.gz",
             .hash = "1220e2510447ece72e357b1c3c3c18547280691bd40331772eb43362825a6a3c67c7",
         },
+        .zss = .{
+            .path = "sub/zss",
+        },
     },
     .paths = .{
         "build.zig",

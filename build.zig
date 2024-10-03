@@ -4,30 +4,39 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
+    const neomacsExe = b.addExecutable(.{
         .root_source_file = b.path("src/main.zig"),
-        .name = "zano",
+        .name = "neomacs",
         .target = target,
         .optimize = optimize,
     });
 
     const terminal = b.dependency("terminal", .{ .target = target, .optimize = optimize });
-    exe.root_module.addImport("thermit", terminal.module("thermit"));
-    exe.root_module.addImport("scinee", terminal.module("scinee"));
+    neomacsExe.root_module.addImport("thermit", terminal.module("thermit"));
+    neomacsExe.root_module.addImport("scinee", terminal.module("scinee"));
 
-    exe.addIncludePath(b.path("src"));
+    b.installArtifact(neomacsExe);
 
-    b.installArtifact(exe);
     // -------------------------------------------------------------------------
 
     const check = b.step("check", "Lsp Check Step");
-    check.dependOn(&exe.step);
+    check.dependOn(&neomacsExe.step);
 
     // -------------------------------------------------------------------------
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |argumnets| run_cmd.addArgs(argumnets);
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
+    const neomacs = b.addRunArtifact(neomacsExe);
+    neomacs.step.dependOn(b.getInstallStep());
+    if (b.args) |argumnets| neomacs.addArgs(argumnets);
+    const run = b.step("run", "run neomacs");
+    run.dependOn(&neomacs.step);
+
+    // -------------------------------------------------------------------------
+
+    const zssExe = b.dependency("zss", .{}).artifact("zss");
+    b.installArtifact(zssExe);
+
+    const zss = b.addRunArtifact(zssExe);
+    if (b.args) |argumnets| zss.addArgs(argumnets);
+    const zssstep = b.step("zss", "run zss");
+    zssstep.dependOn(&zss.step);
 }
