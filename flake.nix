@@ -11,26 +11,36 @@
         (map (s: lib.mapAttrs (_: v: { ${s} = v; }) (f s)) systems);
       # forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f system);
     in eachSystem (system:
-      let pkgs = import nixpkgs { inherit system; };
+      let 
+      pkgs = import nixpkgs { inherit system; };
+      neon = self.packages."${system}";
       in {
         devShells.default = pkgs.mkShell {
           inherit hardeningDisable;
 
-          inputsFrom = [self.packages.${system}.zano];
-          packages = with pkgs; [ gcc valgrind ncurses ];
+          inputsFrom = with neon; [
+            neomacs
+            wev
+          ];
+
+          packages = with pkgs; [ valgrind ];
         };
 
         # formatter.${system} = pkgs.alejandra;
 
         packages = {
-          default = self.packages.${system}.zano;
-          zano = pkgs.stdenv.mkDerivation {
+          default = neon.neomacs;
+          wev = pkgs.callPackage ./sub/wev/wev.nix {};
+          neomacs = pkgs.stdenv.mkDerivation {
             inherit hardeningDisable;
 
-            name = "zano";
+            name = "neomacs";
             src = ./.;
 
-            buildInputs = [ pkgs.ncurses ];
+            buildInputs = with pkgs; [
+              tree-sitter
+              tree-sitter-grammars.tree-sitter-zig
+            ];
 
             buildPhase =
               "${pkgs.zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseFast";

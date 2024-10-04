@@ -4,8 +4,8 @@ const keys = @import("keys.zig");
 const vw = @import("view.zig");
 const fr = @import("frontend.zig");
 
-const term = @import("thermit");
-const scin = @import("scinee");
+const scu = @import("scured");
+const term = scu.thermit;
 
 pub const String_View = vw.String_View;
 
@@ -111,26 +111,16 @@ pub const Arg = extern struct {
 
 pub const Undo = struct {
     type: UndoType = .NONE,
-    data: std.ArrayListUnmanaged(u8),
-    start: usize = @import("std").mem.zeroes(usize),
-    end: usize = @import("std").mem.zeroes(usize),
-
-    pub fn init() Undo {
-        return .{
-            .data = std.ArrayListUnmanaged(u8){},
-        };
-    }
-
-    pub fn deinit(undo: Undo, a: std.mem.Allocator) void {
-        undo.data.deinit(a);
-    }
+    data: std.ArrayListUnmanaged(u8) = .{},
+    start: usize = 0,
+    end: usize = 0,
 };
 
 pub const Undo_Stack = std.ArrayList(Undo);
 
 pub const Repeating = extern struct {
-    repeating: bool = @import("std").mem.zeroes(bool),
-    repeating_count: usize = @import("std").mem.zeroes(usize),
+    repeating: bool = false,
+    repeating_count: usize = 0,
 };
 
 pub const Sized_Str = extern struct {
@@ -246,18 +236,18 @@ pub const Config = struct {
 pub const State = struct {
     a: std.mem.Allocator,
     arena: std.heap.ArenaAllocator,
-    term: scin.Term,
+    term: scu.Term,
 
     // undo_stack: Undo_Stack,
     // redo_stack: Undo_Stack,
-    // cur_undo: Undo,
+    cur_undo: Undo,
     // num_of_braces: usize = @import("std").mem.zeroes(usize),
     ch: term.KeyEvent = std.mem.zeroes(term.KeyEvent),
     // env: [*:0]u8,
     // command: [*:0]u8,
     // command_s: usize = @import("std").mem.zeroes(usize),
     // variables: Variables,
-    // repeating: Repeating = @import("std").mem.zeroes(Repeating),
+    repeating: Repeating = .{},
     num: Data,
     leader: Leader = .NONE,
 
@@ -270,7 +260,7 @@ pub const State = struct {
     // normal_pos: usize = @import("std").mem.zeroes(usize),
     key_func: [5]*const fn (*Buffer, *State) anyerror!void = .{
         &keys.handleNormalKeys,
-        &keys.handle_insert_keys,
+        &keys.handleInsertLeys,
         &keys.handle_search_keys,
         &keys.handle_command_keys,
         &keys.handle_visual_keys,
@@ -290,9 +280,9 @@ pub const State = struct {
     // status_bar_col: c_int = @import("std").mem.zeroes(c_int),
     resized: bool = false,
 
-    line_num_win: scin.Term.Screen = std.mem.zeroes(scin.Term.Screen),
-    main_win: scin.Term.Screen = std.mem.zeroes(scin.Term.Screen),
-    status_bar: scin.Term.Screen = std.mem.zeroes(scin.Term.Screen),
+    line_num_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
+    main_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
+    status_bar: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
 
     config: Config,
 
@@ -300,10 +290,10 @@ pub const State = struct {
         var state = State{
             .a = a,
             .arena = std.heap.ArenaAllocator.init(a),
-            .term = try scin.Term.init(a),
+            .term = try scu.Term.init(a),
             // .undo_stack = Undo_Stack.init(a),
             // .redo_stack = Undo_Stack.init(a),
-            // .cur_undo = Undo.init(),
+            .cur_undo = Undo{},
             // .num_of_braces = @import("std").mem.zeroes(usize),
             // .ch = 0,
             // .env = null,
@@ -346,6 +336,8 @@ pub const State = struct {
         state.files.deinit(state.a);
 
         state.num.deinit(state.a);
+
+        state.cur_undo.data.deinit(state.a);
         // state.undo_stack.deinit();
         // state.redo_stack.deinit();
 

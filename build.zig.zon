@@ -4,17 +4,16 @@
     //.minimum_zig_version = "0.11.0",
     .dependencies = .{
         .terminal = .{
-            .url = "https://github.com/gingerfocus/thermit/archive/4a703aeb901a16274539d42ff176867dbda1ef72.tar.gz",
-            .hash = "1220e2510447ece72e357b1c3c3c18547280691bd40331772eb43362825a6a3c67c7",
+            .url = "https://github.com/gingerfocus/thermit/archive/68c5a7b810f79e11d296e2f0593649c5b1d6ce91.tar.gz",
+            .hash = "12200befeb88258fc2adfaa189aff38ffd9d4eb41c5dee040ad3d73b02bc4fbfe19d",
         },
-        .zss = .{
-            .path = "sub/zss",
-        },
+        .zss = .{ .path = "sub/zss" },
     },
     .paths = .{
         "build.zig",
         "build.zig.zon",
         "src",
+        "sub",
         // For example...
         //"LICENSE",
         "README.md",

@@ -128,7 +128,7 @@ const Buffer = defs.Buffer;
 //     arg: *u8 = @import("std").mem.zeroes(*u8),
 // };
 //
-// const Undo = defs.Undo;
+const Undo = defs.Undo;
 // const Undo_Stack = defs.Undo_Stack;
 //
 // pub const Repeating = extern struct {
@@ -158,7 +158,7 @@ const Buffer = defs.Buffer;
 // const Files = defs.Files;
 // const Config_Vars = defs.Config_Vars;
 // const Config = defs.Config;
-// const State = defs.State;
+const State = defs.State;
 //
 // pub const Brace = extern struct {
 //     brace: u8 = @import("std").mem.zeroes(u8),
@@ -189,104 +189,41 @@ pub fn buffer_calculate_rows(a: std.mem.Allocator, buffer: *Buffer) !void {
     try buffer.rows.append(a, Row{ .start = start, .end = buffer.data.items.len });
 }
 
-// pub fn buffer_insert_char(arg_state: *State, arg_buffer: *Buffer, arg_ch: u8) void {
-//     var state = arg_state;
-//     _ = &state;
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var ch = arg_ch;
-//     _ = &ch;
-//     while (true) {
-//         if (!(buffer != @as(*Buffer, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0)))))))) {
-//             frontend_end();
-//             _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 19));
-//             _ = fprintf(stderr, "buffer exists");
-//             _ = fprintf(stderr, "\n");
-//             exit(@as(c_int, 1));
-//         }
-//         if (!false) break;
-//     }
-//     if (buffer.*.cursor > buffer.*.data.count) {
-//         buffer.*.cursor = buffer.*.data.count;
-//     }
-//     while (true) {
-//         if ((&buffer.*.data).*.count >= (&buffer.*.data).*.capacity) {
-//             (&buffer.*.data).*.capacity = if ((&buffer.*.data).*.capacity == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) @as(usize, @bitCast(@as(c_long, @as(c_int, 1024)))) else (&buffer.*.data).*.capacity *% @as(usize, @bitCast(@as(c_long, @as(c_int, 2))));
-//             var new: ?*anyopaque = calloc((&buffer.*.data).*.capacity +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))), @sizeOf(u8));
-//             _ = &new;
-//             while (true) {
-//                 if (!(new != null)) {
-//                     frontend_end();
-//                     _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 23));
-//                     _ = fprintf(stderr, "outta ram");
-//                     _ = fprintf(stderr, "\n");
-//                     exit(@as(c_int, 1));
-//                 }
-//                 if (!false) break;
-//             }
-//             _ = memcpy(new, @as(?*const anyopaque, @ptrCast((&buffer.*.data).*.data)), (&buffer.*.data).*.count);
-//             free(@as(?*anyopaque, @ptrCast((&buffer.*.data).*.data)));
-//             (&buffer.*.data).*.data = @as(*u8, @ptrCast(@alignCast(new)));
-//         }
-//         (&buffer.*.data).*.data[
-//             blk: {
-//                 const ref = &(&buffer.*.data).*.count;
-//                 const tmp = ref.*;
-//                 ref.* +%= 1;
-//                 break :blk tmp;
-//             }
-//         ] = ch;
-//         if (!false) break;
-//     }
-//     _ = memmove(@as(?*anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))])), @as(?*const anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor])), (buffer.*.data.count -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) -% buffer.*.cursor);
-//     buffer.*.data.data[
-//         blk: {
-//             const ref = &buffer.*.cursor;
-//             const tmp = ref.*;
-//             ref.* +%= 1;
-//             break :blk tmp;
-//         }
-//     ] = ch;
-//     state.*.cur_undo.end = buffer.*.cursor;
-//     buffer_calculate_rows(buffer);
-// }
+pub fn buffer_insert_char(state: *State, buffer: *Buffer, ch: u8) !void {
+    if (buffer.cursor > buffer.data.items.len) {
+        buffer.cursor = buffer.data.items.len;
+    }
+    try buffer.data.insert(state.a, buffer.cursor, ch);
+    state.cur_undo.end = buffer.cursor;
 
-// pub fn buffer_delete_char(arg_buffer: *Buffer, arg_state: *State) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     _ = &state;
-//     if (buffer.*.cursor < buffer.*.data.count) {
-//         _ = memmove(@as(?*anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor])), @as(?*const anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))])), (buffer.*.data.count -% buffer.*.cursor) -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
-//         buffer.*.data.count -%= 1;
-//         buffer_calculate_rows(buffer);
-//     }
-// }
-// pub fn buffer_delete_ch(arg_buffer: *Buffer, arg_state: *State) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
-//         undo.start = buffer.*.cursor;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-//     reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-//     buffer_yank_char(buffer, state);
-//     buffer_delete_char(buffer, state);
-//     state.*.cur_undo.end = buffer.*.cursor;
-//     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-// }
+    // TODO: be smarter about calling this function
+    // buffer_calculate_rows(state.a, buffer);
+}
+
+pub fn buffer_delete_char(buffer: *Buffer, state: *State) void {
+    _ = state; // autofix
+
+    if (buffer.cursor < buffer.data.items.len) {
+        //         _ = memmove(@as(?*anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor])), @as(?*const anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))])), (buffer.*.data.count -% buffer.*.cursor) -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
+        //         buffer.*.data.count -%= 1;
+        //         buffer_calculate_rows(buffer);
+    }
+}
+
+pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
+    _ = buffer; // autofix
+    _ = state; // autofix
+    // var undo = Undo{ };
+    // undo.type = .INSERT_CHARS;
+    // undo.start = buffer.cursor;
+    // state.cur_undo = undo;
+    // reset_command(state.*.clipboard.str, &state.*.clipboard.len);
+    // buffer_yank_char(buffer, state);
+    // buffer_delete_char(buffer, state);
+    // state.*.cur_undo.end = buffer.*.cursor;
+    // undo_push(state, &state.*.undo_stack, state.*.cur_undo);
+}
+
 // pub fn buffer_replace_ch(arg_buffer: *Buffer, arg_state: *State) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;

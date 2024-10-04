@@ -1,7 +1,7 @@
 /.zig-cache
 /zig-out
+
 /.direnv
-/out.txt
 /result
 
 /sub/emacs
@@ -9,3 +9,7 @@
 /sub/kmscon
 /sub/pomozo
 /sub/yuzu
+/sub/neovide
+
+/out.txt
+/neomacs.log

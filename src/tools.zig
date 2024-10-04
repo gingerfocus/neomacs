@@ -1,12 +1,15 @@
 const std = @import("std");
 const defs = @import("defs.zig");
-const State = defs.State;
 const vw = @import("view.zig");
 const bf = @import("buffer.zig");
 const root = @import("root");
 const clr = @import("colors.h.zig");
-
 const cmmd = @import("commands.zig");
+
+const scu = @import("scured");
+const tr = scu.thermit;
+
+const State = defs.State;
 // pub const __dev_t = c_ulong;
 // pub const __uid_t = c_uint;
 // pub const __gid_t = c_uint;
@@ -324,18 +327,12 @@ pub fn dynstr_to_data(str: Sized_Str) Data {
     return Data.fromOwnedSlice(std.heap.c_allocator, str);
 }
 
-pub fn handleCursorShape(state: *State) void {
-    _ = state; // autofix
-    // switch (state.config.mode) {
-    //     .INSERT => {
-    //         _ = system("echo -e -n \"\x1b[5 q\"");
-    //         // _ = wrefresh(stdscr);
-    //     },
-    //     else => {
-    //         _ = system("echo -e -n \"\x1b[0 q\"");
-    //         // _ = wrefresh(stdscr);
-    //     },
-    // }
+pub fn handleCursorShape(state: *State) !void {
+    try tr.setCursorStyle(state.term.tty.f.writer(), switch (state.config.mode) {
+        .INSERT => .SteadyBar,
+        else => .SteadyBlock,
+    });
+    // TODO: refreash screen
 }
 
 // pub fn free_buffer(arg_buffer: *Buffer) void {

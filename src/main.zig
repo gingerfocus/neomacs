@@ -10,127 +10,64 @@ const front = @import("frontend.zig");
 // const keys = @import("keys.zig");
 // const lex = @import("lex.zig");
 const tools = @import("tools.zig");
+const Args = @import("args.zig");
 
-pub const term = @import("thermit");
-pub const scin = @import("scinee");
+pub const scu = @import("scured");
+pub const trm = scu.thermit;
+
+// const treesitter = @cImport({
+//     @cInclude("tree_sitter/api.h");
+// });
 
 const State = defs.State;
 
 pub const std_options: std.Options = .{
-    .logFn = scin.log.logNull,
+    .logFn = scu.log.toFile,
 };
 
-pub fn getHelpPage(a: std.mem.Allocator, page: [*:0]const u8) ![]const u8 {
-    const env = std.posix.getenv("HOME") orelse return error.NoHome;
+pub fn log(
+    comptime srcloc: std.builtin.SourceLocation,
+    comptime level: std.log.Level,
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const scope = .default;
 
-    const help_page = try std.fmt.allocPrint(a, "{s}/.local/share/neomacs/help/{s}", .{ env, page });
+    if (comptime !std.log.logEnabled(level, scope)) return;
 
-    return help_page;
+    const fmt = std.fmt.comptimePrint("{s}:{}: ", .{ srcloc.file, srcloc.line });
+    std.options.logFn(level, scope, fmt ++ format, args);
 }
 
-const Args = struct {
-    progname: [*:0]const u8,
-    help: ?[]const u8,
-    config: ?[*:0]const u8,
-    positional: []const [*:0]const u8,
-};
+pub fn main() u8 {
+    const logFile = std.fs.cwd().createFile("neomacs.log", .{}) catch null;
+    defer if (logFile) |file| file.close();
+    scu.log.setFile(logFile);
 
-pub fn parseFlags(a: std.mem.Allocator) !Args {
-    const args = std.os.argv;
-    var i: usize = 0;
-
-    var opts = Args{
-        .progname = args[i],
-        .help = null,
-        .config = null,
-        .positional = &.{},
+    innermain() catch |err| {
+        std.debug.print("Some unrecoverable error occorred. Check log file for details.\n", .{});
+        log(@src(), .err, "Error: {}\n", .{err});
+        if (@errorReturnTrace()) |stacktrace| {
+            log(@src(), .err, "Stacktrace: {}\n", .{stacktrace});
+        } else {
+            log(@src(), .err, "Unable to Generate Stacktrace\n", .{});
+        }
+        return 1;
     };
-    i += 1;
-
-    while (i < args.len) {
-        if (args[i][0] != '-') break;
-
-        const arg = mem.span(args[i]);
-
-        if (mem.eql(u8, arg, "-h")) {
-            i += 1;
-            opts.help = try getHelpPage(a, "tutor");
-            continue;
-        }
-
-        if (mem.eql(u8, arg, "--help")) {
-            i += 1;
-            if (i >= args.len) {
-                opts.help = try getHelpPage(a, "tutor");
-                continue;
-            }
-            opts.help = try getHelpPage(a, args[i]);
-            i += 1;
-            continue;
-        }
-
-        if (mem.eql(u8, arg, "-c") or mem.eql(u8, arg, "--config")) {
-            i += 1;
-            if (i >= args.len) continue;
-            opts.config = args[i];
-            i += 1;
-            continue;
-        }
-
-        // if it doesnt match an argument try to use it as a file
-        break;
-    }
-    opts.positional = args[i..];
-
-    return opts;
+    return 0;
 }
 
-// inline fn debug(msg: []const u8) void {
-//     const s: std.builtin.SourceLocation = @src();
-//     std.log.info("{s}:{}: {s}", .{ s.file, s.line, msg });
-// }
-
-// pub const std_options: std.Options = .{
-//     // .logFn = std.log.defaultLog,
-//     .logFn = logFn,
-// };
-//
-// var logFile = std.fs.File{
-//     .handle = std.posix.STDERR_FILENO,
-// };
-//
-// fn logFn(
-//     comptime message_level: std.log.Level,
-//     comptime scope: @Type(.EnumLiteral),
-//     comptime format: []const u8,
-//     args: anytype,
-// ) void {
-//     _ = message_level; // autofix
-//     _ = scope; // autofix
-//     std.fmt.format(logFile.writer(), format, args) catch {};
-// }
-
-pub fn main() !void {
+fn innermain() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    std.log.debug("starting (int main)", .{});
+    log(@src(), .debug, "starting (int main)\n", .{});
 
-    const args = try parseFlags(a);
+    const args = try Args.parse(a, std.os.argv);
+    defer args.deinit(a);
 
     const filename: []const u8 = if (args.positional.len < 1) "out.txt" else mem.span(args.positional[0]);
-
-    std.log.debug("opening file ({s})", .{filename});
-
-    var logs = std.ArrayList([]const u8).init(a);
-    defer {
-        for (logs.items) |log| {
-            std.debug.print("err: {s}", .{log});
-            a.free(log);
-        }
-        logs.deinit();
-    }
 
     var state = try State.init(a);
     defer state.deinit();
@@ -140,17 +77,12 @@ pub fn main() !void {
     // try front.initFrontend(&state);
     // defer front.deinitFrontend(&state) catch {};
 
-    if (args.help) |helpfile| {
-        defer state.a.free(helpfile);
-        state.buffer = tools.loadBufferFromFile(a, helpfile) catch |err| {
-            const msg = std.fmt.allocPrint(a, "File Not Found: {s}\n", .{helpfile}) catch return err;
-            logs.append(msg) catch return err;
-            return;
-            // return err;
-        };
-    } else {
-        state.buffer = try tools.loadBufferFromFile(a, filename);
-    }
+    const file = args.help orelse filename;
+    log(@src(), .debug, "opening file ({s})\n", .{file});
+    state.buffer = tools.loadBufferFromFile(a, file) catch |err| {
+        log(@src(), .err, "File Not Found: {s}\n", .{file});
+        return err;
+    };
 
     // const syntax_filename: ?[*:0]u8 = null;
     // tools.load_config_from_file(a, &state, state.buffer, args.config, syntax_filename);
@@ -158,7 +90,7 @@ pub fn main() !void {
     // bf.buffer_calculate_rows(state.buffer);
 
     while (!state.config.QUIT and !(state.ch.modifiers.ctrl and state.ch.character.b() == 'q')) {
-        tools.handleCursorShape(&state);
+        try tools.handleCursorShape(&state);
         try front.render(&state);
 
         const ev = try state.term.tty.read(10000);
