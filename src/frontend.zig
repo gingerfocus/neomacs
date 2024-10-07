@@ -142,7 +142,7 @@ pub fn render(state: *State) !void {
 
     const row_render_start = 0;
 
-    const buffer = state.buffer orelse unreachable;
+    const buffer = state.buffer;
     // ---------------------------------
     var r: usize = row_render_start;
     while (r < buffer.rows.items.len and r < row_render_start + state.main_win.h) : (r += 1) {

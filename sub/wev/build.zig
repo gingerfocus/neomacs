@@ -17,21 +17,13 @@ pub fn build(b: *std.Build) void {
     // -------------------------------------------------------------------------
 
     const wevExe = b.addExecutable(.{
+        .root_source_file = b.path("src/wev.zig"),
         .name = "wev",
         .target = target,
         .optimize = optimize,
     });
-    wevExe.addCSourceFiles(.{
-        .root = b.path("src"),
-        .files = &.{
-            "wev.c",
-            "shm.c",
-        },
-        // .flags = &.{ "-std=c11" },
-    });
-    wevExe.addCSourceFile(.{ .file = privateCode });
 
-    wevExe.addIncludePath(b.path("."));
+    wevExe.addCSourceFile(.{ .file = privateCode });
     wevExe.addIncludePath(clientHeader.dirname());
 
     wevExe.linkLibC();

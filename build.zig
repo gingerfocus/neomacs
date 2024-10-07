@@ -41,7 +41,20 @@ pub fn build(b: *std.Build) void {
 
     // -------------------------------------------------------------------------
 
+    // install wev
+    const wevExe = b.dependency("wev", .{}).artifact("wev");
+    b.installArtifact(wevExe);
+
+    // run wev
+    const wev = b.addRunArtifact(wevExe);
+    if (b.args) |argumnets| wev.addArgs(argumnets);
+    const wevstep = b.step("wev", "run wev");
+    wevstep.dependOn(&wev.step);
+
+    // -------------------------------------------------------------------------
+
     const check = b.step("check", "Lsp Check Step");
     check.dependOn(&neomacsExe.step);
     check.dependOn(&zssExe.step);
+    // check.dependOn(&wevExe.step);
 }

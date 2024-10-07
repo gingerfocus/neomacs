@@ -44,7 +44,7 @@ pub fn main() u8 {
     defer if (logFile) |file| file.close();
     scu.log.setFile(logFile);
 
-    innermain() catch |err| {
+    neomacs() catch |err| {
         std.debug.print("Some unrecoverable error occorred. Check log file for details.\n", .{});
         log(@src(), .err, "Error: {}\n", .{err});
         if (@errorReturnTrace()) |stacktrace| {
@@ -57,32 +57,23 @@ pub fn main() u8 {
     return 0;
 }
 
-fn innermain() !void {
+fn neomacs() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    log(@src(), .debug, "starting (int main)\n", .{});
+    log(@src(), .debug, "starting (main void)\n", .{});
 
     const args = try Args.parse(a, std.os.argv);
     defer args.deinit(a);
 
     const filename: []const u8 = if (args.positional.len < 1) "out.txt" else mem.span(args.positional[0]);
 
-    var state = try State.init(a);
+    const file = args.help orelse filename;
+    var state = try State.init(a, file);
     defer state.deinit();
 
     // try tools.scanFiles(&state, ".");
-
-    // try front.initFrontend(&state);
-    // defer front.deinitFrontend(&state) catch {};
-
-    const file = args.help orelse filename;
-    log(@src(), .debug, "opening file ({s})\n", .{file});
-    state.buffer = tools.loadBufferFromFile(a, file) catch |err| {
-        log(@src(), .err, "File Not Found: {s}\n", .{file});
-        return err;
-    };
 
     // const syntax_filename: ?[*:0]u8 = null;
     // tools.load_config_from_file(a, &state, state.buffer, args.config, syntax_filename);
@@ -97,7 +88,7 @@ fn innermain() !void {
         switch (ev) {
             .Key => |ke| {
                 state.ch = ke;
-                try state.key_func[@intFromEnum(state.config.mode)](state.buffer.?, &state);
+                try state.key_func[@intFromEnum(state.config.mode)](state.buffer, &state);
             },
             .End => state.config.QUIT = true,
             else => {},

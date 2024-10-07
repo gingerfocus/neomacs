@@ -23,7 +23,7 @@
             wev
           ];
 
-          packages = with pkgs; [ valgrind ];
+          packages = with pkgs; [ valgrind strace ];
         };
 
         # formatter.${system} = pkgs.alejandra;

@@ -8,6 +8,7 @@
             .hash = "12200befeb88258fc2adfaa189aff38ffd9d4eb41c5dee040ad3d73b02bc4fbfe19d",
         },
         .zss = .{ .path = "sub/zss" },
+        .wev = .{ .path = "sub/wev" },
     },
     .paths = .{
         "build.zig",

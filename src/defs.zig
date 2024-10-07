@@ -3,9 +3,12 @@ const std = @import("std");
 const keys = @import("keys.zig");
 const vw = @import("view.zig");
 const fr = @import("frontend.zig");
+const tools = @import("tools.zig");
 
 const scu = @import("scured");
 const term = scu.thermit;
+
+const root = @import("root");
 
 pub const String_View = vw.String_View;
 
@@ -269,7 +272,7 @@ pub const State = struct {
     files: Files,
     // is_exploring: bool = false,
     // explore_cursor: usize = 0,
-    buffer: ?*Buffer = null,
+    buffer: *Buffer,
     // grow: c_int = @import("std").mem.zeroes(c_int),
     // gcol: c_int = @import("std").mem.zeroes(c_int),
     // main_row: c_int = @import("std").mem.zeroes(c_int),
@@ -286,7 +289,13 @@ pub const State = struct {
 
     config: Config,
 
-    pub fn init(a: std.mem.Allocator) !State {
+    pub fn init(a: std.mem.Allocator, file: []const u8) !State {
+        root.log(@src(), .debug, "opening file ({s})\n", .{file});
+        const buffer = tools.loadBufferFromFile(a, file) catch |err| {
+            root.log(@src(), .err, "File Not Found: {s}\n", .{file});
+            return err;
+        };
+
         var state = State{
             .a = a,
             .arena = std.heap.ArenaAllocator.init(a),
@@ -294,6 +303,7 @@ pub const State = struct {
             // .undo_stack = Undo_Stack.init(a),
             // .redo_stack = Undo_Stack.init(a),
             .cur_undo = Undo{},
+            .buffer = buffer,
             // .num_of_braces = @import("std").mem.zeroes(usize),
             // .ch = 0,
             // .env = null,
@@ -343,15 +353,14 @@ pub const State = struct {
 
         // state.a.free(state.status_bar_msg);
 
-        state.arena.deinit();
+        state.buffer.data.deinit(state.a);
+        state.buffer.rows.deinit(state.a);
+        state.a.free(state.buffer.filename);
+        state.a.destroy(state.buffer);
 
-        if (state.buffer) |buffer| {
-            buffer.data.deinit(state.a);
-            buffer.rows.deinit(state.a);
-            state.a.free(buffer.filename);
-            state.a.destroy(buffer);
-        }
         state.config.deinit(state.a);
+
+        state.arena.deinit();
     }
 
     pub fn resize(state: *State) !void {
