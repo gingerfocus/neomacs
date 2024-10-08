@@ -19,6 +19,13 @@ pub const trm = scu.thermit;
 //     @cInclude("tree_sitter/api.h");
 // });
 
+pub const luajitsys = @cImport({
+    @cInclude("lua.h");
+    @cInclude("lualib.h");
+    @cInclude("luajit.h");
+    @cInclude("luajit-2.1/lauxlib.h");
+});
+
 const State = defs.State;
 
 pub const std_options: std.Options = .{
@@ -88,7 +95,7 @@ fn neomacs() !void {
         switch (ev) {
             .Key => |ke| {
                 state.ch = ke;
-                try state.key_func[@intFromEnum(state.config.mode)](state.buffer, &state);
+                try state.runKeymap();
             },
             .End => state.config.QUIT = true,
             else => {},

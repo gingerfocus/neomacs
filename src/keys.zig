@@ -268,7 +268,7 @@ fn isdigit(ch: trm.KeyEvent) bool {
 }
 
 pub fn handleNormalKeys(buffer: *Buffer, state: *State) anyerror!void {
-    if (tools.check_keymaps(buffer, state)) return;
+    // if (tools.check_keymaps(buffer, state)) return;
 
     if (state.leader == .NONE) {
         if (handleLeaderKeys(state)) return;

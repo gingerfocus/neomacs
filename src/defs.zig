@@ -1,14 +1,16 @@
 const std = @import("std");
+const root = @import("root");
 
 const keys = @import("keys.zig");
 const vw = @import("view.zig");
 const fr = @import("frontend.zig");
 const tools = @import("tools.zig");
+const lua = @import("lua.zig");
 
 const scu = @import("scured");
 const term = scu.thermit;
 
-const root = @import("root");
+const luajitsys = root.luajitsys;
 
 pub const String_View = vw.String_View;
 
@@ -30,12 +32,7 @@ pub const Mode = enum(usize) {
     }
 };
 
-pub const Leader = enum(u32) {
-    NONE = 0,
-    R = 1,
-    D = 2,
-    Y = 3,
-};
+pub const Leader = enum(u32) { NONE = 0, R = 1, D = 2, Y = 3 };
 
 pub const UndoType = enum {
     NONE,
@@ -44,6 +41,7 @@ pub const UndoType = enum {
     DELETE_MULT_CHAR,
     REPLACE_CHAR,
 };
+
 pub const NO_ERROR: c_int = 0;
 pub const NOT_ENOUGH_ARGS: c_int = 1;
 pub const INVALID_ARGS: c_int = 2;
@@ -97,14 +95,6 @@ pub const Buffer = struct {
     col: usize = 0,
     filename: []const u8,
     visual: ?Visual = null,
-
-    // pub fn deinit(self: Buffer) void {
-    //     self.data.deinit();
-    //     const a = std.heap.c_allocator;
-    //     a.free(self.filename);
-    //     self.row = 0;
-    //     self.col = 0;
-    // }
 };
 
 pub const Arg = extern struct {
@@ -131,12 +121,11 @@ pub const Sized_Str = extern struct {
     len: usize = @import("std").mem.zeroes(usize),
 };
 
-pub const Map = struct {
-    a: u8,
-    b: []const u8,
-};
-
-pub const Maps = std.ArrayListUnmanaged(Map);
+// pub const Maps = std.ArrayListUnmanaged(Map);
+// pub const Map = struct {
+//     a: u8,
+//     b: []const u8,
+// };
 
 pub const Var_Value = extern union {
     as_int: c_int,
@@ -147,92 +136,102 @@ pub const VAR_INT: c_int = 0;
 pub const VAR_FLOAT: c_int = 1;
 pub const VAR_PTR: c_int = 2;
 pub const Var_Type = c_uint;
-pub const Variable = struct {
-    name: []u8,
-    value: Var_Value = @import("std").mem.zeroes(Var_Value),
-    type: Var_Type = @import("std").mem.zeroes(Var_Type),
-};
-pub const Variables = std.ArrayListUnmanaged(Variable);
-pub const File = struct {
-    name: []const u8, // = @import("std").mem.zeroes(*u8),
-    path: []const u8, // = @import("std").mem.zeroes(*u8),
-    is_directory: bool, //= @import("std").mem.zeroes(bool),
-};
-pub const Files = std.ArrayListUnmanaged(File);
 
-pub const Config_Vars = struct {
-    label: String_View = &.{},
-    val: *c_int = @import("std").mem.zeroes(*c_int),
-};
+// pub const Variables = std.ArrayListUnmanaged(Variable);
+// pub const Variable = struct {
+//     name: []u8,
+//     value: Var_Value = @import("std").mem.zeroes(Var_Value),
+//     type: Var_Type = @import("std").mem.zeroes(Var_Type),
+// };
+
+// pub const Files = std.ArrayListUnmanaged(File);
+// pub const File = struct {
+//     name: []const u8,
+//     path: []const u8,
+//     is_directory: bool,
+// };
 
 pub const Config = struct {
-    relative_nums: c_int = 1,
-    auto_indent: c_int = 1,
-    syntax: c_int = 1,
-    indent: c_int = 0,
-    undo_size: c_int = 16,
-    lang: []const u8,
+    // relative_nums: c_int = 1,
+    // auto_indent: c_int = 1,
+    // syntax: c_int = 1,
+    // indent: c_int = 0,
+    // undo_size: c_int = 16,
+    // lang: []const u8,
     QUIT: bool = false,
     mode: Mode = .NORMAL,
     background_color: c_int = -1,
-    leaders: [4]u8,
-    key_maps: Maps,
-    // vars: [5]Config_Vars = @import("std").mem.zeroes([5]Config_Vars),
+    // leaders: [4]u8,
+    // key_maps: Maps,
 
     pub fn init(a: std.mem.Allocator) !Config {
+        _ = a; // autofix
+        // const lang = try a.dupe(u8, " ");
+        // _ = lang; // autofix
         return Config{
-            .lang = try a.dupe(u8, " "),
-            .relative_nums = 1,
-            .auto_indent = 1,
-            .syntax = 1,
-            .indent = 0,
-            .undo_size = 16,
+            // .lang = lang,
+            // .relative_nums = 1,
+            // .auto_indent = 1,
+            // .syntax = 1,
+            // .indent = 0,
+            // .undo_size = 16,
             .QUIT = false,
             .mode = .NORMAL,
             .background_color = -@as(c_int, 1),
-            .leaders = .{ ' ', 'r', 'd', 'y' },
-            .key_maps = Maps{},
-            // .vars = .{
-            //     Config_Vars{
-            //         .label = "syntax",
-            //         .val = &"syntax",
-            //         //     .val = &state.config.syntax,
-            //     },
-            //     Config_Vars{
-            //         //     .label = String_View{
-            //         //         .data = @as(*u8, @ptrCast(@volatileCast(@constCast("indent")))),
-            //         //         .len = @sizeOf([7]u8) -% @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 1)))),
-            //         //     },
-            //         //     .val = &state.config.indent,
-            //     },
-            //     Config_Vars{
-            //         //     .label = String_View{
-            //         //         .data = @as(*u8, @ptrCast(@volatileCast(@constCast("auto-indent")))),
-            //         //         .len = @sizeOf([12]u8) -% @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 1)))),
-            //         //     },
-            //         //     .val = &state.config.auto_indent,
-            //     },
-            //     Config_Vars{
-            //         //     .label = String_View{
-            //         //         .data = @as(*u8, @ptrCast(@volatileCast(@constCast("undo-size")))),
-            //         //         .len = @sizeOf([10]u8) -% @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 1)))),
-            //         //     },
-            //         //     .val = &state.config.undo_size,
-            //     },
-            //     Config_Vars{
-            //         //     .label = String_View{
-            //         //         .data = @as(*u8, @ptrCast(@volatileCast(@constCast("relative")))),
-            //         //         .len = @sizeOf([9]u8) -% @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 1)))),
-            //         //     },
-            //         //     .val = &state.config.relative_nums,
-            //     },
-            // },
-
+            // .leaders = .{ ' ', 'r', 'd', 'y' },
+            // .key_maps = Maps{},
         };
     }
 
     pub fn deinit(config: Config, a: std.mem.Allocator) void {
-        a.free(config.lang);
+        _ = config; // autofix
+        _ = a; // autofix
+        // a.free(config.lang);
+    }
+};
+
+const KeyMaps = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
+pub const KeyMap = union(enum) {
+    const Callback = *const fn (*State) anyerror!void;
+    const LuaRef = c_int;
+
+    Native: Callback,
+    LuaFnc: LuaRef,
+
+    pub fn initLua(L: *lua.State, index: c_int) !KeyMap {
+        if (lua.lua_type(L, index) != lua.LUA_TFUNCTION) {
+            return error.NotALuaFunction;
+            // lua.lua_pushliteral(L, "vim.schedule: expected function");
+            // return lua.lua_error(L);
+        }
+
+        lua.lua_pushvalue(L, index);
+        const ref = lua.luaL_ref(L, lua.LUA_REGISTRYINDEX);
+        if (ref > 0) {
+            // ref_state->ref_count++;
+        } else {
+            return error.CantMakeReference;
+        }
+
+        return .{ .LuaFnc = ref };
+    }
+
+    pub fn run(self: KeyMap, state: *State) anyerror!void {
+        switch (self) {
+            .Native => |fc| try fc(state),
+            .LuaFnc => |id| {
+                std.debug.assert(id > 0);
+
+                luajitsys.lua_rawgeti(state.L, luajitsys.LUA_REGISTRYINDEX, id);
+                luajitsys.luaL_unref(state.L, luajitsys.LUA_REGISTRYINDEX, id);
+                // ref_state->ref_count--;
+
+                if (luajitsys.lua_pcall(state.L, 0, 0, 0) != 0) {
+                    // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
+                    return error.ExecuteLuaCallback;
+                }
+            },
+        }
     }
 };
 
@@ -268,8 +267,11 @@ pub const State = struct {
         &keys.handle_command_keys,
         &keys.handle_visual_keys,
     },
+    keyMaps: [5]KeyMaps = .{ .{}, .{}, .{}, .{}, .{} },
+    L: *lua.State,
+
     // clipboard: ?[]const u8 = null,
-    files: Files,
+    // files: Files,
     // is_exploring: bool = false,
     // explore_cursor: usize = 0,
     buffer: *Buffer,
@@ -296,10 +298,16 @@ pub const State = struct {
             return err;
         };
 
+        const t = try scu.Term.init(a);
+        const L = try lua.init();
+
         var state = State{
             .a = a,
             .arena = std.heap.ArenaAllocator.init(a),
-            .term = try scu.Term.init(a),
+
+            .term = t,
+            .L = L,
+
             // .undo_stack = Undo_Stack.init(a),
             // .redo_stack = Undo_Stack.init(a),
             .cur_undo = Undo{},
@@ -319,7 +327,7 @@ pub const State = struct {
             // .normal_pos = @import("std").mem.zeroes(usize),
             // .key_func = null,
             // .clipboard = @import("std").mem.zeroes(Sized_Str),
-            .files = Files{},
+            // .files = Files{},
             // .is_exploring = false,
             // .explore_cursor = @import("std").mem.zeroes(usize),
             // .grow = 0,
@@ -337,13 +345,16 @@ pub const State = struct {
     }
 
     pub fn deinit(state: *State) void {
-        state.term.deinit();
+        // keymaps before lua as they reference the lua state
+        for (&state.keyMaps) |*keyMap| keyMap.deinit(state.a);
 
-        for (state.files.items) |file| {
-            state.a.free(file.name);
-            state.a.free(file.path);
-        }
-        state.files.deinit(state.a);
+        lua.deinit(state.L);
+
+        // for (state.files.items) |file| {
+        //     state.a.free(file.name);
+        //     state.a.free(file.path);
+        // }
+        // state.files.deinit(state.a);
 
         state.num.deinit(state.a);
 
@@ -360,7 +371,18 @@ pub const State = struct {
 
         state.config.deinit(state.a);
 
+        state.term.deinit();
+
         state.arena.deinit();
+    }
+
+    pub fn runKeymap(state: *State) !void {
+        if (state.keyMaps[@intFromEnum(state.config.mode)].get(term.evbits(state.ch))) |function| {
+            try function.run(state);
+        } else {
+            // TODO: remove this eventually
+            try state.key_func[@intFromEnum(state.config.mode)](state.buffer, state);
+        }
     }
 
     pub fn resize(state: *State) !void {
@@ -395,14 +417,13 @@ pub const Brace = extern struct {
     closing: c_int = @import("std").mem.zeroes(c_int),
 };
 
-pub const Ncurses_Color = extern struct {
-    r: c_int = @import("std").mem.zeroes(c_int),
-    g: c_int = @import("std").mem.zeroes(c_int),
-    b: c_int = @import("std").mem.zeroes(c_int),
-};
-
-pub const Syntax_Highlighting = extern struct {
-    row: usize = @import("std").mem.zeroes(usize),
-    col: usize = @import("std").mem.zeroes(usize),
-    size: usize = @import("std").mem.zeroes(usize),
-};
+// pub const Ncurses_Color = extern struct {
+//     r: c_int = @import("std").mem.zeroes(c_int),
+//     g: c_int = @import("std").mem.zeroes(c_int),
+//     b: c_int = @import("std").mem.zeroes(c_int),
+// };
+// pub const Syntax_Highlighting = extern struct {
+//     row: usize = @import("std").mem.zeroes(usize),
+//     col: usize = @import("std").mem.zeroes(usize),
+//     size: usize = @import("std").mem.zeroes(usize),
+// };
