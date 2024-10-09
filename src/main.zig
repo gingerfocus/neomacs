@@ -1,6 +1,13 @@
 const std = @import("std");
 const mem = std.mem;
 
+// #define CREATE_UNDO(t, p) do {    \
+//     Undo undo = {0};         \
+//     undo.type = (t);         \
+//     undo.start = (p);        \
+//     state->cur_undo = undo;   \
+// } while(0)
+
 // const bf = @import("buffer.zig");
 // const cgo = @import("cgetopt.zig");
 // const clr = @import("colors.h.zig");
@@ -26,7 +33,7 @@ pub const luajitsys = @cImport({
     @cInclude("luajit-2.1/lauxlib.h");
 });
 
-const State = defs.State;
+const State = @import("State.zig");
 
 pub const std_options: std.Options = .{
     .logFn = scu.log.toFile,

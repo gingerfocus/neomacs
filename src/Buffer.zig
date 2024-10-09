@@ -1,6 +1,18 @@
 const defs = @import("defs.zig");
 const std = @import("std");
 
+const Data = defs.Data;
+
+const Buffer = @This();
+
+data: Data,
+rows: Rows,
+cursor: usize = 0,
+row: usize = 0,
+col: usize = 0,
+filename: []const u8,
+// visual: ?Visual = null,
+
 // pub const __off_t = c_long;
 // pub const __off64_t = c_long;
 // pub const chtype = c_uint;
@@ -121,7 +133,6 @@ const Row = defs.Row;
 //     count: usize = @import("std").mem.zeroes(usize),
 //     capacity: usize = @import("std").mem.zeroes(usize),
 // };
-const Buffer = defs.Buffer;
 //
 // pub const Arg = extern struct {
 //     size: usize = @import("std").mem.zeroes(usize),
@@ -158,7 +169,7 @@ const Undo = defs.Undo;
 // const Files = defs.Files;
 // const Config_Vars = defs.Config_Vars;
 // const Config = defs.Config;
-const State = defs.State;
+const State = @import("State.zig");
 //
 // pub const Brace = extern struct {
 //     brace: u8 = @import("std").mem.zeroes(u8),
@@ -194,7 +205,7 @@ pub fn buffer_insert_char(state: *State, buffer: *Buffer, ch: u8) !void {
         buffer.cursor = buffer.data.items.len;
     }
     try buffer.data.insert(state.a, buffer.cursor, ch);
-    state.cur_undo.end = buffer.cursor;
+    // state.cur_undo.end = buffer.cursor;
 
     // TODO: be smarter about calling this function
     // buffer_calculate_rows(state.a, buffer);

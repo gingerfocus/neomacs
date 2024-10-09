@@ -1,8 +1,6 @@
 const defs = @import("defs.zig");
-const vw = @import("view.zig");
-const cmmd = @import("commands.zig");
 const tools = @import("tools.zig");
-const bf = @import("buffer.zig");
+const Buffer = @import("Buffer.zig");
 
 const std = @import("std");
 
@@ -14,13 +12,12 @@ const Visual = defs.Visual;
 const Row = defs.Row;
 const Rows = defs.Rows;
 const Data = defs.Data;
-const Buffer = defs.Buffer;
 const Undo = defs.Undo;
 const Undo_Stack = defs.Undo_Stack;
 const Sized_Str = defs.Sized_Str;
-const File = defs.File;
-const Files = defs.Files;
-const State = defs.State;
+// const File = defs.File;
+// const Files = defs.Files;
+const State = @import("State.zig");
 const Brace = defs.Brace;
 
 // pub fn handle_motion_keys(arg_buffer: *Buffer, arg_state: *State, arg_ch: c_int, arg_repeating_count: *usize) c_int {
@@ -158,16 +155,18 @@ const Brace = defs.Brace;
 // }
 
 pub fn handleNormalToInsertKeys(buffer: *Buffer, state: *State) bool {
-    switch (trm.evbits(state.ch)) {
-        trm.evbits(.{ .character = .i }) => {
+    const norm = scu.thermit.keys.norm;
+
+    switch (scu.thermit.keys.bits(state.ch)) {
+        norm(.i) => {
             state.config.mode = .INSERT;
-            state.repeating.repeating_count = 0;
+            // state.repeating.repeating_count = 0;
             // if (state.*.repeating.repeating_count != 0) {
             //     state.*.ch = frontend_getch(state.*.main_win);
             // }
         },
-        trm.evbits(.{ .character = .I }) => {
-            const row = bf.bufferGetRow(buffer);
+        norm(.I) => {
+            const row = Buffer.bufferGetRow(buffer);
             const cur = buffer.rows.items[row];
             buffer.cursor = cur.start;
             // TODO: check for other white space, make an isspace function from ncurses
@@ -276,35 +275,35 @@ pub fn handleNormalKeys(buffer: *Buffer, state: *State) anyerror!void {
         state.leader = .NONE;
     }
 
-    if (isdigit(state.ch) and
-        !(state.ch.character.b() == '0' and state.num.items.len == 0))
-    {
-        // std.log.info("adding number!\n", .{});
-        try state.num.append(state.a, state.ch.character.b());
-        return;
-    }
+    // if (isdigit(state.ch) and
+    //     !(state.ch.character.b() == '0' and state.num.items.len == 0))
+    // {
+    //     // std.log.info("adding number!\n", .{});
+    //     try state.num.append(state.a, state.ch.character.b());
+    //     return;
+    // }
 
-    if (!isdigit(state.ch) and state.num.items.len > 0) {
-        state.repeating.repeating_count = std.fmt.parseInt(u32, state.num.items, 10) catch {
-            // TODO: error handleing
-            return;
-        };
-        state.num.clearRetainingCapacity();
-
-        // Some functions are smart and will look at repeating_count when the
-        // run and then set it to 0 when finished. Some are not and so this
-        // allows the dumb ones (and user defined ones) to still be repeated.
-        // An optimization might be to make this return a dynamic dispatch
-        // object so we can just call it many times and not worry about finding
-        // it many times.
-        errdefer state.repeating.repeating_count = 0;
-        var i: usize = 0;
-        while (i < state.repeating.repeating_count) : (i += 1) {
-            try state.key_func[@intFromEnum(state.config.mode)](buffer, state);
-        }
-        state.repeating.repeating_count = 0;
-        return;
-    }
+    // if (!isdigit(state.ch) and state.num.items.len > 0) {
+    //     state.repeating.repeating_count = std.fmt.parseInt(u32, state.num.items, 10) catch {
+    //         // TODO: error handleing
+    //         return;
+    //     };
+    //     state.num.clearRetainingCapacity();
+    //
+    //     // Some functions are smart and will look at repeating_count when the
+    //     // run and then set it to 0 when finished. Some are not and so this
+    //     // allows the dumb ones (and user defined ones) to still be repeated.
+    //     // An optimization might be to make this return a dynamic dispatch
+    //     // object so we can just call it many times and not worry about finding
+    //     // it many times.
+    //     errdefer state.repeating.repeating_count = 0;
+    //     var i: usize = 0;
+    //     while (i < state.repeating.repeating_count) : (i += 1) {
+    //         try state.key_func[@intFromEnum(state.config.mode)](buffer, state);
+    //     }
+    //     state.repeating.repeating_count = 0;
+    //     return;
+    // }
 
     switch (state.ch.character) {
         //         @as(c_int, 58) => {
@@ -539,9 +538,9 @@ pub fn handleNormalKeys(buffer: *Buffer, state: *State) anyerror!void {
     }
 
     // idk
-    if (state.repeating.repeating_count == 0) {
-        state.leader = .NONE;
-    }
+    // if (state.repeating.repeating_count == 0) {
+    //     state.leader = .NONE;
+    // }
 }
 
 pub fn handleInsertLeys(buffer: *Buffer, state: *State) anyerror!void {
@@ -550,7 +549,7 @@ pub fn handleInsertLeys(buffer: *Buffer, state: *State) anyerror!void {
         .Backspace => {
             if (buffer.cursor > 0) {
                 buffer.cursor -= 1;
-                bf.buffer_delete_char(buffer, state);
+                Buffer.buffer_delete_char(buffer, state);
             }
         },
 
@@ -706,7 +705,7 @@ pub fn handleInsertLeys(buffer: *Buffer, state: *State) anyerror!void {
             // }
             // brace = find_opposite_brace(@as(u8, @bitCast(@as(i8, @truncate(state.*.ch)))));
 
-            try bf.buffer_insert_char(state, buffer, state.ch.character.b());
+            try Buffer.buffer_insert_char(state, buffer, state.ch.character.b());
 
             // if ((@as(c_int, @bitCast(@as(c_uint, brace.brace))) != @as(c_int, '0')) and !(brace.closing != 0)) {
             //     state.*.cur_undo.end -%= @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));

@@ -162,3 +162,182 @@ pub fn deinit(L: *State) void {
 //     // ret = lua.luaL_dofile(L, "lua/test.lua");
 //     // try luaError(L, ret);
 // }
+
+// pub var tt_string: [18][*:0]const u8 = [18][*:0]const u8{
+//     "set_var",
+//     "set_output",
+//     "set_map",
+//     "let",
+//     "plus",
+//     "minus",
+//     "mult",
+//     "div",
+//     "echo",
+//     "w",
+//     "e",
+//     "we",
+//     "ident",
+//     "special key",
+//     "string",
+//     "config var",
+//     "int",
+//     "float",
+// };
+// pub var ctrl_keys: [26]Ctrl_Key = [26]Ctrl_Key{
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-a>".*;
+//         }).static,
+//         .value = @as(c_int, 'a') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-b>".*;
+//         }).static,
+//         .value = @as(c_int, 'b') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-c>".*;
+//         }).static,
+//         .value = @as(c_int, 'c') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-d>".*;
+//         }).static,
+//         .value = @as(c_int, 'd') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-e>".*;
+//         }).static,
+//         .value = @as(c_int, 'e') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-f>".*;
+//         }).static,
+//         .value = @as(c_int, 'f') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-g>".*;
+//         }).static,
+//         .value = @as(c_int, 'g') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-h>".*;
+//         }).static,
+//         .value = @as(c_int, 'h') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-i>".*;
+//         }).static,
+//         .value = @as(c_int, 'i') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-j>".*;
+//         }).static,
+//         .value = @as(c_int, 'j') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-k>".*;
+//         }).static,
+//         .value = @as(c_int, 'k') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-l>".*;
+//         }).static,
+//         .value = @as(c_int, 'l') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-m>".*;
+//         }).static,
+//         .value = @as(c_int, 'm') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-n>".*;
+//         }).static,
+//         .value = @as(c_int, 'n') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-o>".*;
+//         }).static,
+//         .value = @as(c_int, 'o') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-p>".*;
+//         }).static,
+//         .value = @as(c_int, 'p') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-q>".*;
+//         }).static,
+//         .value = @as(c_int, 'q') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-r>".*;
+//         }).static,
+//         .value = @as(c_int, 'r') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-s>".*;
+//         }).static,
+//         .value = @as(c_int, 's') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-t>".*;
+//         }).static,
+//         .value = @as(c_int, 't') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-u>".*;
+//         }).static,
+//         .value = @as(c_int, 'u') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-v>".*;
+//         }).static,
+//         .value = @as(c_int, 'v') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-w>".*;
+//         }).static,
+//         .value = @as(c_int, 'w') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-x>".*;
+//         }).static,
+//         .value = @as(c_int, 'x') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-y>".*;
+//         }).static,
+//         .value = @as(c_int, 'y') & @as(c_int, 31),
+//     },
+//     Ctrl_Key{
+//         .name = &(struct {
+//             var static = "<ctrl-z>".*;
+//         }).static,
+//         .value = @as(c_int, 'z') & @as(c_int, 31),
+//     },
+// };
