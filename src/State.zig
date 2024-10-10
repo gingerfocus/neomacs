@@ -7,7 +7,7 @@ const fr = @import("frontend.zig");
 
 const luajitsys = root.luajitsys;
 const scu = root.scu;
-const term = scu.thermit;
+const trm = scu.thermit;
 
 const Buffer = @import("Buffer.zig");
 const State = @This();
@@ -20,12 +20,12 @@ term: scu.Term,
 // redo_stack: Undo_Stack,
 // cur_undo: Undo,
 // num_of_braces: usize = @import("std").mem.zeroes(usize),
-ch: term.KeyEvent = std.mem.zeroes(term.KeyEvent),
+ch: trm.KeyEvent = std.mem.zeroes(trm.KeyEvent),
 // env: [*:0]u8,
 // command: [*:0]u8,
 // command_s: usize = @import("std").mem.zeroes(usize),
 // variables: Variables,
-// repeating: Repeating = .{},
+repeating: Repeating = .{},
 // num: Data,
 leader: Leader = .NONE,
 
@@ -39,14 +39,18 @@ x: usize = 0,
 y: usize = 0,
 
 // normal_pos: usize = @import("std").mem.zeroes(usize),
-key_func: [5]*const fn (*Buffer, *State) anyerror!void = .{
-    &keys.handleNormalKeys,
-    &keys.handleInsertLeys,
-    &keys.handle_search_keys,
-    &keys.handle_command_keys,
-    &keys.handle_visual_keys,
-},
+// key_func: [5]*const fn (*Buffer, *State) anyerror!void = .{
+//     &keys.handleNormalKeys,
+//     &keys.handleInsertLeys,
+//     &keys.handle_search_keys,
+//     &keys.handle_command_keys,
+//     &keys.handle_visual_keys,
+// },
 keyMaps: [5]KeyMaps = .{ .{}, .{}, .{}, .{}, .{} },
+
+// If null then do the normal key map look up, else use this as the key maps
+// currentKeyMap: ?*KeyMap = null,
+
 L: *lua.State,
 
 // clipboard: ?[]const u8 = null,
@@ -62,7 +66,7 @@ buffer: *Buffer,
 // line_num_col: c_int = @import("std").mem.zeroes(c_int),
 // status_bar_row: c_int = @import("std").mem.zeroes(c_int),
 // status_bar_col: c_int = @import("std").mem.zeroes(c_int),
-resized: bool = false,
+resized: bool,
 
 line_num_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
 main_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
@@ -71,9 +75,9 @@ status_bar: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
 config: Config,
 
 pub fn init(a: std.mem.Allocator, file: []const u8) !State {
-    root.log(@src(), .debug, "opening file ({s})\n", .{file});
+    root.log(@src(), .debug, "opening file ({s})", .{file});
     const buffer = tools.loadBufferFromFile(a, file) catch |err| {
-        root.log(@src(), .err, "File Not Found: {s}\n", .{file});
+        root.log(@src(), .err, "File Not Found: {s}", .{file});
         return err;
     };
 
@@ -117,15 +121,20 @@ pub fn init(a: std.mem.Allocator, file: []const u8) !State {
         // .line_num_col = 0,
         // .status_bar_row = 0,
         // .status_bar_col = 0,
+
+        // signals to do all the screen math before the first
+        // render
+        .resized = true,
         .config = try Config.init(a),
     };
-    try state.resize();
+    try keys.initKeyMaps(&state);
+
     return state;
 }
 
 pub fn deinit(state: *State) void {
     // keymaps before lua as they reference the lua state
-    for (&state.keyMaps) |*keyMap| keyMap.deinit(state.a);
+    for (&state.keyMaps) |*keyMap| keyMap.keys.deinit(state.a);
 
     lua.deinit(state.L);
 
@@ -155,43 +164,26 @@ pub fn deinit(state: *State) void {
     state.arena.deinit();
 }
 
-pub fn runKeymap(state: *State) !void {
-    if (state.keyMaps[
-        @intFromEnum(state.config.mode) // get the mode
-    ] // get the handler
-        .get(scu.thermit.keys.bits(state.ch))) |function|
-    {
-        try function.run(state);
-    } else {
-        // TODO: remove this eventually
-        try state.key_func[@intFromEnum(state.config.mode)](state.buffer, state);
-    }
+fn getKeyMap(state: *const State) *const KeyMaps {
+    return &state.keyMaps[@intFromEnum(state.config.mode)];
 }
 
-pub fn resize(state: *State) !void {
-    state.resized = true;
-    const x, const y = try term.getWindowSize(state.term.tty.f.handle);
+pub fn runKeymap(state: *State) !void {
+    const map = state.getKeyMap();
+    if (map.keys.get(scu.thermit.keys.bits(state.ch))) |function| {
+        // if there is a custom handler then run it
+        try function.run(state);
+    } else {
+        // if there is no handler and its just a regular key then send it to
+        // the buffer
+        try map.fallback.run(state);
+    }
+    // if (state.config.mode == .INSERT and @as(u8, @bitCast(state.ch.modifiers)) == 0) {
+    //     try Buffer.buffer_insert_char(state, state.buffer, state.ch.character.b());
+    // }
 
-    state.line_num_win = .{
-        .x = 0,
-        .y = 0,
-        .w = fr.sidebarWidth,
-        .h = y - fr.statusbarHeight,
-    };
-
-    state.status_bar = .{
-        .x = 0,
-        .y = y - fr.statusbarHeight,
-        .w = x,
-        .h = fr.statusbarHeight,
-    };
-
-    state.main_win = .{
-        .x = fr.sidebarWidth,
-        .y = 0,
-        .w = x - fr.sidebarWidth,
-        .h = y - fr.statusbarHeight,
-    };
+    // TODO: remove this eventually
+    // try state.key_func[@intFromEnum(state.config.mode)](state.buffer, state);
 }
 
 pub const Config = struct {
@@ -203,7 +195,7 @@ pub const Config = struct {
     // lang: []const u8,
     QUIT: bool = false,
     mode: Mode = .NORMAL,
-    background_color: c_int = -1,
+    // background_color: c_int = -1,
     // leaders: [4]u8,
     // key_maps: Maps,
 
@@ -223,7 +215,7 @@ pub const Config = struct {
             // .undo_size = 16,
             .QUIT = false,
             .mode = .NORMAL,
-            .background_color = -@as(c_int, 1),
+            // .background_color = -@as(c_int, 1),
             // .leaders = .{ ' ', 'r', 'd', 'y' },
             // .key_maps = Maps{},
         };
@@ -236,7 +228,13 @@ pub const Config = struct {
     }
 };
 
-const KeyMaps = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
+fn fallbackNone(_: *State) !void {}
+
+pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
+pub const KeyMaps = struct {
+    keys: KeyMapings = .{},
+    fallback: KeyMap = .{ .Native = fallbackNone },
+};
 
 pub const KeyMap = union(enum) {
     const Callback = *const fn (*State) anyerror!void;
@@ -244,6 +242,7 @@ pub const KeyMap = union(enum) {
 
     Native: Callback,
     LuaFnc: LuaRef,
+    // SubMap: *KeyMaps,
 
     pub fn initLua(L: *lua.State, index: c_int) !KeyMap {
         if (lua.lua_type(L, index) != lua.LUA_TFUNCTION) {
@@ -300,4 +299,9 @@ pub const Mode = enum(usize) {
             .VISUAL => "VISUAL",
         };
     }
+};
+
+pub const Repeating = struct {
+    is: bool = false,
+    count: usize = 0,
 };

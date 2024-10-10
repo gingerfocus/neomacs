@@ -1,5 +1,5 @@
-/.zig-cache
-/zig-out
+.zig-cache
+zig-out
 
 /.direnv
 /result
@@ -10,6 +10,7 @@
 /sub/pomozo
 /sub/yuzu
 /sub/neovide
+/sub/treet
 
 /out.txt
 /neomacs.log

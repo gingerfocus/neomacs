@@ -3,8 +3,8 @@
     .version = "0.1.0",
     .dependencies = .{
         .terminal = .{
-            .url = "https://github.com/gingerfocus/thermit/archive/a5e45fdfd8a49e239a23f8e143565276824db81b.tar.gz",
-            .hash = "1220e8ebd67dfcfb7106f73b315427df58f7a76e7f2cd1d5184d93e6b2d7e21a9d92",
+            .url = "https://github.com/gingerfocus/thermit/archive/71cbffe432df20683f4cca50558f81fcc1b1cc54.tar.gz",
+            .hash = "12208113681f8ae10cab2b8533c7e8c6ea3cbdb324f722df69cc063b6f27ccab1663",
         },
         .zss = .{ .path = "sub/zss" },
         .wev = .{ .path = "sub/wev" },

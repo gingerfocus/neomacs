@@ -386,7 +386,7 @@ pub fn loadBufferFromFile(a: std.mem.Allocator, filename: []const u8) !*Buffer {
         .data = list.moveToUnmanaged(),
         .rows = .{},
     };
-    try Buffer.buffer_calculate_rows(a, buffer);
+    try buffer.recalculateRows(a);
 
     return buffer;
 }

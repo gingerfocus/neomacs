@@ -78,15 +78,10 @@ pub const Undo = struct {
 
 pub const Undo_Stack = std.ArrayList(Undo);
 
-pub const Repeating = extern struct {
-    repeating: bool = false,
-    repeating_count: usize = 0,
-};
-
-pub const Sized_Str = extern struct {
-    str: *u8 = @import("std").mem.zeroes(*u8),
-    len: usize = @import("std").mem.zeroes(usize),
-};
+// pub const Sized_Str = extern struct {
+//     str: *u8 = @import("std").mem.zeroes(*u8),
+//     len: usize = @import("std").mem.zeroes(usize),
+// };
 
 // pub const Maps = std.ArrayListUnmanaged(Map);
 // pub const Map = struct {

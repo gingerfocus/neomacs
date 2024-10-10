@@ -9,9 +9,6 @@ const mem = std.mem;
 // } while(0)
 
 // const bf = @import("buffer.zig");
-// const cgo = @import("cgetopt.zig");
-// const clr = @import("colors.h.zig");
-// const cmd = @import("commands.zig");
 const defs = @import("defs.zig");
 const front = @import("frontend.zig");
 // const keys = @import("keys.zig");
@@ -76,7 +73,7 @@ fn neomacs() !void {
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    log(@src(), .debug, "starting (main void)\n", .{});
+    log(@src(), .debug, "starting (main void)", .{});
 
     const args = try Args.parse(a, std.os.argv);
     defer args.deinit(a);
@@ -92,11 +89,12 @@ fn neomacs() !void {
     // const syntax_filename: ?[*:0]u8 = null;
     // tools.load_config_from_file(a, &state, state.buffer, args.config, syntax_filename);
 
-    // bf.buffer_calculate_rows(state.buffer);
-
     while (!state.config.QUIT and !(state.ch.modifiers.ctrl and state.ch.character.b() == 'q')) {
         try tools.handleCursorShape(&state);
-        try front.render(&state);
+        front.render(&state) catch |err| {
+            log(@src(), .err, "encountered error: {}", .{err});
+            return err;
+        };
 
         const ev = try state.term.tty.read(10000);
         switch (ev) {

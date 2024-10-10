@@ -14,7 +14,7 @@
         neon = self.packages."${system}";
       in {
         devShells.default = pkgs.mkShell {
-          inputsFrom = with neon; [ neomacs wev ];
+          inputsFrom = with neon; [ neomacs wev surf ];
 
           packages = with pkgs; [ 
             valgrind
@@ -29,6 +29,7 @@
         packages = {
           default = neon.neomacs;
           wev = pkgs.callPackage ./sub/wev/wev.nix { };
+          surf = pkgs.callPackage ./sub/surf/surf.nix { };
           neomacs = pkgs.callPackage ./neomacs.nix { };
         };
       });

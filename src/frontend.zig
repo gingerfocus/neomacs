@@ -1,4 +1,5 @@
 const std = @import("std");
+const root = @import("root");
 
 const defs = @import("defs.zig");
 // const scu = root.scu
@@ -13,18 +14,25 @@ pub fn render(state: *State) !void {
     try state.term.start(state.resized);
     defer state.term.finish() catch |err| std.log.err("{any}", .{err});
 
-    const cur_row = 2;
-    const cur_col = 0;
-
-    // TODO: should be in state
-    const row_render_start = 0;
-    const col_render_start = 0;
-
-    _ = col_render_start; // autofix
-
     if (state.resized) {
         // nothing
+        root.log(@src(), .info, "starting window resize render", .{});
+
+        const size = state.term.size;
+
+        state.line_num_win = state.term.makeScreen(0, 0, sidebarWidth, size.y - statusbarHeight);
+        state.status_bar = state.term.makeScreen(0, size.y - statusbarHeight, null, null);
+        state.main_win = state.term.makeScreen(sidebarWidth, 0, null, size.y - statusbarHeight);
     }
+
+    const realRow = state.buffer.row;
+
+    // TODO: should be in state
+    const row_render_start = std.math.sub(usize, realRow, state.term.size.y) catch 0;
+    const col_render_start = 0;
+
+    const viewportRow = state.buffer.row - row_render_start;
+    const viewportCol = state.buffer.col - col_render_start;
 
     // const row: usize = bf.bufferGetRow(state.buffer.?);
     // if (state.is_exploring) {
@@ -53,9 +61,22 @@ pub fn render(state: *State) !void {
         state.term.writeBuffer(state.status_bar, 0, 1, print_msg);
         state.status_bar_msg = null;
     }
+    // ---- clear status bar --------
+    {
+        var x: u16 = 0;
+        while (x < state.status_bar.w) : (x += 1) {
+            var y: u16 = 0;
+            while (y < state.status_bar.h) : (y += 1) {
+                const cell = state.term.getScreenCell(state.status_bar, x, y).?;
+                cell.setSymbol(' ');
+                // cell.bg = .Cyan;
+            }
+        }
+    }
+    // ------------------------------
 
     {
-        const position = try std.fmt.allocPrint(state.a, "{}:{}", .{ cur_row + 1, cur_col + 1 });
+        const position = try std.fmt.allocPrint(state.a, "{}:{}", .{ state.buffer.row + 1, state.buffer.col + 1 });
         defer state.a.free(position);
         state.term.writeBuffer(
             state.status_bar,
@@ -65,18 +86,18 @@ pub fn render(state: *State) !void {
         );
     }
 
-    const mode = state.config.mode.toString();
-    state.term.writeBuffer(state.status_bar, 0, 0, mode);
+    // const mode = state.config.mode.toString();
+    // state.term.writeBuffer(state.status_bar, 0, 0, mode);
 
-    // {
-    //     state.term.writeBuffer(state.status_bar, state.status_bar.w - 1, 1, switch (state.leader) {
-    //         .R => "r",
-    //         .D => "d",
-    //         .Y => "y",
-    //         .NONE => " ", // clear an previous state
-    //     });
-    //     state.term.writeBuffer(state.status_bar, state.status_bar.w - 5, 0, state.num.items);
-    // }
+    {
+        state.term.writeBuffer(state.status_bar, state.status_bar.w - 1, 1, switch (state.leader) {
+            .R => "r",
+            .D => "d",
+            .Y => "y",
+            .NONE => " ", // clear an previous state
+        });
+        // state.term.writeBuffer(state.status_bar, state.status_bar.w - 5, 0, state.num.items);
+    }
 
     // if (state.config.mode == .COMMAND or state.config.mode == .SEARCH) {
     //     const command = try std.fmt.allocPrint(state.a, ":{s}", .{state.command});
@@ -98,34 +119,52 @@ pub fn render(state: *State) !void {
     //     }
     // }
 
-    const relative_nums = false;
+    const relative_nums = true;
+
+    // ----- clear main buffer ----
+    {
+        var x: u16 = 0;
+        while (x < state.main_win.w) : (x += 1) {
+            var y: u16 = 0;
+            while (y < state.main_win.h) : (y += 1) {
+                const cell = state.term.getScreenCell(state.main_win, x, y).?;
+                cell.setSymbol(' ');
+                cell.bg = .Black;
+            }
+        }
+    }
+    // ----------------------------
 
     // ----- main buffer ----------------------------
     {
-        var r: usize = row_render_start;
-        while (r < state.buffer.rows.items.len and r < row_render_start + state.main_win.h) : (r += 1) {
-            const row = state.buffer.rows.items[r];
+        var renderRow: usize = row_render_start;
+        while (renderRow < state.buffer.rows.items.len and renderRow < row_render_start + state.main_win.h) : (renderRow += 1) {
+            const row = state.buffer.rows.items[renderRow];
             const bufdata = state.buffer.data.items[row.start..row.end];
             var c: u16 = 1;
             for (bufdata) |ch| {
-                const cell = state.term.getScreenCell(state.main_win, c, @intCast(r)) orelse break;
+                const cell = state.term.getScreenCell(state.main_win, c, @intCast(renderRow)) orelse continue;
                 cell.fg = .DarkBlue;
-                // cell.bg = .Black;
+                cell.bg = .Black;
 
                 cell.setSymbol(ch);
                 c += 1;
             }
 
             // ---- line numbers -------------------------
-            if (r - row_render_start < state.line_num_win.h) {
+            if (renderRow - row_render_start < state.line_num_win.h) {
                 const lineNumber = if (relative_nums) blk: {
-                    const srow = @as(isize, cur_row);
-                    const sr = @as(isize, @intCast(r));
-                    const res: usize = @abs(srow - sr);
-                    if (res == 0) break :blk r + 1;
+                    const res = if (realRow > renderRow)
+                        realRow - renderRow
+                    else if (realRow == renderRow)
+                        renderRow + 1
+                    else
+                        renderRow - realRow;
+
+                    if (res == 0) break :blk renderRow + 1;
                     break :blk res;
                 } else blk: {
-                    break :blk r + 1;
+                    break :blk renderRow + 1;
                 };
 
                 const BUFSIZE = 8;
@@ -136,7 +175,7 @@ pub fn render(state: *State) !void {
 
                 c = 0;
                 for (data) |ch| {
-                    const cell = state.term.getScreenCell(state.line_num_win, c, @intCast(r)) orelse break;
+                    const cell = state.term.getScreenCell(state.line_num_win, c, @intCast(renderRow)) orelse break;
                     cell.fg = .Yellow;
                     cell.setSymbol(ch);
                     c += 1;
@@ -147,14 +186,14 @@ pub fn render(state: *State) !void {
     }
     // -------------------------------------------
 
-    if (state.config.mode == .COMMAND or state.config.mode == .SEARCH) {
-        // frontend_move_cursor(state.*.status_bar, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))), state.*.x);
-    } else {
-        // TODO: account for tab characters
-        // col = cur_row + countTabs() * 3;
+    // if (state.config.mode == .COMMAND or state.config.mode == .SEARCH) {
+    //     state.term.moveCursor(state.status_bar, @intCast(cur_row), 1); // state.x
+    // } else {
+    // TODO: account for tab characters
+    // const col = cur_row; // + countTabs() * 3;
 
-        // state.term.moveCursor(state.*.main_win, cur_row -% row_render_start, col - col_render_start);
-    }
+    state.term.moveCursor(state.main_win, @intCast(viewportCol + 1), @intCast(viewportRow));
+    // }
 
     // we just finised rendering so we know that the current buffer is the
     // right size

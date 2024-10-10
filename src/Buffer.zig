@@ -1,96 +1,32 @@
-const defs = @import("defs.zig");
 const std = @import("std");
+const root = @import("root");
+
+const defs = @import("defs.zig");
 
 const Data = defs.Data;
 
 const Buffer = @This();
 
+/// literal data in the buffer
 data: Data,
-rows: Rows,
+/// position in the data above
 cursor: usize = 0,
+
+/// Calculated from the above
+rows: Rows,
+/// Derived value from position
 row: usize = 0,
+/// Derived value from position
 col: usize = 0,
+
 filename: []const u8,
 // visual: ?Visual = null,
 
-// pub const __off_t = c_long;
-// pub const __off64_t = c_long;
-// pub const chtype = c_uint;
-// pub const struct__IO_marker = opaque {};
-// pub const _IO_lock_t = anyopaque;
-// pub const struct__IO_codecvt = opaque {};
-// pub const struct__IO_wide_data = opaque {};
-// pub const struct__IO_FILE = extern struct {
-//     _flags: c_int = @import("std").mem.zeroes(c_int),
-//     _IO_read_ptr: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_read_end: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_read_base: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_write_base: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_write_ptr: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_write_end: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_buf_base: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_buf_end: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_save_base: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_backup_base: *u8 = @import("std").mem.zeroes(*u8),
-//     _IO_save_end: *u8 = @import("std").mem.zeroes(*u8),
-//     _markers: ?*struct__IO_marker = @import("std").mem.zeroes(?*struct__IO_marker),
-//     _chain: *struct__IO_FILE = @import("std").mem.zeroes(*struct__IO_FILE),
-//     _fileno: c_int = @import("std").mem.zeroes(c_int),
-//     _flags2: c_int = @import("std").mem.zeroes(c_int),
-//     _old_offset: __off_t = @import("std").mem.zeroes(__off_t),
-//     _cur_column: c_ushort = @import("std").mem.zeroes(c_ushort),
-//     _vtable_offset: i8 = @import("std").mem.zeroes(i8),
-//     _shortbuf: [1]u8 = @import("std").mem.zeroes([1]u8),
-//     _lock: ?*_IO_lock_t = @import("std").mem.zeroes(?*_IO_lock_t),
-//     _offset: __off64_t = @import("std").mem.zeroes(__off64_t),
-//     _codecvt: ?*struct__IO_codecvt = @import("std").mem.zeroes(?*struct__IO_codecvt),
-//     _wide_data: ?*struct__IO_wide_data = @import("std").mem.zeroes(?*struct__IO_wide_data),
-//     _freeres_list: *struct__IO_FILE = @import("std").mem.zeroes(*struct__IO_FILE),
-//     _freeres_buf: ?*anyopaque = @import("std").mem.zeroes(?*anyopaque),
-//     __pad5: usize = @import("std").mem.zeroes(usize),
-//     _mode: c_int = @import("std").mem.zeroes(c_int),
-//     _unused2: [20]u8 = @import("std").mem.zeroes([20]u8),
-// };
-// pub const FILE = struct__IO_FILE;
-// pub extern var stderr: *FILE;
-// pub extern fn fprintf(__stream: *FILE, __format: *const u8, ...) c_int;
-// pub const acs_map: *chtype = @extern(*chtype, .{
-//     .name = "acs_map",
-// });
-// pub const struct_screen = opaque {};
-// pub const SCREEN = struct_screen;
-// pub const attr_t = chtype;
-// pub const struct_ldat = opaque {};
+const Rows = defs.Rows;
+const Row = defs.Row;
+const State = @import("State.zig");
+const Undo = defs.Undo;
 
-// const WINDOW = defs.WINDOW;
-//
-// pub const _ISalnum: c_int = 8;
-// pub extern fn __ctype_b_loc() **const c_ushort;
-//
-// const String_View = defs.String_View;
-//
-// pub const NORMAL: c_int = 0;
-// pub const INSERT: c_int = 1;
-// pub const SEARCH: c_int = 2;
-// pub const COMMAND: c_int = 3;
-// pub const VISUAL: c_int = 4;
-// pub const MODE_COUNT: c_int = 5;
-// pub const Mode = c_uint;
-//
-// pub const LEADER_NONE: c_int = 0;
-// pub const LEADER_R: c_int = 1;
-// pub const LEADER_D: c_int = 2;
-// pub const LEADER_Y: c_int = 3;
-// pub const LEADER_COUNT: c_int = 4;
-// pub const Leader = c_uint;
-//
-// pub const NONE: c_int = 0;
-// pub const INSERT_CHARS: c_int = 1;
-// pub const DELETE_CHAR: c_int = 2;
-// pub const DELETE_MULT_CHAR: c_int = 3;
-// pub const REPLACE_CHAR: c_int = 4;
-// pub const Undo_Type = c_uint;
-//
 // pub const NO_ERROR: c_int = 0;
 // pub const NOT_ENOUGH_ARGS: c_int = 1;
 // pub const INVALID_ARGS: c_int = 2;
@@ -98,21 +34,6 @@ filename: []const u8,
 // pub const INVALID_IDENT: c_int = 4;
 // pub const Command_Error = c_uint;
 //
-// pub const ThreadArgs = extern struct {
-//     path_to_file: *const u8 = @import("std").mem.zeroes(*const u8),
-//     filename: *const u8 = @import("std").mem.zeroes(*const u8),
-//     lang: *const u8 = @import("std").mem.zeroes(*const u8),
-// };
-// pub const Color = extern struct {
-//     color_name: [20]u8 = @import("std").mem.zeroes([20]u8),
-//     is_custom_line_row: bool = @import("std").mem.zeroes(bool),
-//     is_custom: bool = @import("std").mem.zeroes(bool),
-//     slot: c_int = @import("std").mem.zeroes(c_int),
-//     id: c_int = @import("std").mem.zeroes(c_int),
-//     red: c_int = @import("std").mem.zeroes(c_int),
-//     green: c_int = @import("std").mem.zeroes(c_int),
-//     blue: c_int = @import("std").mem.zeroes(c_int),
-// };
 // pub const Point = extern struct {
 //     x: usize = @import("std").mem.zeroes(usize),
 //     y: usize = @import("std").mem.zeroes(usize),
@@ -123,11 +44,6 @@ filename: []const u8,
 //     is_line: c_int = @import("std").mem.zeroes(c_int),
 // };
 
-const Rows = defs.Rows;
-const Row = defs.Row;
-
-// const Data = defs.Data;
-//
 // pub const Positions = extern struct {
 //     data: *usize = @import("std").mem.zeroes(*usize),
 //     count: usize = @import("std").mem.zeroes(usize),
@@ -139,7 +55,6 @@ const Row = defs.Row;
 //     arg: *u8 = @import("std").mem.zeroes(*u8),
 // };
 //
-const Undo = defs.Undo;
 // const Undo_Stack = defs.Undo_Stack;
 //
 // pub const Repeating = extern struct {
@@ -169,29 +84,29 @@ const Undo = defs.Undo;
 // const Files = defs.Files;
 // const Config_Vars = defs.Config_Vars;
 // const Config = defs.Config;
-const State = @import("State.zig");
-//
+
 // pub const Brace = extern struct {
 //     brace: u8 = @import("std").mem.zeroes(u8),
 //     closing: c_int = @import("std").mem.zeroes(c_int),
-// };
-// pub const Ncurses_Color = extern struct {
-//     r: c_int = @import("std").mem.zeroes(c_int),
-//     g: c_int = @import("std").mem.zeroes(c_int),
-//     b: c_int = @import("std").mem.zeroes(c_int),
 // };
 // pub const Syntax_Highlighting = extern struct {
 //     row: usize = @import("std").mem.zeroes(usize),
 //     col: usize = @import("std").mem.zeroes(usize),
 //     size: usize = @import("std").mem.zeroes(usize),
 // };
-// pub extern var string_modes: [5]*u8;
 
-pub fn buffer_calculate_rows(a: std.mem.Allocator, buffer: *Buffer) !void {
+pub fn recalculateRows(buffer: *Buffer, a: std.mem.Allocator) !void {
     // buffer.rows.count = 0;
     var start: usize = 0;
 
+    buffer.rows.clearRetainingCapacity();
+
     for (buffer.data.items, 0..) |ch, i| {
+        if (i == buffer.cursor) {
+            buffer.row = buffer.rows.items.len;
+            buffer.col = i - start;
+        }
+
         if (ch == '\n') {
             try buffer.rows.append(a, Row{ .start = start, .end = i });
             start = i + 1;
@@ -205,19 +120,25 @@ pub fn buffer_insert_char(state: *State, buffer: *Buffer, ch: u8) !void {
         buffer.cursor = buffer.data.items.len;
     }
     try buffer.data.insert(state.a, buffer.cursor, ch);
+    buffer.cursor += 1;
     // state.cur_undo.end = buffer.cursor;
 
     // TODO: be smarter about calling this function
-    // buffer_calculate_rows(state.a, buffer);
+    try buffer.recalculateRows(state.a);
 }
 
-pub fn buffer_delete_char(buffer: *Buffer, state: *State) void {
-    _ = state; // autofix
-
+pub fn buffer_delete_char(buffer: *Buffer, state: *State) !void {
     if (buffer.cursor < buffer.data.items.len) {
-        //         _ = memmove(@as(?*anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor])), @as(?*const anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))])), (buffer.*.data.count -% buffer.*.cursor) -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
-        //         buffer.*.data.count -%= 1;
-        //         buffer_calculate_rows(buffer);
+        // shift
+        @memcpy(
+            buffer.data.items[buffer.cursor .. buffer.data.items.len - 1],
+            buffer.data.items[buffer.cursor + 1 .. buffer.data.items.len],
+        );
+        // reduce capacity
+        buffer.data.items = buffer.data.items[0 .. buffer.data.items.len - 1];
+
+        // recalculate
+        try buffer.recalculateRows(state.a);
     }
 }
 
@@ -350,20 +271,20 @@ pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
 //     state.*.repeating.repeating_count = 0;
 // }
 
-pub fn bufferGetRow(buffer: *const Buffer) usize {
-    // std.debug.assert(buffer.cursor <= buffer.data.items.len);
-
-    // there must be at least one line
-    std.debug.assert(buffer.rows.items.len >= 1);
-
-    for (buffer.rows.items, 0..) |row, i| {
-        if (row.start <= buffer.cursor and buffer.cursor <= row.end) {
-            return i;
-        }
-    }
-
-    return 0;
-}
+// pub fn bufferGetRow(buffer: *const Buffer) usize {
+//     // std.debug.assert(buffer.cursor <= buffer.data.items.len);
+//
+//     // there must be at least one line
+//     std.debug.assert(buffer.rows.items.len >= 1);
+//
+//     for (buffer.rows.items, 0..) |row, i| {
+//         if (row.start <= buffer.cursor and buffer.cursor <= row.end) {
+//             return i;
+//         }
+//     }
+//
+//     return 0;
+// }
 
 // pub fn index_get_row(arg_buffer: *Buffer, arg_index_1: usize) usize {
 //     var buffer = arg_buffer;
@@ -550,34 +471,35 @@ pub fn bufferGetRow(buffer: *const Buffer) usize {
 //     buffer.*.data.count +%= size;
 //     buffer_calculate_rows(buffer);
 // }
-// pub fn buffer_move_up(arg_buffer: *Buffer) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var row: usize = bufferGetRow(buffer);
-//     _ = &row;
-//     var col: usize = buffer.*.cursor -% buffer.*.rows.data[row].start;
-//     _ = &col;
-//     if (row > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-//         buffer.*.cursor = buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start +% col;
-//         if (buffer.*.cursor > buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end) {
-//             buffer.*.cursor = buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end;
-//         }
-//     }
-// }
-// pub fn buffer_move_down(arg_buffer: *Buffer) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var row: usize = bufferGetRow(buffer);
-//     _ = &row;
-//     var col: usize = buffer.*.cursor -% buffer.*.rows.data[row].start;
-//     _ = &col;
-//     if (row < (buffer.*.rows.count -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))))) {
-//         buffer.*.cursor = buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start +% col;
-//         if (buffer.*.cursor > buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end) {
-//             buffer.*.cursor = buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end;
-//         }
-//     }
-// }
+
+pub fn moveUp(buffer: *Buffer, count: usize) void {
+    buffer.row -= count;
+    root.log(@src(), .warn, "TODO: improve move implementation", .{});
+
+    // var row: usize = bufferGetRow(buffer);
+    // var col: usize = buffer.*.cursor -% buffer.*.rows.data[row].start;
+    // if (row > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
+    //     buffer.*.cursor = buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start +% col;
+    //     if (buffer.*.cursor > buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end) {
+    //         buffer.*.cursor = buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end;
+    //     }
+    // }
+}
+
+pub fn moveDown(buffer: *Buffer, count: usize) void {
+    buffer.row += count;
+    root.log(@src(), .warn, "TODO: improve move implementation", .{});
+
+    // const row: usize = bufferGetRow(buffer);
+    // var col: usize = buffer.*.cursor -% buffer.*.rows.data[row].start;
+    // if (row < (buffer.*.rows.count -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))))) {
+    //     buffer.*.cursor = buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start +% col;
+    //     if (buffer.*.cursor > buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end) {
+    //         buffer.*.cursor = buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end;
+    //     }
+    // }
+}
+
 // pub fn buffer_move_right(arg_buffer: *Buffer) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -701,29 +623,26 @@ pub fn bufferGetRow(buffer: *const Buffer) usize {
 //     buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '\n'))))));
 //     buffer_create_indent(buffer, state);
 // }
+
+// const ROPE_SPLIT_LENGTH = 128;
+// const RopeString = struct {
+//     data: []const u8,
+//     indx: usize, // the start index of the string
+//     left: ?*RopeString = null,
+//     rigt: ?*RopeString = null,
+// };
+// fn ropeFromBuffer(a: std.mem.Allocator, buffer: []const u8) !RopeString {
+//     _ = a; // autofix
+//     var remaining = buffer;
+//     var root = RopeString{
+//         .data = "",
+//         .indx = 0,
+//     };
+//     var curr = &root;
 //
-// pub const wchar_t = c_int;
-// pub const div_t = extern struct {
-//     quot: c_int = @import("std").mem.zeroes(c_int),
-//     rem: c_int = @import("std").mem.zeroes(c_int),
-// };
-// pub const ldiv_t = extern struct {
-//     quot: c_long = @import("std").mem.zeroes(c_long),
-//     rem: c_long = @import("std").mem.zeroes(c_long),
-// };
-// pub const lldiv_t = extern struct {
-//     quot: c_longlong = @import("std").mem.zeroes(c_longlong),
-//     rem: c_longlong = @import("std").mem.zeroes(c_longlong),
-// };
-// pub extern fn calloc(__nmemb: c_ulong, __size: c_ulong) ?*anyopaque;
-// pub extern fn realloc(__ptr: ?*anyopaque, __size: c_ulong) ?*anyopaque;
-// pub extern fn free(__ptr: ?*anyopaque) void;
-// pub extern fn exit(__status: c_int) noreturn;
-// pub extern fn memcpy(__dest: ?*anyopaque, __src: ?*const anyopaque, __n: c_ulong) ?*anyopaque;
-// pub extern fn memmove(__dest: ?*anyopaque, __src: ?*const anyopaque, __n: c_ulong) ?*anyopaque;
-// pub extern fn strncpy(__dest: *u8, __src: *const u8, __n: c_ulong) *u8;
-// pub extern fn frontend_getch(window: *WINDOW) c_int;
-// pub extern fn frontend_end() void;
-// pub extern fn undo_push(state: *State, stack: *Undo_Stack, undo: Undo) void;
-// pub extern fn find_opposite_brace(opening: u8) Brace;
-// pub extern fn reset_command(command: *u8, command_s: *usize) void;
+//     while (remaining.len > ROPE_SPLIT_LENGTH) {
+//         curr.data = remaining[0..ROPE_SPLIT_LENGTH];
+//     }
+//     curr.data = remaining;
+//     return root;
+// }
