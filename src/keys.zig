@@ -34,8 +34,8 @@ pub fn initKeyMaps(state: *State) !void {
 }
 
 fn insertCharacter(state: *State) !void {
-    if (@as(u8, @bitCast(state.ch.modifiers)) == 0) {
-        try Buffer.buffer_insert_char(state, state.buffer, state.ch.character.b());
+    if (state.ch.modifiers.bits() == 0) {
+        try state.buffer.insertCharacter(state.a, state.ch.character.b());
     }
 }
 

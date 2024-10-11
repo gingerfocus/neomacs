@@ -16,17 +16,14 @@ a: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 term: scu.Term,
 
-// undo_stack: Undo_Stack,
-// redo_stack: Undo_Stack,
-// cur_undo: Undo,
-// num_of_braces: usize = @import("std").mem.zeroes(usize),
+// undos: Undo_Stack,
+// redos: Undo_Stack,
+// undo: Undo,
+
 ch: trm.KeyEvent = std.mem.zeroes(trm.KeyEvent),
-// env: [*:0]u8,
-// command: [*:0]u8,
-// command_s: usize = @import("std").mem.zeroes(usize),
-// variables: Variables,
+
+// command: std.ArrayListUnmanaged(u8),
 repeating: Repeating = .{},
-// num: Data,
 leader: Leader = .NONE,
 
 /// Message to show in the status bar, remains until cleared
@@ -38,34 +35,15 @@ x: usize = 0,
 /// cursor y position
 y: usize = 0,
 
-// normal_pos: usize = @import("std").mem.zeroes(usize),
-// key_func: [5]*const fn (*Buffer, *State) anyerror!void = .{
-//     &keys.handleNormalKeys,
-//     &keys.handleInsertLeys,
-//     &keys.handle_search_keys,
-//     &keys.handle_command_keys,
-//     &keys.handle_visual_keys,
-// },
 keyMaps: [5]KeyMaps = .{ .{}, .{}, .{}, .{}, .{} },
-
-// If null then do the normal key map look up, else use this as the key maps
-// currentKeyMap: ?*KeyMap = null,
+/// If null then do the normal key map look up, else use this as the key maps
+currentKeyMap: ?*KeyMaps = null,
 
 L: *lua.State,
 
 // clipboard: ?[]const u8 = null,
-// files: Files,
-// is_exploring: bool = false,
-// explore_cursor: usize = 0,
 buffer: *Buffer,
-// grow: c_int = @import("std").mem.zeroes(c_int),
-// gcol: c_int = @import("std").mem.zeroes(c_int),
-// main_row: c_int = @import("std").mem.zeroes(c_int),
-// main_col: c_int = @import("std").mem.zeroes(c_int),
-// line_num_row: c_int = @import("std").mem.zeroes(c_int),
-// line_num_col: c_int = @import("std").mem.zeroes(c_int),
-// status_bar_row: c_int = @import("std").mem.zeroes(c_int),
-// status_bar_col: c_int = @import("std").mem.zeroes(c_int),
+
 resized: bool,
 
 line_num_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
@@ -76,7 +54,9 @@ config: Config,
 
 pub fn init(a: std.mem.Allocator, file: []const u8) !State {
     root.log(@src(), .debug, "opening file ({s})", .{file});
-    const buffer = tools.loadBufferFromFile(a, file) catch |err| {
+
+    const buffer = try a.create(Buffer);
+    buffer.* = Buffer.init(a, file) catch |err| {
         root.log(@src(), .err, "File Not Found: {s}", .{file});
         return err;
     };
@@ -102,7 +82,6 @@ pub fn init(a: std.mem.Allocator, file: []const u8) !State {
         // .command_s = @import("std").mem.zeroes(usize),
         // .variables = Variables{},
         // .repeating = @import("std").mem.zeroes(Repeating),
-        //.num = Data{},
         // .is_print_msg = false,
         // .status_bar_msg = try a.alloc(u8, 128),
         // .x = @import("std").mem.zeroes(usize),
@@ -111,20 +90,10 @@ pub fn init(a: std.mem.Allocator, file: []const u8) !State {
         // .key_func = null,
         // .clipboard = @import("std").mem.zeroes(Sized_Str),
         // .files = Files{},
-        // .is_exploring = false,
-        // .explore_cursor = @import("std").mem.zeroes(usize),
-        // .grow = 0,
-        // .gcol = 0,
-        // .main_row = 0,
-        // .main_col = 0,
-        // .line_num_row = 0,
-        // .line_num_col = 0,
-        // .status_bar_row = 0,
-        // .status_bar_col = 0,
 
-        // signals to do all the screen math before the first
-        // render
+        // Do all the screen math before the first render starts
         .resized = true,
+
         .config = try Config.init(a),
     };
     try keys.initKeyMaps(&state);
@@ -134,7 +103,7 @@ pub fn init(a: std.mem.Allocator, file: []const u8) !State {
 
 pub fn deinit(state: *State) void {
     // keymaps before lua as they reference the lua state
-    for (&state.keyMaps) |*keyMap| keyMap.keys.deinit(state.a);
+    for (&state.keyMaps) |*keyMap| keyMap.deinit(state.a);
 
     lua.deinit(state.L);
 
@@ -144,17 +113,13 @@ pub fn deinit(state: *State) void {
     // }
     // state.files.deinit(state.a);
 
-    // state.num.deinit(state.a);
-
     // state.cur_undo.data.deinit(state.a);
     // state.undo_stack.deinit();
     // state.redo_stack.deinit();
 
     // state.a.free(state.status_bar_msg);
 
-    state.buffer.data.deinit(state.a);
-    state.buffer.rows.deinit(state.a);
-    state.a.free(state.buffer.filename);
+    state.buffer.deinit(state.a);
     state.a.destroy(state.buffer);
 
     state.config.deinit(state.a);
@@ -164,26 +129,9 @@ pub fn deinit(state: *State) void {
     state.arena.deinit();
 }
 
-fn getKeyMap(state: *const State) *const KeyMaps {
+pub fn getKeyMaps(state: *const State) *const KeyMaps {
+    if (state.currentKeyMap) |map| return map;
     return &state.keyMaps[@intFromEnum(state.config.mode)];
-}
-
-pub fn runKeymap(state: *State) !void {
-    const map = state.getKeyMap();
-    if (map.keys.get(scu.thermit.keys.bits(state.ch))) |function| {
-        // if there is a custom handler then run it
-        try function.run(state);
-    } else {
-        // if there is no handler and its just a regular key then send it to
-        // the buffer
-        try map.fallback.run(state);
-    }
-    // if (state.config.mode == .INSERT and @as(u8, @bitCast(state.ch.modifiers)) == 0) {
-    //     try Buffer.buffer_insert_char(state, state.buffer, state.ch.character.b());
-    // }
-
-    // TODO: remove this eventually
-    // try state.key_func[@intFromEnum(state.config.mode)](state.buffer, state);
 }
 
 pub const Config = struct {
@@ -229,11 +177,51 @@ pub const Config = struct {
 };
 
 fn fallbackNone(_: *State) !void {}
+// fn targeterNone(state: *State, target: usize) void {
+//     state.buffer.cursor = target;
+// }
 
 pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
 pub const KeyMaps = struct {
     keys: KeyMapings = .{},
+
+    // targeter: *const fn (*State, usize) void,
     fallback: KeyMap = .{ .Native = fallbackNone },
+
+    pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
+        var iter = self.keys.iterator();
+        while (iter.next()) |key| key.value_ptr.deinit(a);
+
+        self.keys.deinit(a);
+    }
+
+    pub fn run(self: KeyMaps, state: *State) !void {
+        if (self.keys.get(scu.thermit.keys.bits(state.ch))) |function| {
+            // if there is a custom handler then run it
+            try function.run(state);
+        } else {
+            // if there is no handler and its just a regular key then send it to
+            // the buffer
+            try self.fallback.run(state);
+        }
+    }
+
+    pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: KeyMap) !void {
+        self.keys.put(a, character, value);
+    }
+
+    /// Gets the next
+    pub fn then(self: *KeyMaps, a: std.mem.Allocator, character: u16) *KeyMaps {
+        const res = self.keys.getOrPut(a, character) catch @panic("OOM");
+        if (res.found_existing) {
+            switch (res.value_ptr) {
+                .SubMap => |map| return map,
+                else => {},
+            }
+        }
+        res.value_ptr.* = .{ .SubMap = a.create(KeyMaps) catch @panic("OOM") };
+        return res.value_ptr;
+    }
 };
 
 pub const KeyMap = union(enum) {
@@ -242,7 +230,14 @@ pub const KeyMap = union(enum) {
 
     Native: Callback,
     LuaFnc: LuaRef,
-    // SubMap: *KeyMaps,
+    SubMap: *KeyMaps,
+
+    pub fn deinit(self: KeyMap, a: std.mem.Allocator) void {
+        switch (self) {
+            .SubMap => |map| map.deinit(a),
+            else => {},
+        }
+    }
 
     pub fn initLua(L: *lua.State, index: c_int) !KeyMap {
         if (lua.lua_type(L, index) != lua.LUA_TFUNCTION) {
@@ -276,6 +271,10 @@ pub const KeyMap = union(enum) {
                     // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
                     return error.ExecuteLuaCallback;
                 }
+            },
+            .SubMap => |map| {
+                state.currentKeyMap = map;
+                return;
             },
         }
     }

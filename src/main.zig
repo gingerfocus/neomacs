@@ -1,6 +1,9 @@
 const std = @import("std");
 const mem = std.mem;
 
+pub const scu = @import("scured");
+pub const trm = scu.thermit;
+
 // #define CREATE_UNDO(t, p) do {    \
 //     Undo undo = {0};         \
 //     undo.type = (t);         \
@@ -8,16 +11,12 @@ const mem = std.mem;
 //     state->cur_undo = undo;   \
 // } while(0)
 
-// const bf = @import("buffer.zig");
 const defs = @import("defs.zig");
 const front = @import("frontend.zig");
 // const keys = @import("keys.zig");
-// const lex = @import("lex.zig");
 const tools = @import("tools.zig");
-const Args = @import("args.zig");
 
-pub const scu = @import("scured");
-pub const trm = scu.thermit;
+const Args = @import("args.zig");
 
 // const treesitter = @cImport({
 //     @cInclude("tree_sitter/api.h");
@@ -100,9 +99,10 @@ fn neomacs() !void {
         switch (ev) {
             .Key => |ke| {
                 state.ch = ke;
-                try state.runKeymap();
+                try state.getKeyMaps().run(&state);
             },
             .End => state.config.QUIT = true,
+            .Resize => state.resized = true,
             else => {},
         }
     }

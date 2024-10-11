@@ -27,80 +27,63 @@ const Row = defs.Row;
 const State = @import("State.zig");
 const Undo = defs.Undo;
 
+pub fn init(a: std.mem.Allocator, filename: []const u8) !Buffer {
+    const file = try std.fs.cwd().openFile(filename, .{}); // a+
+    defer file.close();
+
+    var list = std.ArrayList(u8).init(a);
+    defer list.deinit();
+    try file.reader().readAllArrayList(&list, 128 * 1024 * 1024);
+
+    var buffer = Buffer{
+        .filename = try a.dupe(u8, filename),
+        .data = list.moveToUnmanaged(),
+        .rows = .{},
+    };
+    try buffer.recalculateRows(a);
+
+    return buffer;
+}
+
+pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
+    buffer.data.deinit(a);
+    buffer.rows.deinit(a);
+
+    a.free(buffer.filename);
+}
+
 // pub const NO_ERROR: c_int = 0;
 // pub const NOT_ENOUGH_ARGS: c_int = 1;
 // pub const INVALID_ARGS: c_int = 2;
 // pub const UNKNOWN_COMMAND: c_int = 3;
 // pub const INVALID_IDENT: c_int = 4;
 // pub const Command_Error = c_uint;
-//
-// pub const Point = extern struct {
-//     x: usize = @import("std").mem.zeroes(usize),
-//     y: usize = @import("std").mem.zeroes(usize),
-// };
-// pub const Visual = extern struct {
-//     start: usize = @import("std").mem.zeroes(usize),
-//     end: usize = @import("std").mem.zeroes(usize),
-//     is_line: c_int = @import("std").mem.zeroes(c_int),
-// };
+
+const Point = root.scu.thermit.Size;
+const VisualMode = enum {
+    Range,
+    Line,
+    Block,
+};
+pub const Visual = struct {
+    start: Point,
+    end: Point,
+    mode: VisualMode,
+};
 
 // pub const Positions = extern struct {
 //     data: *usize = @import("std").mem.zeroes(*usize),
 //     count: usize = @import("std").mem.zeroes(usize),
 //     capacity: usize = @import("std").mem.zeroes(usize),
 // };
-//
-// pub const Arg = extern struct {
-//     size: usize = @import("std").mem.zeroes(usize),
-//     arg: *u8 = @import("std").mem.zeroes(*u8),
-// };
-//
-// const Undo_Stack = defs.Undo_Stack;
-//
-// pub const Repeating = extern struct {
-//     repeating: bool = @import("std").mem.zeroes(bool),
-//     repeating_count: usize = @import("std").mem.zeroes(usize),
-// };
-// pub const Sized_Str = extern struct {
-//     str: *u8 = @import("std").mem.zeroes(*u8),
-//     len: usize = @import("std").mem.zeroes(usize),
-// };
+
 // const Map = defs.Map;
 // const Maps = defs.Maps;
-// pub const Var_Value = extern union {
-//     as_int: c_int,
-//     as_float: f32,
-//     as_ptr: ?*anyopaque,
-// };
-// pub const VAR_INT: c_int = 0;
-// pub const VAR_FLOAT: c_int = 1;
-// pub const VAR_PTR: c_int = 2;
-// pub const Var_Type = c_uint;
-//
-// const Variable = defs.Variable;
-// const Variables = defs.Variables;
-//
-// const File = defs.File;
-// const Files = defs.Files;
-// const Config_Vars = defs.Config_Vars;
-// const Config = defs.Config;
-
-// pub const Brace = extern struct {
-//     brace: u8 = @import("std").mem.zeroes(u8),
-//     closing: c_int = @import("std").mem.zeroes(c_int),
-// };
-// pub const Syntax_Highlighting = extern struct {
-//     row: usize = @import("std").mem.zeroes(usize),
-//     col: usize = @import("std").mem.zeroes(usize),
-//     size: usize = @import("std").mem.zeroes(usize),
-// };
 
 pub fn recalculateRows(buffer: *Buffer, a: std.mem.Allocator) !void {
-    // buffer.rows.count = 0;
-    var start: usize = 0;
-
     buffer.rows.clearRetainingCapacity();
 
+    var start: usize = 0;
     for (buffer.data.items, 0..) |ch, i| {
         if (i == buffer.cursor) {
             buffer.row = buffer.rows.items.len;
@@ -115,31 +98,49 @@ pub fn recalculateRows(buffer: *Buffer, a: std.mem.Allocator) !void {
     try buffer.rows.append(a, Row{ .start = start, .end = buffer.data.items.len });
 }
 
-pub fn buffer_insert_char(state: *State, buffer: *Buffer, ch: u8) !void {
-    if (buffer.cursor > buffer.data.items.len) {
-        buffer.cursor = buffer.data.items.len;
-    }
-    try buffer.data.insert(state.a, buffer.cursor, ch);
+pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
+    // if (buffer.cursor > buffer.data.items.len) {
+    //     buffer.cursor = buffer.data.items.len;
+    // }
+
+    try buffer.data.insert(a, buffer.cursor, ch);
     buffer.cursor += 1;
+
     // state.cur_undo.end = buffer.cursor;
 
-    // TODO: be smarter about calling this function
-    try buffer.recalculateRows(state.a);
+    // PERF: time this to see if this is a real optimization, I think it is
+    // beacuse it will be on debug as it has no error path but on release mode
+    // it may be the same
+    if (ch == '\n') {
+        try buffer.recalculateRows(a);
+    } else {
+        buffer.col += 1;
+        for (buffer.rows.items) |*row| {
+            // skip if you need
+            if (row.end < buffer.cursor) continue;
+
+            // add if you are not in it
+            if (row.start > buffer.cursor) row.start += 1;
+
+            // always add after
+            row.end += 1;
+        }
+    }
 }
 
 pub fn buffer_delete_char(buffer: *Buffer, state: *State) !void {
-    if (buffer.cursor < buffer.data.items.len) {
-        // shift
-        @memcpy(
-            buffer.data.items[buffer.cursor .. buffer.data.items.len - 1],
-            buffer.data.items[buffer.cursor + 1 .. buffer.data.items.len],
-        );
-        // reduce capacity
-        buffer.data.items = buffer.data.items[0 .. buffer.data.items.len - 1];
+    std.debug.assert(buffer.cursor < buffer.data.items.len);
 
-        // recalculate
-        try buffer.recalculateRows(state.a);
-    }
+    // shift
+    @memcpy(
+        buffer.data.items[buffer.cursor .. buffer.data.items.len - 1],
+        buffer.data.items[buffer.cursor + 1 .. buffer.data.items.len],
+    );
+    // reduce capacity
+    buffer.data.items = buffer.data.items[0 .. buffer.data.items.len - 1];
+
+    // recalculate
+    try buffer.recalculateRows(state.a);
 }
 
 pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
@@ -514,6 +515,7 @@ pub fn moveDown(buffer: *Buffer, count: usize) void {
 //         buffer.*.cursor -%= 1;
 //     }
 // }
+
 // pub fn skip_to_char(arg_buffer: *Buffer, arg_cur_pos: c_int, arg_direction: c_int, arg_c: u8) c_int {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -543,6 +545,7 @@ pub fn moveDown(buffer: *Buffer, count: usize) void {
 //     }
 //     return cur_pos;
 // }
+
 // pub fn buffer_next_brace(arg_buffer: *Buffer) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
