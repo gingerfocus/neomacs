@@ -1,25 +1,32 @@
-const defs = @import("defs.zig");
-const tools = @import("tools.zig");
-const Buffer = @import("Buffer.zig");
-
 const root = @import("root");
 const std = @import("std");
 const scu = @import("scured");
 const trm = scu.thermit;
+const lua = @import("lua.zig");
 
-const Row = defs.Row;
-const Rows = defs.Rows;
-const Data = defs.Data;
+const km = @import("keymaps.zig");
+
+const Buffer = @import("Buffer.zig");
+const State = @import("State.zig");
+
+// const Row = defs.Row;
+// const Rows = defs.Rows;
+// const Data = defs.Data;
 // const String_View = defs.String_View;
 // const Visual = defs.Visual;
 // const Undo = defs.Undo;
 // const Brace = defs.Brace;
-const State = @import("State.zig");
+
+const norm = scu.thermit.keys.norm;
+const ctrl = scu.thermit.keys.ctrl;
+
+const Ks = scu.thermit.KeySymbol;
 
 pub fn initKeyMaps(state: *State) !void {
-    const normal = &state.keyMaps[@intFromEnum(State.Mode.NORMAL)];
-    const visual = &state.keyMaps[@intFromEnum(State.Mode.VISUAL)];
-    const insert = &state.keyMaps[@intFromEnum(State.Mode.INSERT)];
+    const normal = &state.keyMaps[@intFromEnum(State.Mode.normal)];
+    const visual = &state.keyMaps[@intFromEnum(State.Mode.visual)];
+    const insert = &state.keyMaps[@intFromEnum(State.Mode.insert)];
+    const comand = &state.keyMaps[@intFromEnum(State.Mode.comand)];
 
     // insert
     try initInsertKeys(state.a, &insert.keys);
@@ -27,26 +34,42 @@ pub fn initKeyMaps(state: *State) !void {
 
     // normal
     try initToInsertKeys(state.a, &normal.keys);
-    try initMotionKeys(state.a, &normal.keys);
+    try initMotionKeys(state.a, normal);
+    try initNormalKeys(state.a, &normal.keys);
 
     // normal
-    try initMotionKeys(state.a, &visual.keys);
+    try initMotionKeys(state.a, visual);
+
+    // command
+    try initCommandKeys(state.a, &comand.keys);
+    comand.fallback = .{ .Native = appendCharacter };
 }
 
 fn insertCharacter(state: *State) !void {
     if (state.ch.modifiers.bits() == 0) {
-        try state.buffer.insertCharacter(state.a, state.ch.character.b());
+        try state.buffer.insertCharacter(state.a, state.ch.character);
     }
 }
 
-const norm = scu.thermit.keys.norm;
+fn appendCharacter(state: *State) !void {
+    if (state.ch.modifiers.bits() == 0) {
+        try state.command.append(state.a, state.ch.character);
+    }
+}
 
-pub fn initMotionKeys(a: std.mem.Allocator, mode: *State.KeyMapings) !void {
-    try mode.put(a, norm(.j), .{ .Native = motion_j });
-    try mode.put(a, norm(.k), .{ .Native = motion_k });
+pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
+    const mode = &maps.keys;
 
-    // try mode.put(a, norm(.g), .{ .Native = motion_g });
-    // motion_G(state);
+    try mode.put(a, norm('j'), .{ .Native = motionDown });
+    try mode.put(a, norm('k'), .{ .Native = motionUp });
+    try mode.put(a, norm('l'), .{ .Native = motionRight });
+    try mode.put(a, norm('h'), .{ .Native = motionLeft });
+
+    const g = try maps.then(a, norm('g'));
+    try g.keys.put(a, norm('g'), .{ .Native = motionTop });
+
+    try mode.put(a, norm('G'), .{ .Native = motionBottom });
+
     // motion_0(state);
     try mode.put(a, '$', .{ .Native = @"motion_$" });
     // motion_e(state);
@@ -119,7 +142,7 @@ pub fn initMotionKeys(a: std.mem.Allocator, mode: *State.KeyMapings) !void {
 //     return 1;
 // }
 
-pub fn initToInsertKeys(a: std.mem.Allocator, normal: *State.KeyMapings) !void {
+pub fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMapings) !void {
     // var undo: Undo = Undo{
     //     .type = @as(c_uint, @bitCast(@as(c_int, 0))),
     //     .data = @import("std").mem.zeroes(Data),
@@ -130,7 +153,7 @@ pub fn initToInsertKeys(a: std.mem.Allocator, normal: *State.KeyMapings) !void {
     // undo.start = buffer.*.cursor;
     // state.*.cur_undo = undo;
 
-    try normal.put(a, norm(.i), .{ .Native = normal_i });
+    try normal.put(a, norm('i'), .{ .Native = normal_i });
     // norm(.I) => {
     //     const row = buffer.row; // Buffer.bufferGetRow(buffer);
     //     const cur = buffer.rows.items[row];
@@ -212,7 +235,7 @@ pub fn initToInsertKeys(a: std.mem.Allocator, normal: *State.KeyMapings) !void {
 }
 
 fn normal_i(state: *State) anyerror!void {
-    state.config.mode = .INSERT;
+    state.config.mode = .insert;
     // state.repeating.repeating_count = 0;
     // if (state.*.repeating.repeating_count != 0) {
     //     state.*.ch = frontend_getch(state.*.main_win);
@@ -224,15 +247,22 @@ fn isdigit(ch: trm.KeyEvent) bool {
     return std.ascii.isDigit(ch.character.b());
 }
 
-pub fn handleNormalKeys(buffer: *Buffer, state: *State) anyerror!void {
-    _ = buffer; // autofix
+fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMapings) !void {
+    const colon = struct {
+        fn handle(state: *State) anyerror!void {
+            state.config.mode = .comand;
+        }
+    };
+
+    try normal.put(a, norm(':'), .{ .Native = colon.handle });
+
     // if (tools.check_keymaps(buffer, state)) return;
 
-    if (state.leader == .NONE) {
-        if (handleLeaderKeys(state)) return;
-    } else if (state.ch.character == .Esc) {
-        state.leader = .NONE;
-    }
+    // if (state.leader == .NONE) {
+    //     if (handleLeaderKeys(state)) return;
+    // } else if (state.ch.character == .Esc) {
+    //     state.leader = .NONE;
+    // }
 
     // if (isdigit(state.ch) and
     //     !(state.ch.character.b() == '0' and state.num.items.len == 0))
@@ -264,235 +294,233 @@ pub fn handleNormalKeys(buffer: *Buffer, state: *State) anyerror!void {
     //     return;
     // }
 
-    switch (state.ch.character) {
-        //         @as(c_int, 58) => {
-        //             state.*.x = 1;
-        //             frontend_move_cursor(state.*.status_bar, state.*.x, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
-        //             state.*.config.mode = @as(c_uint, @bitCast(COMMAND));
-        //             break;
-        //         },
-        //         @as(c_int, 47) => {
-        //             if (state.*.is_exploring) break;
-        //             reset_command(state.*.command, &state.*.command_s);
-        //             state.*.x = state.*.command_s +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
-        //             frontend_move_cursor(state.*.status_bar, state.*.x, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
-        //             state.*.config.mode = @as(c_uint, @bitCast(SEARCH));
-        //             break;
-        //         },
-        //         @as(c_int, 118) => {
-        //             if (state.*.is_exploring) break;
-        //             buffer.*.visual.start = buffer.*.cursor;
-        //             buffer.*.visual.end = buffer.*.cursor;
-        //             buffer.*.visual.is_line = 0;
-        //             state.*.config.mode = @as(c_uint, @bitCast(VISUAL));
-        //             break;
-        //         },
-        //         @as(c_int, 86) => {
-        //             if (state.*.is_exploring) break;
-        //             buffer.*.visual.start = buffer.*.rows.data[buffer_get_row(buffer)].start;
-        //             buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].end;
-        //             buffer.*.visual.is_line = 1;
-        //             state.*.config.mode = @as(c_uint, @bitCast(VISUAL));
-        //             break;
-        //         },
-        //         @as(c_int, 15) => {
-        //             {
-        //                 while (true) {
-        //                     var undo: Undo = Undo{
-        //                         .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-        //                         .data = @import("std").mem.zeroes(Data),
-        //                         .start = @import("std").mem.zeroes(usize),
-        //                         .end = @import("std").mem.zeroes(usize),
-        //                     };
-        //                     _ = &undo;
-        //                     undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-        //                     undo.start = buffer.*.cursor;
-        //                     state.*.cur_undo = undo;
-        //                     if (!false) break;
-        //                 }
-        //                 var row: usize = buffer_get_row(buffer);
-        //                 _ = &row;
-        //                 var end: usize = buffer.*.rows.data[row].end;
-        //                 _ = &end;
-        //                 buffer.*.cursor = end;
-        //                 buffer_newline_indent(buffer, state);
-        //                 undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-        //                 break;
-        //             }
-        //         },
-        //         @as(c_int, 110) => {
-        //             {
-        //                 var index_1: usize = search(buffer, state.*.command, state.*.command_s);
-        //                 _ = &index_1;
-        //                 buffer.*.cursor = index_1;
-        //             }
-        //             break;
-        //         },
-        //         @as(c_int, 117) => {
-        //             {
-        //                 var undo: Undo = undo_pop(&state.*.undo_stack);
-        //                 _ = &undo;
-        //                 buffer_handle_undo(state, &undo);
-        //                 undo_push(state, &state.*.redo_stack, state.*.cur_undo);
-        //                 free_undo(&undo);
-        //             }
-        //             break;
-        //         },
-        //         @as(c_int, 85) => {
-        //             {
-        //                 var redo: Undo = undo_pop(&state.*.redo_stack);
-        //                 _ = &redo;
-        //                 buffer_handle_undo(state, &redo);
-        //                 undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-        //                 free_undo(&redo);
-        //             }
-        //             break;
-        //         },
-        //         @as(c_int, 19) => {
-        //             {
-        //                 handle_save(buffer);
-        //                 state.*.config.QUIT = 1;
-        //             }
-        //             break;
-        //         },
-        //         @as(c_int, 3), @as(c_int, 27) => {
-        //             state.*.repeating.repeating_count = 0;
-        //             reset_command(state.*.command, &state.*.command_s);
-        //             state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-        //             break;
-        //         },
-        //         @as(c_int, 410) => {
-        //             {
-        //                 frontend_resize_window(state);
-        //             }
-        //             break;
-        //         },
-        //         @as(c_int, 121) => {
-        //             {
-        //                 while (true) {
-        //                     switch (state.*.leader) {
-        //                         @as(c_uint, @bitCast(@as(c_int, 3))) => {
-        //                             {
-        //                                 if (state.*.repeating.repeating_count == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-        //                                     state.*.repeating.repeating_count = 1;
-        //                                 }
-        //                                 reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-        //                                 {
-        //                                     var i: usize = 0;
-        //                                     _ = &i;
-        //                                     while (i < state.*.repeating.repeating_count) : (i +%= 1) {
-        //                                         buffer_yank_line(buffer, state, i);
-        //                                     }
-        //                                 }
-        //                                 state.*.repeating.repeating_count = 0;
-        //                             }
-        //                             break;
-        //                         },
-        //                         else => break,
-        //                     }
-        //                     break;
-        //                 }
-        //             }
-        //             break;
-        //         },
-        //         @as(c_int, 112) => {
-        //             {
-        //                 if (state.*.clipboard.len == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) break;
-        //                 while (true) {
-        //                     var undo: Undo = Undo{
-        //                         .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-        //                         .data = @import("std").mem.zeroes(Data),
-        //                         .start = @import("std").mem.zeroes(usize),
-        //                         .end = @import("std").mem.zeroes(usize),
-        //                     };
-        //                     _ = &undo;
-        //                     undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-        //                     undo.start = buffer.*.cursor;
-        //                     state.*.cur_undo = undo;
-        //                     if (!false) break;
-        //                 }
-        //                 var data: Data = dynstr_to_data(state.*.clipboard);
-        //                 _ = &data;
-        //                 if ((state.*.clipboard.len > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, state.*.clipboard.str[@as(c_uint, @intCast(@as(c_int, 0)))]))) == @as(c_int, '\n'))) {
-        //                     while (true) {
-        //                         var file: *FILE = fopen("logs/cano.log", "a");
-        //                         _ = &file;
-        //                         if (file != @as(*FILE, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0))))))) {
-        //                             _ = fprintf(file, "%s:%d: newline\n", "src/keys.c", @as(c_int, 433));
-        //                             _ = fclose(file);
-        //                         }
-        //                         if (!false) break;
-        //                     }
-        //                     var row: usize = buffer_get_row(buffer);
-        //                     _ = &row;
-        //                     var end: usize = buffer.*.rows.data[row].end;
-        //                     _ = &end;
-        //                     buffer.*.cursor = end;
-        //                 }
-        //                 buffer_insert_selection(buffer, &data, buffer.*.cursor);
-        //                 state.*.cur_undo.end = buffer.*.cursor;
-        //                 undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-        //                 if (((state.*.clipboard.len > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, state.*.clipboard.str[@as(c_uint, @intCast(@as(c_int, 0)))]))) == @as(c_int, '\n'))) and (buffer.*.cursor < buffer.*.data.count)) {
-        //                     buffer.*.cursor +%= 1;
-        //                 }
-        //             }
-        //             break;
-        //         },
+    //         @as(c_int, 58) => {
+    //             state.*.x = 1;
+    //             frontend_move_cursor(state.*.status_bar, state.*.x, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
+    //             state.*.config.mode = @as(c_uint, @bitCast(COMMAND));
+    //             break;
+    //         },
+    //         @as(c_int, 47) => {
+    //             if (state.*.is_exploring) break;
+    //             reset_command(state.*.command, &state.*.command_s);
+    //             state.*.x = state.*.command_s +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
+    //             frontend_move_cursor(state.*.status_bar, state.*.x, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
+    //             state.*.config.mode = @as(c_uint, @bitCast(SEARCH));
+    //             break;
+    //         },
+    //         @as(c_int, 118) => {
+    //             if (state.*.is_exploring) break;
+    //             buffer.*.visual.start = buffer.*.cursor;
+    //             buffer.*.visual.end = buffer.*.cursor;
+    //             buffer.*.visual.is_line = 0;
+    //             state.*.config.mode = @as(c_uint, @bitCast(VISUAL));
+    //             break;
+    //         },
+    //         @as(c_int, 86) => {
+    //             if (state.*.is_exploring) break;
+    //             buffer.*.visual.start = buffer.*.rows.data[buffer_get_row(buffer)].start;
+    //             buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].end;
+    //             buffer.*.visual.is_line = 1;
+    //             state.*.config.mode = @as(c_uint, @bitCast(VISUAL));
+    //             break;
+    //         },
+    //         @as(c_int, 15) => {
+    //             {
+    //                 while (true) {
+    //                     var undo: Undo = Undo{
+    //                         .type = @as(c_uint, @bitCast(@as(c_int, 0))),
+    //                         .data = @import("std").mem.zeroes(Data),
+    //                         .start = @import("std").mem.zeroes(usize),
+    //                         .end = @import("std").mem.zeroes(usize),
+    //                     };
+    //                     _ = &undo;
+    //                     undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
+    //                     undo.start = buffer.*.cursor;
+    //                     state.*.cur_undo = undo;
+    //                     if (!false) break;
+    //                 }
+    //                 var row: usize = buffer_get_row(buffer);
+    //                 _ = &row;
+    //                 var end: usize = buffer.*.rows.data[row].end;
+    //                 _ = &end;
+    //                 buffer.*.cursor = end;
+    //                 buffer_newline_indent(buffer, state);
+    //                 undo_push(state, &state.*.undo_stack, state.*.cur_undo);
+    //                 break;
+    //             }
+    //         },
+    //         @as(c_int, 110) => {
+    //             {
+    //                 var index_1: usize = search(buffer, state.*.command, state.*.command_s);
+    //                 _ = &index_1;
+    //                 buffer.*.cursor = index_1;
+    //             }
+    //             break;
+    //         },
+    //         @as(c_int, 117) => {
+    //             {
+    //                 var undo: Undo = undo_pop(&state.*.undo_stack);
+    //                 _ = &undo;
+    //                 buffer_handle_undo(state, &undo);
+    //                 undo_push(state, &state.*.redo_stack, state.*.cur_undo);
+    //                 free_undo(&undo);
+    //             }
+    //             break;
+    //         },
+    //         @as(c_int, 85) => {
+    //             {
+    //                 var redo: Undo = undo_pop(&state.*.redo_stack);
+    //                 _ = &redo;
+    //                 buffer_handle_undo(state, &redo);
+    //                 undo_push(state, &state.*.undo_stack, state.*.cur_undo);
+    //                 free_undo(&redo);
+    //             }
+    //             break;
+    //         },
+    //         @as(c_int, 19) => {
+    //             {
+    //                 handle_save(buffer);
+    //                 state.*.config.QUIT = 1;
+    //             }
+    //             break;
+    //         },
+    //         @as(c_int, 3), @as(c_int, 27) => {
+    //             state.*.repeating.repeating_count = 0;
+    //             reset_command(state.*.command, &state.*.command_s);
+    //             state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+    //             break;
+    //         },
+    //         @as(c_int, 410) => {
+    //             {
+    //                 frontend_resize_window(state);
+    //             }
+    //             break;
+    //         },
+    //         @as(c_int, 121) => {
+    //             {
+    //                 while (true) {
+    //                     switch (state.*.leader) {
+    //                         @as(c_uint, @bitCast(@as(c_int, 3))) => {
+    //                             {
+    //                                 if (state.*.repeating.repeating_count == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
+    //                                     state.*.repeating.repeating_count = 1;
+    //                                 }
+    //                                 reset_command(state.*.clipboard.str, &state.*.clipboard.len);
+    //                                 {
+    //                                     var i: usize = 0;
+    //                                     _ = &i;
+    //                                     while (i < state.*.repeating.repeating_count) : (i +%= 1) {
+    //                                         buffer_yank_line(buffer, state, i);
+    //                                     }
+    //                                 }
+    //                                 state.*.repeating.repeating_count = 0;
+    //                             }
+    //                             break;
+    //                         },
+    //                         else => break,
+    //                     }
+    //                     break;
+    //                 }
+    //             }
+    //             break;
+    //         },
+    //         @as(c_int, 112) => {
+    //             {
+    //                 if (state.*.clipboard.len == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) break;
+    //                 while (true) {
+    //                     var undo: Undo = Undo{
+    //                         .type = @as(c_uint, @bitCast(@as(c_int, 0))),
+    //                         .data = @import("std").mem.zeroes(Data),
+    //                         .start = @import("std").mem.zeroes(usize),
+    //                         .end = @import("std").mem.zeroes(usize),
+    //                     };
+    //                     _ = &undo;
+    //                     undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
+    //                     undo.start = buffer.*.cursor;
+    //                     state.*.cur_undo = undo;
+    //                     if (!false) break;
+    //                 }
+    //                 var data: Data = dynstr_to_data(state.*.clipboard);
+    //                 _ = &data;
+    //                 if ((state.*.clipboard.len > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, state.*.clipboard.str[@as(c_uint, @intCast(@as(c_int, 0)))]))) == @as(c_int, '\n'))) {
+    //                     while (true) {
+    //                         var file: *FILE = fopen("logs/cano.log", "a");
+    //                         _ = &file;
+    //                         if (file != @as(*FILE, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0))))))) {
+    //                             _ = fprintf(file, "%s:%d: newline\n", "src/keys.c", @as(c_int, 433));
+    //                             _ = fclose(file);
+    //                         }
+    //                         if (!false) break;
+    //                     }
+    //                     var row: usize = buffer_get_row(buffer);
+    //                     _ = &row;
+    //                     var end: usize = buffer.*.rows.data[row].end;
+    //                     _ = &end;
+    //                     buffer.*.cursor = end;
+    //                 }
+    //                 buffer_insert_selection(buffer, &data, buffer.*.cursor);
+    //                 state.*.cur_undo.end = buffer.*.cursor;
+    //                 undo_push(state, &state.*.undo_stack, state.*.cur_undo);
+    //                 if (((state.*.clipboard.len > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, state.*.clipboard.str[@as(c_uint, @intCast(@as(c_int, 0)))]))) == @as(c_int, '\n'))) and (buffer.*.cursor < buffer.*.data.count)) {
+    //                     buffer.*.cursor +%= 1;
+    //                 }
+    //             }
+    //             break;
+    //         },
 
-        // term.ctrl('n') => {
-        //     state.*.is_exploring = !state.*.is_exploring;
-        // },
+    // term.ctrl('n') => {
+    //     state.*.is_exploring = !state.*.is_exploring;
+    // },
 
-        else => {
-            // if (state.*.is_exploring) {
-            //     while (true) {
-            //         switch (state.*.ch) {
-            //             @as(c_int, 258), @as(c_int, 106) => {
-            //                 if (state.explore_cursor < state.files.items.len - 1) {
-            //                     state.explore_cursor += 1;
-            //                 }
-            //                 break;
-            //             },
-            //             @as(c_int, 259), @as(c_int, 107) => {
-            //                 if (state.*.explore_cursor > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-            //                     state.*.explore_cursor -%= 1;
-            //                 }
-            //                 break;
-            //             },
-            //             @as(c_int, 10) => {
-            //                 {
-            //                     const f: File = state.files.items[state.explore_cursor];
-            //                     if (f.is_directory) {
-            //                         const str = try state.a.dupe(u8, f.path); // TODO: use a stack buffer
-            //                         defer state.a.free(str);
-            //                         state.files.clearRetainingCapacity();
-            //                         try tools.scan_files(state, str);
-            //                         state.explore_cursor = 0;
-            //                     } else {
-            //                         if (state.buffer) |buf| buf.deinit();
-            //                         state.buffer = tools.load_buffer_from_file(f.path);
-            //                         // var config_filename: *u8 = null;
-            //                         // _ = &config_filename;
-            //                         // var syntax_filename: *u8 = null;
-            //                         // _ = &syntax_filename;
-            //                         tools.load_config_from_file(state, state.buffer.?, null, null);
-            //                         state.is_exploring = false;
-            //                     }
-            //                 }
-            //                 break;
-            //             },
-            //             else => {},
-            //         }
-            //         break;
-            //     }
-            //     break;
-            // }
+    // else => {
+    // if (state.*.is_exploring) {
+    //     while (true) {
+    //         switch (state.*.ch) {
+    //             @as(c_int, 258), @as(c_int, 106) => {
+    //                 if (state.explore_cursor < state.files.items.len - 1) {
+    //                     state.explore_cursor += 1;
+    //                 }
+    //                 break;
+    //             },
+    //             @as(c_int, 259), @as(c_int, 107) => {
+    //                 if (state.*.explore_cursor > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
+    //                     state.*.explore_cursor -%= 1;
+    //                 }
+    //                 break;
+    //             },
+    //             @as(c_int, 10) => {
+    //                 {
+    //                     const f: File = state.files.items[state.explore_cursor];
+    //                     if (f.is_directory) {
+    //                         const str = try state.a.dupe(u8, f.path); // TODO: use a stack buffer
+    //                         defer state.a.free(str);
+    //                         state.files.clearRetainingCapacity();
+    //                         try tools.scan_files(state, str);
+    //                         state.explore_cursor = 0;
+    //                     } else {
+    //                         if (state.buffer) |buf| buf.deinit();
+    //                         state.buffer = tools.load_buffer_from_file(f.path);
+    //                         // var config_filename: *u8 = null;
+    //                         // _ = &config_filename;
+    //                         // var syntax_filename: *u8 = null;
+    //                         // _ = &syntax_filename;
+    //                         tools.load_config_from_file(state, state.buffer.?, null, null);
+    //                         state.is_exploring = false;
+    //                     }
+    //                 }
+    //                 break;
+    //             },
+    //             else => {},
+    //         }
+    //         break;
+    //     }
+    //     break;
+    // }
 
-            // if (handle_modifying_keys(buffer, state) != 0) break;
+    // if (handle_modifying_keys(buffer, state) != 0) break;
 
-            std.log.warn("unimplemented key: {}", .{state.ch});
-        },
-    }
+    // std.log.warn("unimplemented key: {}", .{state.ch});
+    // },
 
     // idk
     // if (state.repeating.repeating_count == 0) {
@@ -500,10 +528,10 @@ pub fn handleNormalKeys(buffer: *Buffer, state: *State) anyerror!void {
     // }
 }
 
-fn insert_esc(state: *State) anyerror!void {
+fn gotoNormal(state: *State) anyerror!void {
     //     state.*.cur_undo.end = buffer.*.cursor;
     //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-    state.config.mode = .NORMAL;
+    state.config.mode = .normal;
     //     while (true) {
     //         var undo: Undo = Undo{
     //             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
@@ -519,27 +547,20 @@ fn insert_esc(state: *State) anyerror!void {
     //     }
 }
 
-fn initInsertKeys(a: std.mem.Allocator, insert: *State.KeyMapings) !void {
-    try insert.put(a, norm(.Esc), .{ .Native = insert_esc });
-    // switch (state.ch.character) {
-    // 127, \b
-    // .Backspace => {
-    //     if (buffer.cursor > 0) {
-    //         buffer.cursor -= 1;
-    //         try Buffer.buffer_delete_char(buffer, state);
-    //     }
-    // },
-    // @as(c_int, 19) => {
-    //     {
-    //         handle_save(buffer);
-    //         state.*.config.QUIT = 1;
-    //     }
-    //     break;
-    // },
+fn deleteBufferCharacter(state: *State) !void {
+    try state.buffer.buffer_delete_char(state.a);
+}
+
+fn initInsertKeys(a: std.mem.Allocator, insert: *km.KeyMapings) !void {
+    try insert.put(a, norm(Ks.Esc.toBits()), .{ .Native = gotoNormal });
+    try insert.put(a, norm(Ks.Backspace.toBits()), .{ .Native = deleteBufferCharacter });
+
+    // try insert.put(a, ctrl('s'), .{ .Native = {
+    //     handle_save(buffer);
+    //     state.*.config.QUIT = 1;
+    // } });
 
     // ctrl-c
-    // .Esc => { // back to normal mode
-    // },
     // @as(c_int, 260) => {
     //      handle_move_left(state, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
     // },
@@ -717,11 +738,28 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *State.KeyMapings) !void {
     // }
 }
 
-pub fn handle_command_keys(arg_buffer: *Buffer, state: *State) anyerror!void {
-    _ = arg_buffer; // autofix
-    _ = state; // autofix
-    // var buffer = arg_buffer;
-    // _ = &buffer;
+fn deleteCharacterCommand(state: *State) !void {
+    _ = state.command.popOrNull();
+}
+
+fn submitCommand(state: *State) !void {
+    state.config.mode = .normal;
+
+    const cmd = try state.command.toOwnedSliceSentinel(state.a, 0);
+    defer state.a.free(cmd);
+
+    lua.runCommand(state.L, cmd) catch |err| {
+        root.log(@src(), .err, "lua command line error: {}", .{err});
+    };
+}
+
+fn initCommandKeys(a: std.mem.Allocator, comand: *km.KeyMapings) !void {
+    try comand.put(a, norm(Ks.Esc.toBits()), .{ .Native = gotoNormal });
+    try comand.put(a, ctrl('c'), .{ .Native = gotoNormal });
+
+    try comand.put(a, norm(Ks.Backspace.toBits()), .{ .Native = deleteCharacterCommand });
+
+    try comand.put(a, norm(Ks.Return.toBits()), .{ .Native = submitCommand });
     // while (true) {
     //     switch (state.*.ch) {
     //         @as(c_int, 8), @as(c_int, 127), @as(c_int, 263) => {
@@ -1185,7 +1223,7 @@ pub fn handle_visual_keys(buffer: *Buffer, state: *State) anyerror!void {
 //     }
 // }
 
-fn motion_j(state: *State) !void {
+fn motionDown(state: *State) !void {
     const count = if (state.repeating.is) blk: {
         const tmp = state.repeating.count;
         state.repeating.count = 0;
@@ -1193,11 +1231,11 @@ fn motion_j(state: *State) !void {
         break :blk tmp;
     } else 1;
 
-    root.log(@src(), .debug, "motion j", .{});
-    state.buffer.moveDown(count);
+    state.buffer.row += count;
+    state.buffer.updatePostionKeepRow();
 }
 
-fn motion_k(state: *State) !void {
+fn motionUp(state: *State) !void {
     const count = if (state.repeating.is) blk: {
         const tmp = state.repeating.count;
         state.repeating.count = 0;
@@ -1205,78 +1243,56 @@ fn motion_k(state: *State) !void {
         break :blk tmp;
     } else 1;
 
-    root.log(@src(), .debug, "motion j", .{});
-    state.buffer.moveUp(count);
+    state.buffer.row = if (state.buffer.row < count) 0 else state.buffer.row - count;
+    state.buffer.updatePostionKeepRow();
 }
 
-// fn motion_g(state: *State) !void {
-//     var row: usize = buffer_get_row(state.*.buffer);
-//     _ = &row;
-//     if (state.*.repeating.repeating_count >= state.*.buffer.*.rows.count) {
-//         state.*.repeating.repeating_count = state.*.buffer.*.rows.count;
-//     }
-//     if (state.*.repeating.repeating_count == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-//         state.*.repeating.repeating_count = 1;
-//     }
-//     state.*.buffer.*.cursor = state.*.buffer.*.rows.data[state.*.repeating.repeating_count -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start;
-//     state.*.repeating.repeating_count = 0;
-//     if (state.*.leader != @as(c_uint, @bitCast(LEADER_D))) return;
-//     var end: usize = state.*.buffer.*.rows.data[row].end;
-//     _ = &end;
-//     var start: usize = state.*.buffer.*.cursor;
-//     _ = &start;
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
-//         undo.start = start;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-//     buffer_delete_selection(state.*.buffer, state, start, end);
-//     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-// }
+fn motionRight(state: *State) !void {
+    const count = if (state.repeating.is) blk: {
+        const tmp = state.repeating.count;
+        state.repeating.count = 0;
+        state.repeating.is = false;
+        break :blk tmp;
+    } else 1;
 
-// pub fn motion_G(arg_state: *State) void {
-//     var state = arg_state;
-//     _ = &state;
-//     var row: usize = buffer_get_row(state.*.buffer);
-//     _ = &row;
-//     var start: usize = state.*.buffer.*.rows.data[row].start;
-//     _ = &start;
-//     if (state.*.repeating.repeating_count > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-//         if (state.*.repeating.repeating_count >= state.*.buffer.*.rows.count) {
-//             state.*.repeating.repeating_count = state.*.buffer.*.rows.count;
-//         }
-//         state.*.buffer.*.cursor = state.*.buffer.*.rows.data[state.*.repeating.repeating_count -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start;
-//         state.*.repeating.repeating_count = 0;
-//     } else {
-//         state.*.buffer.*.cursor = state.*.buffer.*.data.count;
-//     }
-//     if (state.*.leader != @as(c_uint, @bitCast(LEADER_D))) return;
-//     var end: usize = state.*.buffer.*.cursor;
-//     _ = &end;
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
-//         undo.start = start;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-//     buffer_delete_selection(state.*.buffer, state, start, end);
-//     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-// }
+    state.buffer.moveRight(count);
+}
+
+fn motionLeft(state: *State) !void {
+    const count = if (state.repeating.is) blk: {
+        const tmp = state.repeating.count;
+        state.repeating.count = 0;
+        state.repeating.is = false;
+        break :blk tmp;
+    } else 1;
+
+    state.buffer.moveLeft(count);
+}
+
+fn motionTop(state: *State) !void {
+    const target = if (state.repeating.is) blk: {
+        const tmp = state.repeating.count;
+        state.repeating.count = 0;
+        state.repeating.is = false;
+        break :blk tmp;
+    } else 1;
+
+    state.buffer.row = target - 1;
+    state.buffer.updatePostionKeepRow();
+}
+
+fn motionBottom(state: *State) !void {
+    if (state.repeating.is) {
+        state.repeating.is = false;
+        state.buffer.row = state.repeating.count;
+        state.buffer.updatePostionKeepRow();
+        return;
+    }
+
+    state.buffer.row = state.buffer.rows.items.len - 1;
+    state.buffer.updatePostionKeepRow();
+}
+
 // pub fn motion_0(arg_state: *State) void {
 //     var state = arg_state;
 //     _ = &state;
@@ -1548,125 +1564,3 @@ pub fn handleLeaderKeys(state: *State) bool {
 //     }
 // }
 //
-// pub fn handle_move_left(arg_state: *State, arg_num: usize) void {
-//     var state = arg_state;
-//     _ = &state;
-//     var num = arg_num;
-//     _ = &num;
-//     state.*.cur_undo.end = state.*.buffer.*.cursor;
-//     if (state.*.cur_undo.end != state.*.cur_undo.start) {
-//         undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-//     }
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < num) : (i +%= 1) {
-//             buffer_move_left(state.*.buffer);
-//         }
-//     }
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-//         undo.start = state.*.buffer.*.cursor;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-// }
-// pub fn handle_move_down(arg_state: *State, arg_num: usize) void {
-//     var state = arg_state;
-//     _ = &state;
-//     var num = arg_num;
-//     _ = &num;
-//     state.*.cur_undo.end = state.*.buffer.*.cursor;
-//     if (state.*.cur_undo.end != state.*.cur_undo.start) {
-//         undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-//     }
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < num) : (i +%= 1) {
-//             buffer_move_down(state.*.buffer);
-//         }
-//     }
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-//         undo.start = state.*.buffer.*.cursor;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-// }
-
-// pub fn handle_move_up(arg_state: *State, arg_num: usize) void {
-//     var state = arg_state;
-//     _ = &state;
-//     var num = arg_num;
-//     _ = &num;
-//     state.*.cur_undo.end = state.*.buffer.*.cursor;
-//     if (state.*.cur_undo.end != state.*.cur_undo.start) {
-//         undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-//     }
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < num) : (i +%= 1) {
-//             buffer_move_up(state.*.buffer);
-//         }
-//     }
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-//         undo.start = state.*.buffer.*.cursor;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-// }
-
-// pub fn handle_move_right(arg_state: *State, arg_num: usize) void {
-//     var state = arg_state;
-//     _ = &state;
-//     var num = arg_num;
-//     _ = &num;
-//     state.*.cur_undo.end = state.*.buffer.*.cursor;
-//     if (state.*.cur_undo.end != state.*.cur_undo.start) {
-//         undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-//     }
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < num) : (i +%= 1) {
-//             buffer_move_right(state.*.buffer);
-//         }
-//     }
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-//         undo.start = state.*.buffer.*.cursor;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-// }

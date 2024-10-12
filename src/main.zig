@@ -4,19 +4,11 @@ const mem = std.mem;
 pub const scu = @import("scured");
 pub const trm = scu.thermit;
 
-// #define CREATE_UNDO(t, p) do {    \
-//     Undo undo = {0};         \
-//     undo.type = (t);         \
-//     undo.start = (p);        \
-//     state->cur_undo = undo;   \
-// } while(0)
-
-const defs = @import("defs.zig");
 const front = @import("frontend.zig");
-// const keys = @import("keys.zig");
 const tools = @import("tools.zig");
+const lua = @import("lua.zig");
 
-const Args = @import("args.zig");
+const Args = @import("Args.zig");
 
 // const treesitter = @cImport({
 //     @cInclude("tree_sitter/api.h");
@@ -30,6 +22,8 @@ pub const luajitsys = @cImport({
 });
 
 const State = @import("State.zig");
+
+pub var state: State = undefined;
 
 pub const std_options: std.Options = .{
     .logFn = scu.log.toFile,
@@ -72,7 +66,7 @@ fn neomacs() !void {
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    log(@src(), .debug, "starting (main void)", .{});
+    log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
 
     const args = try Args.parse(a, std.os.argv);
     defer args.deinit(a);
@@ -80,15 +74,19 @@ fn neomacs() !void {
     const filename: []const u8 = if (args.positional.len < 1) "out.txt" else mem.span(args.positional[0]);
 
     const file = args.help orelse filename;
-    var state = try State.init(a, file);
+    state = try State.init(a, file);
     defer state.deinit();
+
+    lua.runInit(state.L) catch {
+        log(@src(), .warn, "could not run lua init, check above for errors", .{});
+    };
 
     // try tools.scanFiles(&state, ".");
 
     // const syntax_filename: ?[*:0]u8 = null;
     // tools.load_config_from_file(a, &state, state.buffer, args.config, syntax_filename);
 
-    while (!state.config.QUIT and !(state.ch.modifiers.ctrl and state.ch.character.b() == 'q')) {
+    while (!state.config.QUIT and !(state.ch.modifiers.ctrl and state.ch.character == 'q')) {
         try tools.handleCursorShape(&state);
         front.render(&state) catch |err| {
             log(@src(), .err, "encountered error: {}", .{err});

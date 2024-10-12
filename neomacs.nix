@@ -1,13 +1,14 @@
-{ lib, stdenv, zig, luajit, tree-sitter, tree-sitter-grammars }:
+{ lib, stdenv, callPackage, zig, luajit, tree-sitter, tree-sitter-grammars }:
 stdenv.mkDerivation {
-    hardeningDisable = [ "format" "fortify" ];
-
     pname = "neomacs";
-    version = "0.0.1";
+    version = "0.1.0";
 
     src = ./.;
 
-    nativeBuildInputs = [zig];
+    nativeBuildInputs = [
+      zig.hook
+    ];
+
     buildInputs = [
       luajit
       (luajit.withPackages (ps: (with ps; [ fennel ])))
@@ -16,10 +17,5 @@ stdenv.mkDerivation {
       tree-sitter-grammars.tree-sitter-zig
     ];
 
-    buildPhase = ''
-      ${zig}/bin/zig build --prefix $out                \
-            --cache-dir /build/zig-cache                \
-            --global-cache-dir /build/global-cache      \
-            -Doptimize=ReleaseFast
-    '';
+    zigBuildFlags = [ "--system" "${callPackage ./build.zig.zon.nix { } }" ];
 }

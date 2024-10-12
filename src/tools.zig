@@ -1,6 +1,5 @@
 const std = @import("std");
 const root = @import("root");
-const defs = @import("defs.zig");
 
 const scu = root.scu;
 const thr = scu.thermit;
@@ -10,10 +9,9 @@ const Buffer = @import("Buffer.zig");
 
 pub fn handleCursorShape(state: *State) !void {
     try thr.setCursorStyle(state.term.tty.f.writer(), switch (state.config.mode) {
-        .INSERT => .SteadyBar,
+        .insert => .SteadyBar,
         else => .SteadyBlock,
     });
-    // TODO: refreash screen
 }
 
 // pub fn free_undo(arg_undo: *Undo) void {
@@ -476,3 +474,36 @@ pub fn handleCursorShape(state: *State) !void {
 //     @memset(cmd, 0);
 //     command_s.* = 0;
 // }
+
+// pub const UndoType = enum {
+//     NONE,
+//     INSERT_CHARS,
+//     DELETE_CHAR,
+//     DELETE_MULT_CHAR,
+//     REPLACE_CHAR,
+// };
+// pub const Undo = struct {
+//     type: UndoType = .NONE,
+//     data: std.ArrayListUnmanaged(u8) = .{},
+//     start: usize = 0,
+//     end: usize = 0,
+// };
+// pub const Undo_Stack = std.ArrayList(Undo);
+//
+// pub const Files = std.ArrayListUnmanaged(File);
+// pub const File = struct {
+//     name: []const u8,
+//     path: []const u8,
+//     is_directory: bool,
+// };
+// pub const Brace = extern struct {
+//     brace: u8 = @import("std").mem.zeroes(u8),
+//     closing: c_int = @import("std").mem.zeroes(c_int),
+// };
+//
+// #define CREATE_UNDO(t, p) do {    \
+//     Undo undo = {0};         \
+//     undo.type = (t);         \
+//     undo.start = (p);        \
+//     state->cur_undo = undo;   \
+// } while(0)

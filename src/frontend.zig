@@ -1,11 +1,8 @@
 const std = @import("std");
 const root = @import("root");
-
-const defs = @import("defs.zig");
-// const scu = root.scu
+const scu = root.scu;
 
 const State = @import("State.zig");
-// const Buffer = @import("Buffer.zig");
 
 pub const sidebarWidth = 3;
 pub const statusbarHeight = 2;
@@ -86,8 +83,8 @@ pub fn render(state: *State) !void {
         );
     }
 
-    // const mode = state.config.mode.toString();
-    // state.term.writeBuffer(state.status_bar, 0, 0, mode);
+    const mode = state.config.mode.toString();
+    state.term.writeBuffer(state.status_bar, 0, 0, mode);
 
     {
         state.term.writeBuffer(state.status_bar, state.status_bar.w - 1, 1, switch (state.leader) {
@@ -99,11 +96,11 @@ pub fn render(state: *State) !void {
         // state.term.writeBuffer(state.status_bar, state.status_bar.w - 5, 0, state.num.items);
     }
 
-    // if (state.config.mode == .COMMAND or state.config.mode == .SEARCH) {
-    //     const command = try std.fmt.allocPrint(state.a, ":{s}", .{state.command});
-    //     defer state.a.free(command);
-    //     try state.term.draw(state.status_bar, 1, 0, command);
-    // }
+    if (state.config.mode == .comand or state.config.mode == .search) {
+        const command = try std.fmt.allocPrint(state.a, ":{s}", .{state.command.items});
+        defer state.a.free(command);
+        state.term.writeBuffer(state.status_bar, 0, 1, command);
+    }
 
     // if (state.*.is_exploring) {
     //     _ = wattr_on(state.*.main_win, @as(attr_t, @bitCast((@as(chtype, @bitCast(BLUE_COLOR)) << @intCast(@as(c_int, 0) + @as(c_int, 8))) & (@as(chtype, @bitCast((@as(c_uint, 1) << @intCast(8)) -% @as(c_uint, 1))) << @intCast(@as(c_int, 0) + @as(c_int, 8))))), @as(?*anyopaque, @ptrFromInt(@as(c_int, 0))));
@@ -143,11 +140,16 @@ pub fn render(state: *State) !void {
             const bufdata = state.buffer.data.items[row.start..row.end];
             var c: u16 = 1;
             for (bufdata) |ch| {
-                const cell = state.term.getScreenCell(state.main_win, c, @intCast(renderRow)) orelse continue;
+                const cell = state.term.getScreenCell(state.main_win, c, @intCast(renderRow)) orelse break;
                 cell.fg = .DarkBlue;
                 cell.bg = .Black;
 
                 cell.setSymbol(ch);
+
+                if (ch == ' ') {
+                    cell.fg = .Cyan;
+                    cell.setSymbol('-');
+                }
                 c += 1;
             }
 
@@ -186,14 +188,14 @@ pub fn render(state: *State) !void {
     }
     // -------------------------------------------
 
-    // if (state.config.mode == .COMMAND or state.config.mode == .SEARCH) {
-    //     state.term.moveCursor(state.status_bar, @intCast(cur_row), 1); // state.x
-    // } else {
-    // TODO: account for tab characters
-    // const col = cur_row; // + countTabs() * 3;
+    if (state.config.mode == .comand or state.config.mode == .search) {
+        state.term.moveCursor(state.status_bar, @intCast(1 + state.command.items.len), 1); // state.x
+    } else {
+        // TODO: account for tab characters
+        // const col = cur_row; // + countTabs() * 3;
 
-    state.term.moveCursor(state.main_win, @intCast(viewportCol + 1), @intCast(viewportRow));
-    // }
+        state.term.moveCursor(state.main_win, @intCast(viewportCol + 1), @intCast(viewportRow));
+    }
 
     // we just finised rendering so we know that the current buffer is the
     // right size

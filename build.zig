@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
     neomacsExe.root_module.addImport("scured", terminal.module("scured"));
 
     // neomacsExe.linkSystemLibrary("tree-sitter");
-    neomacsExe.linkSystemLibrary("luajit");
+    neomacsExe.linkSystemLibrary("luajit-5.1");
     neomacsExe.linkLibC();
 
     // install neomacs

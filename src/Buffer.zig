@@ -1,14 +1,18 @@
+const Buffer = @This();
+
 const std = @import("std");
 const root = @import("root");
 
-const defs = @import("defs.zig");
+const State = @import("State.zig");
 
-const Data = defs.Data;
-
-const Buffer = @This();
+pub const Rows = std.ArrayListUnmanaged(Row);
+pub const Row = struct {
+    start: usize,
+    end: usize,
+};
 
 /// literal data in the buffer
-data: Data,
+data: std.ArrayListUnmanaged(u8),
 /// position in the data above
 cursor: usize = 0,
 
@@ -22,10 +26,9 @@ col: usize = 0,
 filename: []const u8,
 // visual: ?Visual = null,
 
-const Rows = defs.Rows;
-const Row = defs.Row;
-const State = @import("State.zig");
-const Undo = defs.Undo;
+// TODO: make a desired x and y
+// when the y is change the desired x stays the same
+// the col is set the to desired x or the most valid position
 
 pub fn init(a: std.mem.Allocator, filename: []const u8) !Buffer {
     const file = try std.fs.cwd().openFile(filename, .{}); // a+
@@ -103,10 +106,17 @@ pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
     //     buffer.cursor = buffer.data.items.len;
     // }
 
-    try buffer.data.insert(a, buffer.cursor, ch);
+    if (buffer.cursor >= buffer.data.items.len) {
+        try buffer.data.append(a, ch);
+    } else {
+        try buffer.data.insert(a, buffer.cursor, ch);
+    }
     buffer.cursor += 1;
 
     // state.cur_undo.end = buffer.cursor;
+
+    try buffer.recalculateRows(a);
+    if (true) return;
 
     // PERF: time this to see if this is a real optimization, I think it is
     // beacuse it will be on debug as it has no error path but on release mode
@@ -120,7 +130,7 @@ pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
             if (row.end < buffer.cursor) continue;
 
             // add if you are not in it
-            if (row.start > buffer.cursor) row.start += 1;
+            if (row.start >= buffer.cursor) row.start += 1;
 
             // always add after
             row.end += 1;
@@ -128,34 +138,38 @@ pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
     }
 }
 
-pub fn buffer_delete_char(buffer: *Buffer, state: *State) !void {
+pub fn buffer_delete_char(buffer: *Buffer, a: std.mem.Allocator) !void {
     std.debug.assert(buffer.cursor < buffer.data.items.len);
 
-    // shift
-    @memcpy(
-        buffer.data.items[buffer.cursor .. buffer.data.items.len - 1],
-        buffer.data.items[buffer.cursor + 1 .. buffer.data.items.len],
-    );
+    // nothing to delete
+    if (buffer.cursor == 0) return;
+
+    buffer.cursor -= 1;
+
+    var i: usize = buffer.cursor;
+    while (i < buffer.data.items.len - 1) : (i += 1) {
+        buffer.data.items[i] = buffer.data.items[i + 1];
+    }
     // reduce capacity
-    buffer.data.items = buffer.data.items[0 .. buffer.data.items.len - 1];
+    buffer.data.items.len -= 1;
 
     // recalculate
-    try buffer.recalculateRows(state.a);
+    try buffer.recalculateRows(a);
 }
 
-pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
-    _ = buffer; // autofix
-    _ = state; // autofix
-    // var undo = Undo{ };
-    // undo.type = .INSERT_CHARS;
-    // undo.start = buffer.cursor;
-    // state.cur_undo = undo;
-    // reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-    // buffer_yank_char(buffer, state);
-    // buffer_delete_char(buffer, state);
-    // state.*.cur_undo.end = buffer.*.cursor;
-    // undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-}
+// pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
+//     _ = buffer; // autofix
+//     _ = state; // autofix
+//     var undo = Undo{ };
+//     undo.type = .INSERT_CHARS;
+//     undo.start = buffer.cursor;
+//     state.cur_undo = undo;
+//     reset_command(state.*.clipboard.str, &state.*.clipboard.len);
+//     buffer_yank_char(buffer, state);
+//     buffer_delete_char(buffer, state);
+//     state.*.cur_undo.end = buffer.*.cursor;
+//     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
+// }
 
 // pub fn buffer_replace_ch(arg_buffer: *Buffer, arg_state: *State) void {
 //     var buffer = arg_buffer;
@@ -443,6 +457,7 @@ pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
 //     buffer.*.data.count -%= size;
 //     buffer_calculate_rows(buffer);
 // }
+
 // pub fn buffer_insert_selection(arg_buffer: *Buffer, arg_selection: *Data, arg_start: usize) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -466,55 +481,54 @@ pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
 //             }
 //             if (!false) break;
 //         }
-//     }
+//  }
 //     _ = memmove(@as(?*anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor +% size])), @as(?*const anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor])), buffer.*.data.count -% buffer.*.cursor);
 //     _ = strncpy(&buffer.*.data.data[buffer.*.cursor], selection.*.data, size);
 //     buffer.*.data.count +%= size;
 //     buffer_calculate_rows(buffer);
 // }
 
-pub fn moveUp(buffer: *Buffer, count: usize) void {
-    buffer.row -= count;
-    root.log(@src(), .warn, "TODO: improve move implementation", .{});
-
-    // var row: usize = bufferGetRow(buffer);
-    // var col: usize = buffer.*.cursor -% buffer.*.rows.data[row].start;
-    // if (row > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-    //     buffer.*.cursor = buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start +% col;
-    //     if (buffer.*.cursor > buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end) {
-    //         buffer.*.cursor = buffer.*.rows.data[row -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end;
-    //     }
-    // }
+pub fn moveRight(buffer: *Buffer, count: usize) void {
+    buffer.cursor += count;
+    buffer.updatePostionKeepPos();
 }
 
-pub fn moveDown(buffer: *Buffer, count: usize) void {
-    buffer.row += count;
-    root.log(@src(), .warn, "TODO: improve move implementation", .{});
-
-    // const row: usize = bufferGetRow(buffer);
-    // var col: usize = buffer.*.cursor -% buffer.*.rows.data[row].start;
-    // if (row < (buffer.*.rows.count -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))))) {
-    //     buffer.*.cursor = buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].start +% col;
-    //     if (buffer.*.cursor > buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end) {
-    //         buffer.*.cursor = buffer.*.rows.data[row +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))].end;
-    //     }
-    // }
+pub fn moveLeft(buffer: *Buffer, count: usize) void {
+    buffer.cursor = if (buffer.cursor < count) 0 else buffer.cursor - count;
+    buffer.updatePostionKeepPos();
 }
 
-// pub fn buffer_move_right(arg_buffer: *Buffer) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     if (buffer.*.cursor < buffer.*.data.count) {
-//         buffer.*.cursor +%= 1;
-//     }
-// }
-// pub fn buffer_move_left(arg_buffer: *Buffer) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     if (buffer.*.cursor > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-//         buffer.*.cursor -%= 1;
-//     }
-// }
+/// Moves the cursor to the best position it can using the current row as the
+/// authoritive value
+/// TODO: inline?
+pub fn updatePostionKeepRow(buffer: *Buffer) void {
+    if (buffer.row >= buffer.rows.items.len)
+        buffer.row = buffer.rows.items.len - 1;
+
+    const row = buffer.rows.items[buffer.row];
+    if (buffer.col > row.end - row.start) {
+        buffer.col = row.end - row.start;
+        if (buffer.col > 0) buffer.col -= 1;
+    }
+
+    buffer.cursor = row.start + buffer.col;
+}
+
+/// Moves the cursor to the best position it can using the cursor position as
+/// the authoritive value
+/// TODO: inline?
+pub fn updatePostionKeepPos(buffer: *Buffer) void {
+    if (buffer.cursor >= buffer.data.items.len)
+        buffer.cursor = buffer.data.items.len - 1;
+
+    for (buffer.rows.items, 0..) |row, r| {
+        if (row.start <= buffer.cursor and buffer.cursor <= row.end) {
+            buffer.row = r;
+            buffer.col = buffer.cursor - row.start;
+            return;
+        }
+    } else unreachable;
+}
 
 // pub fn skip_to_char(arg_buffer: *Buffer, arg_cur_pos: c_int, arg_direction: c_int, arg_c: u8) c_int {
 //     var buffer = arg_buffer;
