@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     const terminal = b.dependency("terminal", .{ .target = target, .optimize = optimize });
     neomacsExe.root_module.addImport("scured", terminal.module("scured"));
 
-    // neomacsExe.linkSystemLibrary("tree-sitter");
+    neomacsExe.linkSystemLibrary("tree-sitter");
     neomacsExe.linkSystemLibrary("luajit-5.1");
     neomacsExe.linkLibC();
 

@@ -8,7 +8,7 @@ const State = @import("State.zig");
 const Buffer = @import("Buffer.zig");
 
 pub fn handleCursorShape(state: *State) !void {
-    try thr.setCursorStyle(state.term.tty.f.writer(), switch (state.config.mode) {
+    try thr.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
         .insert => .SteadyBar,
         else => .SteadyBlock,
     });

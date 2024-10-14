@@ -3,7 +3,7 @@ stdenv.mkDerivation {
     pname = "neomacs";
     version = "0.1.0";
 
-    src = ./.;
+    src = ./..;
 
     nativeBuildInputs = [
       zig.hook
@@ -17,5 +17,5 @@ stdenv.mkDerivation {
       tree-sitter-grammars.tree-sitter-zig
     ];
 
-    zigBuildFlags = [ "--system" "${callPackage ./build.zig.zon.nix { } }" ];
+    zigBuildFlags = [ "--system" "${ callPackage ./zig-zon.nix { } }" ];
 }

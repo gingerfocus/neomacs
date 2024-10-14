@@ -1,2 +1,2 @@
-vim.opt.relativelines = false
+vim.opt.autoindent = false
 print("hello from the inner file")

@@ -8,6 +8,10 @@ Overall, this project aims to be everything but a web browser. And you should
 (eventually) be able to run a system with only busybox, this, ssh and firefox
 installed.
 
+## Why
+Neovim is a 6M distribution contains many lines of code. I think many of these
+things could be done better.
+
 # Devolopment
 
 ## Keybinds

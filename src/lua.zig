@@ -5,16 +5,42 @@ const scu = root.scu;
 const mem = std.mem;
 const luajitsys = root.luajitsys;
 
+const State = @import("State.zig");
+const Config = @import("Config.zig");
+
 pub const LuaState = luajitsys.lua_State;
 
 pub fn init() *LuaState {
+    root.log(@src(), .debug, "creating lua state", .{});
+
     const L = luajitsys.luaL_newstate() orelse unreachable;
     luajitsys.luaL_openlibs(L);
 
-    // Main Neomacs Object
+    // Neomacs Object
     pushStruct(L, .{
-        .api = .{},
+        .api = .{
+            // local win_id = vim.api.nvim_open_win(
+            //      bufnr, -- buf id
+            //      true, -- focus on create
+            //      {
+            //     relative = "editor",
+            //     title = "Harpoon",
+            //     title_pos = toggle_opts.title_pos or "left",
+            //     row = math.floor(((vim.o.lines - height) / 2) - 1),
+            //     col = math.floor((vim.o.columns - width) / 2),
+            //     width = width,
+            //     height = height,
+            //     style = "minimal",
+            //     border = toggle_opts.border or "single",
+            // })
+        },
+        .buf = .{
+            // .getName = nluaGetName
+            // .create = nluaCreate(focus, )
+        },
+        .opt = Config{},
         .keymap = .{
+            .del = nluaKeymapDel,
             .set = nluaKeymapSet,
         },
         .cmd = .{
@@ -24,21 +50,10 @@ pub fn init() *LuaState {
             // .help = nluaHelp,
             // .tutor = nluaTutor,
         },
-        .opt = .{
-            .relativelines = true,
-            .scrolloff = 8,
-        },
         .notify = nluaNotify,
         .print = nluaPrint,
-        // ._treesitter = .{},
-        // .schedule = nlua_schedule
-        // .in_fast_event = nlua_in_fast_event
-        // .call = nlua_call
-        // .rpcrequest = nlua_rpcrequest,
-        // .rpcnotify = nlua_rpcnotify,
-        // .wait = nlua_wait,
-        // .ui_attach = nlua_ui_attach,
-        // .ui_detach = nlua_ui_detach,
+        .treesitter = .{},
+        // .schedule = nluaSchedule
     });
     luajitsys.lua_setglobal(L, "neomacs");
 
@@ -51,29 +66,25 @@ pub fn init() *LuaState {
     return L;
 }
 
-pub fn runInit(L: *LuaState) !void {
-    var ret: c_int = undefined;
-
-    const sysinit = @embedFile("sysinit.lua");
-    ret = luajitsys.luaL_loadstring(L, sysinit);
-    try luaError(L, ret);
-
-    // ret = luajitsys.luaL_loadfile(L, "share/init.lua");
-    // try luaError(L, ret);
-
-    ret = luajitsys.lua_pcall(L, 0, luajitsys.LUA_MULTRET, 0);
-    try luaError(L, ret);
+pub fn deinit(L: *LuaState) void {
+    luajitsys.lua_close(L);
 }
 
-fn luaError(L: *LuaState, ret: c_int) !void {
-    if (ret != 0) {
+pub fn runInit(L: *LuaState) !void {
+    root.log(@src(), .debug, "running lua state", .{});
+
+    const sysinit = @embedFile("sysinit.lua");
+    if (luajitsys.luaL_loadstring(L, sysinit) != 0)
+        unreachable; // embeded file is always the same
+
+    if (luajitsys.lua_pcall(L, 0, luajitsys.LUA_MULTRET, 0) != 0) {
         const c = luajitsys.lua_tolstring(L, -1, null);
         std.log.err("{s}", .{c});
         return error.LuaError;
     }
 }
 
-fn pushStruct(L: *LuaState, comptime value: anytype) void {
+pub fn pushStruct(L: *LuaState, comptime value: anytype) void {
     const Value = @TypeOf(value);
     const typeInfo: std.builtin.Type = @typeInfo(Value);
 
@@ -82,19 +93,24 @@ fn pushStruct(L: *LuaState, comptime value: anytype) void {
     // const v = Value{};
     inline for (typeInfo.Struct.fields) |field| {
         const f = @field(value, field.name);
-        switch (@typeInfo(field.type)) {
-            .ComptimeInt, .Int => luajitsys.lua_pushinteger(L, f),
-            .Bool => luajitsys.lua_pushboolean(L, @intFromBool(f)),
-            .Struct => pushStruct(L, f),
-            .Fn => luajitsys.lua_pushcfunction(L, f),
-            else => unreachable,
+        if (comptime std.mem.eql(u8, field.name, "__metatable")) {
+            pushStruct(L, f);
+            _ = luajitsys.lua_setmetatable(L, -2);
+        } else {
+            switch (@typeInfo(field.type)) {
+                .ComptimeInt, .Int => luajitsys.lua_pushinteger(L, f),
+                .Bool => luajitsys.lua_pushboolean(L, @intFromBool(f)),
+                .Struct => pushStruct(L, f),
+                .Fn => luajitsys.lua_pushcfunction(L, f),
+                .Enum => {
+                    const name = @tagName(f);
+                    luajitsys.lua_pushlstring(L, name.ptr, name.len);
+                },
+                else => unreachable,
+            }
+            luajitsys.lua_setfield(L, -2, field.name);
         }
-        luajitsys.lua_setfield(L, -2, field.name);
     }
-}
-
-pub fn deinit(L: *LuaState) void {
-    luajitsys.lua_close(L);
 }
 
 pub fn runCommand(L: *LuaState, cmd: [:0]const u8) !void {
@@ -128,215 +144,23 @@ pub fn runCommand(L: *LuaState, cmd: [:0]const u8) !void {
     // std.debug.print("[loop] ending loop\n", .{});
 }
 
-// fn runFile(L: *LuaState) !void {
-//     var ret: c_int = 0;
-//     ret = lua.luaL_loadfile(L, "lua/test.lua");
-//     try luaError(L, ret);
-//
-//     ret = lua.lua_pcall(L, 0, lua.LUA_MULTRET, 0);
-//     try luaError(L, ret);
-//
-//     // ret = lua.luaL_dofile(L, "lua/test.lua");
-//     // try luaError(L, ret);
-// }
-
-// pub var tt_string: [18][*:0]const u8 = [18][*:0]const u8{
-//     "set_var",
-//     "set_output",
-//     "set_map",
-//     "let",
-//     "plus",
-//     "minus",
-//     "mult",
-//     "div",
-//     "echo",
-//     "w",
-//     "e",
-//     "we",
-//     "ident",
-//     "special key",
-//     "string",
-//     "config var",
-//     "int",
-//     "float",
-// };
-
-// pub var ctrl_keys: [26]Ctrl_Key = [26]Ctrl_Key{
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-a>".*;
-//         }).static,
-//         .value = @as(c_int, 'a') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-b>".*;
-//         }).static,
-//         .value = @as(c_int, 'b') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-c>".*;
-//         }).static,
-//         .value = @as(c_int, 'c') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-d>".*;
-//         }).static,
-//         .value = @as(c_int, 'd') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-e>".*;
-//         }).static,
-//         .value = @as(c_int, 'e') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-f>".*;
-//         }).static,
-//         .value = @as(c_int, 'f') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-g>".*;
-//         }).static,
-//         .value = @as(c_int, 'g') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-h>".*;
-//         }).static,
-//         .value = @as(c_int, 'h') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-i>".*;
-//         }).static,
-//         .value = @as(c_int, 'i') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-j>".*;
-//         }).static,
-//         .value = @as(c_int, 'j') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-k>".*;
-//         }).static,
-//         .value = @as(c_int, 'k') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-l>".*;
-//         }).static,
-//         .value = @as(c_int, 'l') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-m>".*;
-//         }).static,
-//         .value = @as(c_int, 'm') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-n>".*;
-//         }).static,
-//         .value = @as(c_int, 'n') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-o>".*;
-//         }).static,
-//         .value = @as(c_int, 'o') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-p>".*;
-//         }).static,
-//         .value = @as(c_int, 'p') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-q>".*;
-//         }).static,
-//         .value = @as(c_int, 'q') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-r>".*;
-//         }).static,
-//         .value = @as(c_int, 'r') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-s>".*;
-//         }).static,
-//         .value = @as(c_int, 's') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-t>".*;
-//         }).static,
-//         .value = @as(c_int, 't') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-u>".*;
-//         }).static,
-//         .value = @as(c_int, 'u') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-v>".*;
-//         }).static,
-//         .value = @as(c_int, 'v') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-w>".*;
-//         }).static,
-//         .value = @as(c_int, 'w') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-x>".*;
-//         }).static,
-//         .value = @as(c_int, 'x') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-y>".*;
-//         }).static,
-//         .value = @as(c_int, 'y') & @as(c_int, 31),
-//     },
-//     Ctrl_Key{
-//         .name = &(struct {
-//             var static = "<ctrl-z>".*;
-//         }).static,
-//         .value = @as(c_int, 'z') & @as(c_int, 31),
-//     },
-// };
-
 fn stateWrite() void {
     root.log(@src(), .info, "[zig] Should write", .{});
 }
 
-fn nluaQuit(_: ?*LuaState) callconv(.C) c_int {
-    root.state.config.QUIT = true;
+fn nluaQuit(L: ?*LuaState) callconv(.C) c_int {
+    Config.set(L, "QUIT", true);
     return 0;
 }
 
-fn nluaWrite(_: ?*const LuaState) callconv(.C) c_int {
+fn nluaWrite(_: ?*LuaState) callconv(.C) c_int {
     stateWrite();
     return 0;
 }
 
-fn nluaWriteQuit(_: ?*const LuaState) callconv(.C) c_int {
+fn nluaWriteQuit(L: ?*LuaState) callconv(.C) c_int {
     stateWrite();
-    root.state.config.QUIT = true;
+    Config.set(L, "QUIT", true);
     return 0;
 }
 
@@ -347,10 +171,6 @@ fn nluaWriteQuit(_: ?*const LuaState) callconv(.C) c_int {
 //     return lua.lua_error(L);
 // }
 
-// LuaRef cb = nlua_ref_global(lstate, 1);
-
-// multiqueue_put(main_loop.events, nlua_schedule_event,
-//                1, (void *)(ptrdiff_t)cb);
 fn nluaHelp(L: ?*LuaState) callconv(.C) c_int {
     const file = scu.log.getFile() orelse return 1;
 
@@ -446,6 +266,12 @@ fn printError(L: ?*LuaState, idx: c_int, msg: []const u8) c_int {
     return luajitsys.lua_error(L);
 }
 
+fn nluaKeymapDel(L: ?*LuaState) callconv(.C) c_int {
+    root.log(@src(), .info, "neomacs.keymap.del not implemented", .{});
+    _ = L; // autofix
+    return 0;
+}
+
 fn nluaKeymapSet(L: ?*LuaState) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
     _ = L; // autofix
@@ -455,8 +281,6 @@ fn nluaKeymapSet(L: ?*LuaState) callconv(.C) c_int {
 /// Pretty print
 /// vim.print
 fn nluaPrint(L: ?*LuaState) callconv(.C) c_int {
-    if (true) return 0;
-
     const nargs = luajitsys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
@@ -464,31 +288,148 @@ fn nluaPrint(L: ?*LuaState) callconv(.C) c_int {
     var buf = std.ArrayList(u8).initCapacity(a, 80) catch unreachable;
     defer buf.deinit();
 
-    var curargidx: c_int = 1;
-    while (curargidx <= nargs) : (curargidx += 1) {
-        neomacsPrintInner(L, curargidx, 0) catch return 0;
+    var state = PrintState{
+        .buf = &buf,
+        .indent = 0,
+        .functionCount = 0,
+    };
+
+    var idx: c_int = 1;
+    while (idx <= nargs) : (idx += 1) {
+        neomacsPrintInner(L, idx, &state) catch return 0;
         luajitsys.lua_pop(L, 1);
     }
 
-    std.log.info("print: {s}", .{buf.items});
+    std.log.info("print: \n{s}", .{buf.items});
     return 0;
 }
 
-fn neomacsPrintInner(L: *LuaState, buf: *std.ArrayList(u8), idx: c_int, indent: usize) !void {
+const PrintState = struct {
+    indent: usize,
+    buf: *std.ArrayList(u8),
+    functionCount: usize,
+};
+
+fn neomacsPrintInner(L: ?*LuaState, idx: c_int, state: *PrintState) !void {
     const ty = luajitsys.lua_type(L, idx);
 
     switch (ty) {
-        luajitsys.LUA_TNIL => try buf.appendSlice("nil"),
-
-        //         luajitsys.LUA_TFUNCTION => return .Function,
-        luajitsys.LUA_TTABLE => {
-            buf.appendNTimes(' ', indent);
-            buf.appendSlice("{\n");
-            // iter the table
-            // for (field) {
-            //     neomacsPrintInner(L, -1, indent + 2) catch return 0;
-            // }
+        luajitsys.LUA_TNIL => try state.buf.appendSlice("nil"),
+        luajitsys.LUA_TFUNCTION => {
+            try std.fmt.format(state.buf.writer(), "<function {}>", .{state.functionCount});
+            state.functionCount += 1;
         },
+        luajitsys.LUA_TTABLE => {
+            try state.buf.appendSlice("{");
+
+            state.indent += 2;
+
+            // iter the table
+            var first = true;
+            luajitsys.lua_pushnil(L); // first key
+            while (luajitsys.lua_next(L, -2) != 0) {
+                if (first) {
+                    try state.buf.append('\n');
+                    first = false;
+                } else {
+                    try state.buf.appendSlice(",\n");
+                }
+
+                // uses 'key' (at index -2) and 'value' (at index -1)
+                const key = luajitsys.lua_tolstring(L, -2, null); // may not be a string
+                //
+                try state.buf.appendNTimes(' ', state.indent);
+
+                try std.fmt.format(state.buf.writer(), "{s}: ", .{key});
+
+                neomacsPrintInner(L, -1, state) catch unreachable;
+                // removes 'value'; keeps 'key' for next iteration
+                luajitsys.lua_pop(L, 1);
+            }
+
+            state.indent -= 2;
+
+            if (!first) {
+                try state.buf.append('\n');
+                try state.buf.appendNTimes(' ', state.indent);
+            }
+
+            try state.buf.appendSlice("}");
+        },
+        luajitsys.LUA_TNUMBER => {
+            const val = luajitsys.lua_tonumber(L, idx);
+            const v: isize = @intFromFloat(val);
+            try std.fmt.format(state.buf.writer(), "{}", .{v});
+        },
+        luajitsys.LUA_TBOOLEAN => {
+            const val = luajitsys.lua_toboolean(L, idx);
+            try std.fmt.format(state.buf.writer(), "{}", .{val != 0});
+        },
+        luajitsys.LUA_TNONE => {},
         else => unreachable,
     }
 }
+
+// Creates the language into the internal language map.
+//
+// Returns true if the language is correctly loaded in the language map
+// int tslua_add_language(lua_State *L)
+// {
+//   const char *path = luaL_checkstring(L, 1);
+//   const char *lang_name = luaL_checkstring(L, 2);
+//   const char *symbol_name = lang_name;
+//
+//   if (lua_gettop(L) >= 3 && !lua_isnil(L, 3)) {
+//     symbol_name = luaL_checkstring(L, 3);
+//   }
+//
+//   if (pmap_has(cstr_t)(&langs, lang_name)) {
+//     lua_pushboolean(L, true);
+//     return 1;
+//   }
+//
+// #define BUFSIZE 128
+//   char symbol_buf[BUFSIZE];
+//   snprintf(symbol_buf, BUFSIZE, "tree_sitter_%s", symbol_name);
+// #undef BUFSIZE
+//
+//   uv_lib_t lib;
+//   if (uv_dlopen(path, &lib)) {
+//     snprintf(IObuff, IOSIZE, "Failed to load parser for language '%s': uv_dlopen: %s",
+//              lang_name, uv_dlerror(&lib));
+//     uv_dlclose(&lib);
+//     lua_pushstring(L, IObuff);
+//     return lua_error(L);
+//   }
+//
+//   TSLanguage *(*lang_parser)(void);
+//   if (uv_dlsym(&lib, symbol_buf, (void **)&lang_parser)) {
+//     snprintf(IObuff, IOSIZE, "Failed to load parser: uv_dlsym: %s",
+//              uv_dlerror(&lib));
+//     uv_dlclose(&lib);
+//     lua_pushstring(L, IObuff);
+//     return lua_error(L);
+//   }
+//
+//   TSLanguage *lang = lang_parser();
+//   if (lang == NULL) {
+//     uv_dlclose(&lib);
+//     return luaL_error(L, "Failed to load parser %s: internal error", path);
+//   }
+//
+//   uint32_t lang_version = ts_language_version(lang);
+//   if (lang_version < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION
+//       || lang_version > TREE_SITTER_LANGUAGE_VERSION) {
+//     return luaL_error(L,
+//                       "ABI version mismatch for %s: supported between %d and %d, found %d",
+//                       path,
+//                       TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION,
+//                       TREE_SITTER_LANGUAGE_VERSION, lang_version);
+//   }
+//
+//   pmap_put(cstr_t)(&langs, xstrdup(lang_name), lang);
+//
+//   lua_pushboolean(L, true);
+//   return 1;
+// }
+//

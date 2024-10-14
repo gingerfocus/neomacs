@@ -7,17 +7,25 @@ const luajitsys = root.luajitsys;
 
 const State = @import("State.zig");
 
-fn fallbackNone(_: *State) !void {}
-// fn targeterNone(state: *State, target: usize) void {
-//     state.buffer.cursor = target;
-// }
+fn fallbackNone(state: *State) !void {
+    _ = state; // autofix
+    // state.currentKeyMap = null;
+}
+
+fn targeterMove(state: *State) !void {
+    if (state.target) |target| {
+        state.buffer.cursor = target.cursor;
+        state.buffer.updatePostionKeepPos();
+    }
+    state.target = null;
+    state.currentKeyMap = null;
+}
 
 pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
 pub const KeyMaps = struct {
     keys: KeyMapings = .{},
-
-    // targeter: *const fn (*State, usize) void,
     fallback: KeyMap = .{ .Native = fallbackNone },
+    targeter: *const fn (*State) anyerror!void = targeterMove,
 
     pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
         var iter = self.keys.iterator();
@@ -35,10 +43,13 @@ pub const KeyMaps = struct {
             // the buffer
             try self.fallback.run(state);
         }
+
+        // TODO: I dont think this should run after a fallback
+        try self.targeter(state);
     }
 
     pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: KeyMap) !void {
-        self.keys.put(a, character, value);
+        try self.keys.put(a, character, value);
     }
 
     /// Gets the next
@@ -67,7 +78,10 @@ pub const KeyMap = union(enum) {
 
     pub fn deinit(self: KeyMap, a: std.mem.Allocator) void {
         switch (self) {
-            .SubMap => |map| map.deinit(a),
+            .SubMap => |map| {
+                map.deinit(a);
+                a.destroy(map);
+            },
             else => {},
         }
     }

@@ -11,6 +11,9 @@ pub const Row = struct {
     end: usize,
 };
 
+/// Unique id of the buffer
+id: u64,
+
 /// literal data in the buffer
 data: std.ArrayListUnmanaged(u8),
 /// position in the data above
@@ -26,6 +29,8 @@ col: usize = 0,
 filename: []const u8,
 // visual: ?Visual = null,
 
+mode: Mode = .normal,
+
 // TODO: make a desired x and y
 // when the y is change the desired x stays the same
 // the col is set the to desired x or the most valid position
@@ -38,7 +43,12 @@ pub fn init(a: std.mem.Allocator, filename: []const u8) !Buffer {
     defer list.deinit();
     try file.reader().readAllArrayList(&list, 128 * 1024 * 1024);
 
+    // std.builtin.CallModifier
+    // @call(.always_inline, Buffer.deinit, .{});
+    const id = std.hash.murmur.Murmur2_64.hash(filename);
+
     var buffer = Buffer{
+        .id = id,
         .filename = try a.dupe(u8, filename),
         .data = list.moveToUnmanaged(),
         .rows = .{},
@@ -105,6 +115,10 @@ pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
     // if (buffer.cursor > buffer.data.items.len) {
     //     buffer.cursor = buffer.data.items.len;
     // }
+    if (ch == '\n') {
+        try buffer.newlineInsert(a);
+        return;
+    }
 
     if (buffer.cursor >= buffer.data.items.len) {
         try buffer.data.append(a, ch);
@@ -121,20 +135,16 @@ pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
     // PERF: time this to see if this is a real optimization, I think it is
     // beacuse it will be on debug as it has no error path but on release mode
     // it may be the same
-    if (ch == '\n') {
-        try buffer.recalculateRows(a);
-    } else {
-        buffer.col += 1;
-        for (buffer.rows.items) |*row| {
-            // skip if you need
-            if (row.end < buffer.cursor) continue;
+    buffer.col += 1;
+    for (buffer.rows.items) |*row| {
+        // skip if you need
+        if (row.end < buffer.cursor) continue;
 
-            // add if you are not in it
-            if (row.start >= buffer.cursor) row.start += 1;
+        // add if you are not in it
+        if (row.start >= buffer.cursor) row.start += 1;
 
-            // always add after
-            row.end += 1;
-        }
+        // always add after
+        row.end += 1;
     }
 }
 
@@ -609,6 +619,7 @@ pub fn updatePostionKeepPos(buffer: *Buffer) void {
 //     }).*))) & @as(c_int, @bitCast(@as(c_uint, @as(c_ushort, @bitCast(@as(c_short, @truncate(_ISalnum)))))))) != 0) or (@as(c_int, @bitCast(@as(c_uint, ch))) == @as(c_int, '_'))) return 1;
 //     return 0;
 // }
+
 // pub fn buffer_create_indent(arg_buffer: *Buffer, arg_state: *State) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -632,14 +643,12 @@ pub fn updatePostionKeepPos(buffer: *Buffer) void {
 //         }
 //     }
 // }
-// pub fn buffer_newline_indent(arg_buffer: *Buffer, arg_state: *State) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '\n'))))));
-//     buffer_create_indent(buffer, state);
-// }
+
+pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
+    try buffer.data.insert(a, buffer.cursor, '\n');
+    try buffer.recalculateRows(a);
+    // TODO: indent the curosr
+}
 
 // const ROPE_SPLIT_LENGTH = 128;
 // const RopeString = struct {
@@ -663,3 +672,23 @@ pub fn updatePostionKeepPos(buffer: *Buffer) void {
 //     curr.data = remaining;
 //     return root;
 // }
+
+pub const Mode = enum(usize) {
+    normal = 0,
+    insert = 1,
+    search = 2,
+    comand = 3,
+    visual = 4,
+
+    pub const COUNT = @typeInfo(Mode).Enum.fields.len;
+
+    pub fn toString(self: Mode) []const u8 {
+        return switch (self) {
+            .normal => "NORMAL",
+            .insert => "INSERT",
+            .search => "SEARCH",
+            .comand => "COMMAND",
+            .visual => "VISUAL",
+        };
+    }
+};

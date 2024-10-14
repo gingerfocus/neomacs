@@ -7,12 +7,13 @@ pub const trm = scu.thermit;
 const front = @import("frontend.zig");
 const tools = @import("tools.zig");
 const lua = @import("lua.zig");
+const alloc = @import("alloc.zig");
 
 const Args = @import("Args.zig");
 
-// const treesitter = @cImport({
-//     @cInclude("tree_sitter/api.h");
-// });
+pub const treesitter = @cImport({
+    @cInclude("tree_sitter/api.h");
+});
 
 pub const luajitsys = @cImport({
     @cInclude("lua.h");
@@ -21,9 +22,7 @@ pub const luajitsys = @cImport({
     @cInclude("luajit-2.1/lauxlib.h");
 });
 
-const State = @import("State.zig");
-
-pub var state: State = undefined;
+//-----------------------------------------------------------------------------
 
 pub const std_options: std.Options = .{
     .logFn = scu.log.toFile,
@@ -61,10 +60,15 @@ pub fn main() u8 {
     return 0;
 }
 
+//-----------------------------------------------------------------------------
+
+const State = @import("State.zig");
+// pub var state: State = undefined;
+
 fn neomacs() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const a = gpa.allocator();
+    alloc.init();
+    defer alloc.deinit();
+    const a = alloc.allocator();
 
     log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
 
@@ -74,8 +78,12 @@ fn neomacs() !void {
     const filename: []const u8 = if (args.positional.len < 1) "out.txt" else mem.span(args.positional[0]);
 
     const file = args.help orelse filename;
-    state = try State.init(a, file);
+
+    var state = try State.init(a, file);
+    // state = try State.init(a, file);
     defer state.deinit();
+
+    // treesitter.ts_set_allocator()
 
     lua.runInit(state.L) catch {
         log(@src(), .warn, "could not run lua init, check above for errors", .{});
@@ -86,7 +94,10 @@ fn neomacs() !void {
     // const syntax_filename: ?[*:0]u8 = null;
     // tools.load_config_from_file(a, &state, state.buffer, args.config, syntax_filename);
 
-    while (!state.config.QUIT and !(state.ch.modifiers.ctrl and state.ch.character == 'q')) {
+    while (!(state.ch.modifiers.ctrl and state.ch.character == 'q')) {
+        state.config = null;
+        if (state.getConfig().QUIT) break;
+
         try tools.handleCursorShape(&state);
         front.render(&state) catch |err| {
             log(@src(), .err, "encountered error: {}", .{err});
@@ -99,9 +110,20 @@ fn neomacs() !void {
                 state.ch = ke;
                 try state.getKeyMaps().run(&state);
             },
-            .End => state.config.QUIT = true,
+            .End => state.slowExit(),
             .Resize => state.resized = true,
             else => {},
         }
     }
+
+    // const parser = treesitter.ts_parser_new();
+    // treesitter.ts_parser_set_language(parser, tree_sitter_json());
+
+    //   const tree = treesitter.ts_parser_parse_string(
+    //   parser,
+    //   NULL,
+    //   source_code,
+    //   strlen(source_code)
+    // );
+    // _ = allocator.deinit();
 }

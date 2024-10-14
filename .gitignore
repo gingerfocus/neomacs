@@ -9,8 +9,9 @@ zig-out
 /sub/kmscon
 /sub/pomozo
 /sub/yuzu
-/sub/neovide
+# /sub/neovide
 /sub/treet
+/sub/zimv
 
 /out.txt
 /neomacs.log

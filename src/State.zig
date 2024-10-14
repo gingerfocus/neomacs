@@ -12,6 +12,7 @@ const scu = root.scu;
 const trm = scu.thermit;
 
 const Buffer = @import("Buffer.zig");
+const Config = @import("Config.zig");
 const State = @This();
 
 a: std.mem.Allocator,
@@ -24,6 +25,15 @@ term: scu.Term,
 // undo: Undo,
 
 ch: trm.KeyEvent = .{ .character = scu.thermit.KeySymbol.None.toBits() },
+/// Motion keys have two ways in which they select text, a region and a
+/// point. A motion can set this structure to not null to indicate what it
+/// wants. Then a selector runs using this data. The default one just sets the
+/// cursor to target position. Some other common ones are `d` which deletes
+/// text in the selection. The can also be user defined.
+target: ?struct {
+    select: struct { x1: usize, y1: usize, x2: usize, y2: usize },
+    cursor: usize,
+} = null,
 
 command: std.ArrayListUnmanaged(u8),
 repeating: Repeating = .{},
@@ -38,7 +48,7 @@ status_bar_msg: ?[]const u8 = null,
 // cursor y position
 // y: usize = 0,
 
-keyMaps: [Mode.COUNT]km.KeyMaps,
+keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
 /// If null then do the normal key map look up, else use this as the key maps,
 /// dont touch this as if you try to be clever it will just be set to null
 currentKeyMap: ?*km.KeyMaps = null,
@@ -46,6 +56,9 @@ currentKeyMap: ?*km.KeyMaps = null,
 L: *lua.LuaState,
 
 // clipboard: ?[]const u8 = null,
+
+buffers: std.ArrayListUnmanaged(*Buffer),
+/// Always a memeber of the buffers array
 buffer: *Buffer,
 
 resized: bool,
@@ -54,7 +67,7 @@ line_num_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
 main_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
 status_bar: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
 
-config: Config = .{},
+config: ?Config = null,
 
 pub fn init(a: std.mem.Allocator, file: []const u8) !State {
     root.log(@src(), .debug, "opening file ({s})", .{file});
@@ -64,6 +77,8 @@ pub fn init(a: std.mem.Allocator, file: []const u8) !State {
         root.log(@src(), .err, "File Not Found: {s}", .{file});
         return err;
     };
+    var buffers = std.ArrayListUnmanaged(*Buffer){};
+    try buffers.append(a, buffer);
 
     const t = try scu.Term.init(a);
     const L = lua.init();
@@ -74,12 +89,13 @@ pub fn init(a: std.mem.Allocator, file: []const u8) !State {
         .term = t,
         .L = L,
 
-        .keyMaps = .{.{}} ** Mode.COUNT,
+        .keyMaps = .{.{}} ** Buffer.Mode.COUNT,
 
         // .undo_stack = Undo_Stack.init(a),
         // .redo_stack = Undo_Stack.init(a),
         // .cur_undo = Undo{},
 
+        .buffers = buffers,
         .buffer = buffer,
         .command = .{},
 
@@ -99,12 +115,6 @@ pub fn deinit(state: *State) void {
 
     lua.deinit(state.L);
 
-    // for (state.files.items) |file| {
-    //     state.a.free(file.name);
-    //     state.a.free(file.path);
-    // }
-    // state.files.deinit(state.a);
-
     // state.cur_undo.data.deinit(state.a);
     // state.undo_stack.deinit();
     // state.redo_stack.deinit();
@@ -113,8 +123,11 @@ pub fn deinit(state: *State) void {
 
     state.command.deinit(state.a);
 
-    state.buffer.deinit(state.a);
-    state.a.destroy(state.buffer);
+    for (state.buffers.items) |buffer| {
+        buffer.deinit(state.a);
+        state.a.destroy(buffer);
+    }
+    state.buffers.deinit(state.a);
 
     state.term.deinit();
 
@@ -123,53 +136,29 @@ pub fn deinit(state: *State) void {
 
 pub fn getKeyMaps(state: *const State) *const km.KeyMaps {
     if (state.currentKeyMap) |map| return map;
-    return &state.keyMaps[@intFromEnum(state.config.mode)];
+    return &state.keyMaps[@intFromEnum(state.buffer.mode)];
 }
 
-pub const Config = struct {
-    // relative_nums: c_int = 1,
-    // auto_indent: c_int = 1,
-    // syntax: c_int = 1,
-    // indent: c_int = 0,
-    // undo_size: c_int = 16,
-    // lang: []const u8,
+pub fn getConfig(state: *State) *const Config {
+    if (state.config) |*config| {
+        return config;
+    }
+    state.config = Config.get(state.L);
+    return &state.config.?;
+}
 
-    /// If true then exit the program, ussually dont need to lock for this as
-    /// if we are exiting then a race condition is not that important
-    QUIT: bool = false,
-    mode: Mode = .normal,
-    // background_color: c_int = -1,
-    // leaders: [4]u8,
-    // .leaders = .{ ' ', 'r', 'd', 'y' },
-    // key_maps: Maps,
-
-    // Used by lua call backs to lock the config state before changing it
-    // luaLock: std.Thread.Mutex = .{},
-};
+pub fn slowExit(state: *State) void {
+    Config.set(state.L, "QUIT", true);
+}
 
 pub const Leader = enum(u32) { NONE = 0, R = 1, D = 2, Y = 3 };
-
-pub const Mode = enum(usize) {
-    normal = 0,
-    insert = 1,
-    search = 2,
-    comand = 3,
-    visual = 4,
-
-    const COUNT = @typeInfo(Mode).Enum.fields.len;
-
-    pub fn toString(self: Mode) []const u8 {
-        return switch (self) {
-            .normal => "NORMAL",
-            .insert => "INSERT",
-            .search => "SEARCH",
-            .comand => "COMMAND",
-            .visual => "VISUAL",
-        };
-    }
-};
 
 pub const Repeating = struct {
     is: bool = false,
     count: usize = 0,
+
+    pub inline fn reset(self: *Repeating) void {
+        self.is = false;
+        self.count = 0;
+    }
 };

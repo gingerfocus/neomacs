@@ -83,7 +83,7 @@ pub fn render(state: *State) !void {
         );
     }
 
-    const mode = state.config.mode.toString();
+    const mode = state.buffer.mode.toString();
     state.term.writeBuffer(state.status_bar, 0, 0, mode);
 
     {
@@ -96,7 +96,7 @@ pub fn render(state: *State) !void {
         // state.term.writeBuffer(state.status_bar, state.status_bar.w - 5, 0, state.num.items);
     }
 
-    if (state.config.mode == .comand or state.config.mode == .search) {
+    if (state.buffer.mode == .comand or state.buffer.mode == .search) {
         const command = try std.fmt.allocPrint(state.a, ":{s}", .{state.command.items});
         defer state.a.free(command);
         state.term.writeBuffer(state.status_bar, 0, 1, command);
@@ -188,7 +188,7 @@ pub fn render(state: *State) !void {
     }
     // -------------------------------------------
 
-    if (state.config.mode == .comand or state.config.mode == .search) {
+    if (state.buffer.mode == .comand or state.buffer.mode == .search) {
         state.term.moveCursor(state.status_bar, @intCast(1 + state.command.items.len), 1); // state.x
     } else {
         // TODO: account for tab characters
