@@ -4,16 +4,21 @@ const keys = @import("keys.zig");
 const lua = @import("lua.zig");
 const tools = @import("tools.zig");
 const fr = @import("frontend.zig");
-
 const km = @import("keymaps.zig");
 
-const luajitsys = root.luajitsys;
 const scu = root.scu;
-const trm = scu.thermit;
+const trm = root.trm;
 
-const Buffer = @import("Buffer.zig");
+const Buffer = root.Buffer;
 const Config = @import("Config.zig");
+const Command = @import("Command.zig");
+
 const State = @This();
+
+// pub const Static = struct {
+//     pub var config = Config{};
+//     // __none: std.meta.Tuple(),
+// };
 
 a: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
@@ -24,7 +29,8 @@ term: scu.Term,
 // redos: Undo_Stack,
 // undo: Undo,
 
-ch: trm.KeyEvent = .{ .character = scu.thermit.KeySymbol.None.toBits() },
+ch: trm.KeyEvent = @bitCast(@as(u16, 0)),
+
 /// Motion keys have two ways in which they select text, a region and a
 /// point. A motion can set this structure to not null to indicate what it
 /// wants. Then a selector runs using this data. The default one just sets the
@@ -35,49 +41,46 @@ target: ?struct {
     cursor: usize,
 } = null,
 
-command: std.ArrayListUnmanaged(u8),
 repeating: Repeating = .{},
-leader: Leader = .NONE,
+
+command: Command,
 
 /// Message to show in the status bar, remains until cleared
-/// must be area allocated
+/// must be arena allocated
 status_bar_msg: ?[]const u8 = null,
-
-// cursor x position
-// x: usize = 0,
-// cursor y position
-// y: usize = 0,
 
 keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
 /// If null then do the normal key map look up, else use this as the key maps,
 /// dont touch this as if you try to be clever it will just be set to null
 currentKeyMap: ?*km.KeyMaps = null,
 
-L: *lua.LuaState,
+L: *lua.State,
 
-// clipboard: ?[]const u8 = null,
+config: Config = .{},
 
 buffers: std.ArrayListUnmanaged(*Buffer),
 /// Always a memeber of the buffers array
-buffer: *Buffer,
+buffer: *Buffer, // todo: might be better to make it an index
 
 resized: bool,
 
-line_num_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
-main_win: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
-status_bar: scu.Term.Screen = std.mem.zeroes(scu.Term.Screen),
+line_num_win: scu.Term.Screen,
+main_win: scu.Term.Screen,
+status_bar: scu.Term.Screen,
 
-config: ?Config = null,
-
-pub fn init(a: std.mem.Allocator, file: []const u8) !State {
-    root.log(@src(), .debug, "opening file ({s})", .{file});
-
-    const buffer = try a.create(Buffer);
-    buffer.* = Buffer.init(a, file) catch |err| {
-        root.log(@src(), .err, "File Not Found: {s}", .{file});
-        return err;
-    };
+pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
     var buffers = std.ArrayListUnmanaged(*Buffer){};
+    const buffer = try a.create(Buffer);
+    if (file) |f| {
+        root.log(@src(), .debug, "opening file ({s})", .{f});
+        buffer.* = Buffer.edit(a, f) catch |err| {
+            root.log(@src(), .err, "File Not Found: {s}", .{f});
+            a.destroy(buffer);
+            return err;
+        };
+    } else {
+        buffer.* = Buffer.empty();
+    }
     try buffers.append(a, buffer);
 
     const t = try scu.Term.init(a);
@@ -97,14 +100,16 @@ pub fn init(a: std.mem.Allocator, file: []const u8) !State {
 
         .buffers = buffers,
         .buffer = buffer,
-        .command = .{},
+        .command = try Command.init(a),
 
         // Do all the screen math before the first render starts
         .resized = true,
+
+        .line_num_win = undefined,
+        .main_win = undefined,
+        .status_bar = undefined,
     };
     try keys.initKeyMaps(&state);
-
-    // try lua.runCommand(state.L, "tester");
 
     return state;
 }
@@ -134,24 +139,47 @@ pub fn deinit(state: *State) void {
     state.arena.deinit();
 }
 
-pub fn getKeyMaps(state: *const State) *const km.KeyMaps {
+pub fn getEditBuffer(state: *State) ?*Buffer.Edit {
+    switch (state.buffer.data) {
+        .Edit => |*edit| return edit,
+        .Custom => |*custom| return &custom.edit,
+        .Empty => return null,
+    }
+}
+
+pub fn press(state: *State) !void {
+    // -- Command Thing --------------------
+    if (state.command.is) {
+        if (state.command.maps.keys.get(trm.keys.bits(state.ch))) |function| {
+            try function.run(state);
+        } else {
+            try state.command.maps.fallback.run(state);
+        }
+        return;
+    }
+    // -------------------------
+
+    try state.getKeyMaps().run(state);
+}
+
+fn getKeyMaps(state: *const State) *const km.KeyMaps {
     if (state.currentKeyMap) |map| return map;
     return &state.keyMaps[@intFromEnum(state.buffer.mode)];
 }
 
-pub fn getConfig(state: *State) *const Config {
-    if (state.config) |*config| {
-        return config;
-    }
-    state.config = Config.get(state.L);
-    return &state.config.?;
-}
+// pub fn getConfig(state: *State) *const Config {
+//     if (state.config) |*config| {
+//         return config;
+//     }
+//     state.config = Config.get(state.L);
+//     return &state.config.?;
+// }
 
-pub fn slowExit(state: *State) void {
-    Config.set(state.L, "QUIT", true);
-}
-
-pub const Leader = enum(u32) { NONE = 0, R = 1, D = 2, Y = 3 };
+// pub fn slowExit(state: *State) void {
+//     _ = state; // autofix
+//     State.Static.config.QUIT = true;
+//     // Config.set(state.L, "QUIT", true);
+// }
 
 pub const Repeating = struct {
     is: bool = false,

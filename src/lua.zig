@@ -1,24 +1,35 @@
+// https://raw.githubusercontent.com/daurnimator/zig-autolua/refs/heads/master/src/autolua.zig
+
 const root = @import("root");
 const std = @import("std");
-const scu = root.scu;
 
 const mem = std.mem;
-const luajitsys = root.luajitsys;
+const scu = root.scu;
+const tools = @import("tools.zig");
+const lua = @This();
 
-const State = @import("State.zig");
 const Config = @import("Config.zig");
+const Global = @import("State.zig");
 
-pub const LuaState = luajitsys.lua_State;
+pub const sys = @cImport({
+    @cInclude("lua.h");
+    @cInclude("lualib.h");
+    @cInclude("luajit.h");
+    @cInclude("luajit-2.1/lauxlib.h");
+});
 
-pub fn init() *LuaState {
+pub const State = sys.lua_State;
+
+pub fn init() *State {
     root.log(@src(), .debug, "creating lua state", .{});
 
-    const L = luajitsys.luaL_newstate() orelse unreachable;
-    luajitsys.luaL_openlibs(L);
+    const L = sys.luaL_newstate() orelse unreachable;
+    sys.luaL_openlibs(L);
 
     // Neomacs Object
-    pushStruct(L, .{
-        .api = .{
+    push(L, .{
+        .api = .{},
+        .win = .{
             // local win_id = vim.api.nvim_open_win(
             //      bufnr, -- buf id
             //      true, -- focus on create
@@ -34,11 +45,18 @@ pub fn init() *LuaState {
             //     border = toggle_opts.border or "single",
             // })
         },
+        // .pkg = .{},
         .buf = .{
             // .getName = nluaGetName
             // .create = nluaCreate(focus, )
         },
-        .opt = Config{},
+        .opt = .{
+            // .__help = true,
+            .__metatable = .{
+                .__index = nluaOptIndex,
+                .__newindex = nluaOptNewIndex,
+            },
+        },
         .keymap = .{
             .del = nluaKeymapDel,
             .set = nluaKeymapSet,
@@ -47,120 +65,202 @@ pub fn init() *LuaState {
             .w = nluaWrite,
             .q = nluaQuit,
             .wq = nluaWriteQuit,
+            .e = nluaEdit,
             // .help = nluaHelp,
             // .tutor = nluaTutor,
+            .bn = nluaBufferNext,
+            .bp = nluaBufferPrev,
         },
         .notify = nluaNotify,
         .print = nluaPrint,
         .treesitter = .{},
         // .schedule = nluaSchedule
     });
-    luajitsys.lua_setglobal(L, "neomacs");
+    sys.lua_setglobal(L, "neomacs");
 
     // overwrite print implementation
-    luajitsys.lua_pushcfunction(L, luaPrint);
-    luajitsys.lua_setglobal(L, "print");
+    sys.lua_pushcfunction(L, luaPrint);
+    sys.lua_setglobal(L, "print");
 
     // TODO: patch require(...) to a different function for profiling
+
+    // -----------------
+    root.log(@src(), .debug, "running init.lua state", .{});
+
+    const SYSINIT = @embedFile("embed.lua");
+
+    if (sys.luaL_loadstring(L, SYSINIT) != 0)
+        unreachable; // embeded file is always the same
+
+    if (sys.lua_pcall(L, 0, sys.LUA_MULTRET, 0) != 0) {
+        var len: usize = undefined;
+        const c = sys.lua_tolstring(L, -1, &len);
+        root.log(@src(), .err, "could not run lua init:\n {s}", .{c[0..len]});
+    }
+    // -----------------
 
     return L;
 }
 
-pub fn deinit(L: *LuaState) void {
-    luajitsys.lua_close(L);
+pub fn deinit(L: *State) void {
+    sys.lua_close(L);
 }
 
-pub fn runInit(L: *LuaState) !void {
-    root.log(@src(), .debug, "running lua state", .{});
+// pub fn pushStruct(L: *State, comptime value: anytype) void {
+//     const Value = @TypeOf(value);
+//     const typeInfo: std.builtin.Type = @typeInfo(Value);
+//
+//     sys.lua_newtable(L);
+//
+//     inline for (typeInfo.Struct.fields) |field| {
+//         const f = @field(value, field.name);
+//
+//         switch (@typeInfo(field.type)) {
+//             .ComptimeInt, .Int => sys.lua_pushinteger(L, f),
+//             .Bool => sys.lua_pushboolean(L, @intFromBool(f)),
+//             .Struct => pushStruct(L, f),
+//             .Fn => sys.lua_pushcfunction(L, f),
+//             .Enum => {
+//                 const name = @tagName(f);
+//                 sys.lua_pushlstring(L, name.ptr, name.len);
+//             },
+//             else => @compileError("unable to push type: " ++ @typeName(Value)),
+//         }
+//
+//         if (comptime std.mem.eql(u8, field.name, "__metatable")) {
+//             _ = sys.lua_setmetatable(L, -2);
+//         } else {
+//             sys.lua_setfield(L, -2, field.name);
+//         }
+//     }
+// }
 
-    const sysinit = @embedFile("sysinit.lua");
-    if (luajitsys.luaL_loadstring(L, sysinit) != 0)
-        unreachable; // embeded file is always the same
-
-    if (luajitsys.lua_pcall(L, 0, luajitsys.LUA_MULTRET, 0) != 0) {
-        const c = luajitsys.lua_tolstring(L, -1, null);
-        std.log.err("{s}", .{c});
-        return error.LuaError;
-    }
-}
-
-pub fn pushStruct(L: *LuaState, comptime value: anytype) void {
+pub fn push(L: *State, value: anytype) void {
     const Value = @TypeOf(value);
-    const typeInfo: std.builtin.Type = @typeInfo(Value);
+    const typeInfo = @typeInfo(Value);
 
-    luajitsys.lua_newtable(L);
+    switch (typeInfo) {
+        .ComptimeInt, .Int => sys.lua_pushinteger(L, value),
+        .Bool => sys.lua_pushboolean(L, @intFromBool(value)),
+        .Struct => {
+            sys.lua_newtable(L);
 
-    // const v = Value{};
-    inline for (typeInfo.Struct.fields) |field| {
-        const f = @field(value, field.name);
-        if (comptime std.mem.eql(u8, field.name, "__metatable")) {
-            pushStruct(L, f);
-            _ = luajitsys.lua_setmetatable(L, -2);
-        } else {
-            switch (@typeInfo(field.type)) {
-                .ComptimeInt, .Int => luajitsys.lua_pushinteger(L, f),
-                .Bool => luajitsys.lua_pushboolean(L, @intFromBool(f)),
-                .Struct => pushStruct(L, f),
-                .Fn => luajitsys.lua_pushcfunction(L, f),
-                .Enum => {
-                    const name = @tagName(f);
-                    luajitsys.lua_pushlstring(L, name.ptr, name.len);
-                },
-                else => unreachable,
+            inline for (typeInfo.Struct.fields) |field| {
+                const f = @field(value, field.name);
+
+                push(L, f);
+
+                if (comptime std.mem.eql(u8, field.name, "__metatable")) {
+                    _ = sys.lua_setmetatable(L, -2);
+                } else {
+                    sys.lua_setfield(L, -2, field.name);
+                }
             }
-            luajitsys.lua_setfield(L, -2, field.name);
-        }
+        },
+        .Fn => sys.lua_pushcfunction(L, value),
+        .Enum => {
+            const name = @tagName(value);
+            sys.lua_pushlstring(L, name.ptr, name.len);
+        },
+        else => @compileError("unable to push type: " ++ @typeName(Value)),
     }
 }
 
-pub fn runCommand(L: *LuaState, cmd: [:0]const u8) !void {
-    luajitsys.lua_getglobal(L, "neomacs");
-    luajitsys.lua_getfield(L, -1, "cmd");
-    luajitsys.lua_getfield(L, -1, cmd.ptr);
+fn all(comptime T: type, items: []const T, func: fn (T) bool) bool {
+    for (items) |item| if (!func(item)) return false;
+    return true;
+}
 
-    const t = luajitsys.lua_type(L, -1);
+pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
+    const isCommand = all(u8, cmd, std.ascii.isAlphabetic);
+    // if (std.mem.indexOfScalarPos(u8, cmd, 0, ' ')) |_| isCommand = false;
 
-    switch (t) {
-        luajitsys.LUA_TFUNCTION => {
-            const ret = luajitsys.lua_pcall(L, 0, 0, 0);
-            if (ret != 0) return error.FunctionError;
-            // try luaError(L, ret);
-        },
-        luajitsys.LUA_TNUMBER => {
-            const n = luajitsys.lua_tonumber(L, -1);
-            const num: i32 = @intFromFloat(n);
-            std.log.info("[loop] got n: {}\n", .{num});
-        },
-        luajitsys.LUA_TNIL => {
-            luajitsys.lua_pop(L, -1);
-            std.log.warn("[loop] unknown key \"{s}\"\n", .{cmd});
-        },
-        else => {
-            const name = luajitsys.lua_typename(L, luajitsys.lua_type(L, -1));
-            std.log.err("[loop] unknown object type: {s}\n", .{mem.span(name)});
-        },
+    if (isCommand) {
+        sys.lua_getglobal(L, "neomacs");
+        sys.lua_getfield(L, -1, "cmd");
+        sys.lua_getfield(L, -1, cmd.ptr);
+
+        const t = sys.lua_type(L, -1);
+
+        switch (t) {
+            sys.LUA_TFUNCTION => {
+                const ret = sys.lua_pcall(L, 0, 0, 0);
+                if (ret != 0) {
+                    var len: usize = undefined;
+                    const str = sys.lua_tolstring(L, -1, &len);
+                    root.log(@src(), .err, "{s}", .{str[0..len]});
+                    return error.FunctionError;
+                }
+                return;
+            },
+            sys.LUA_TNIL => {
+                sys.lua_pop(L, -1);
+                // fall through to the execute case
+            },
+            else => {
+                const name = sys.lua_typename(L, sys.lua_type(L, -1));
+                root.log(@src(), .err, "[loop] not a function, object type: {s}", .{mem.span(name)});
+                return;
+            },
+        }
+    } else {
+        if (sys.luaL_loadstring(L, cmd) != 0) {
+            std.log.warn("[loop] unknown key or syntax \"{s}\"", .{cmd});
+            return error.SyntaxError;
+        }
+
+        if (sys.lua_pcall(L, 0, 0, 0) != 0) {
+            return error.CodeError;
+        }
     }
 
     // std.debug.print("[loop] ending loop\n", .{});
+
+    return;
 }
 
-fn stateWrite() void {
+// --- Lua Functions ---------------------------------------------------------
+
+fn nluaQuit(_: ?*State) callconv(.C) c_int {
+    root.state().config.QUIT = true;
+    return 0;
+}
+
+fn nluaWrite(_: ?*State) callconv(.C) c_int {
     root.log(@src(), .info, "[zig] Should write", .{});
-}
-
-fn nluaQuit(L: ?*LuaState) callconv(.C) c_int {
-    Config.set(L, "QUIT", true);
     return 0;
 }
 
-fn nluaWrite(_: ?*LuaState) callconv(.C) c_int {
-    stateWrite();
+fn nluaWriteQuit(s: ?*State) callconv(.C) c_int {
+    _ = nluaWrite(s);
+    _ = nluaQuit(s);
     return 0;
 }
 
-fn nluaWriteQuit(L: ?*LuaState) callconv(.C) c_int {
-    stateWrite();
-    Config.set(L, "QUIT", true);
+fn nluaEdit(L: ?*lua.State) callconv(.C) c_int {
+    const state = root.state();
+
+    const file = check(L, 1, []const u8) orelse {
+        // TODO: make a prompt thing that requests it from the user
+        return 0;
+    };
+
+    const buf = state.a.create(root.Buffer) catch return 0;
+    buf.* = root.Buffer.edit(state.a, file) catch return 0;
+
+    state.buffers.append(state.a, buf) catch return 0;
+    state.buffer = state.buffers.items[state.buffers.items.len - 1];
+
+    return 0;
+}
+
+fn nluaBufferNext(_: ?*State) callconv(.C) c_int {
+    tools.bufferNext(root.state());
+    return 0;
+}
+
+fn nluaBufferPrev(_: ?*State) callconv(.C) c_int {
+    tools.bufferPrev(root.state());
     return 0;
 }
 
@@ -171,39 +271,39 @@ fn nluaWriteQuit(L: ?*LuaState) callconv(.C) c_int {
 //     return lua.lua_error(L);
 // }
 
-fn nluaHelp(L: ?*LuaState) callconv(.C) c_int {
+fn nluaHelp(L: ?*State) callconv(.C) c_int {
     const file = scu.log.getFile() orelse return 1;
 
-    luajitsys.lua_getglobal(L, "neomacs");
-    std.debug.assert(luajitsys.lua_istable(L, -1));
+    sys.lua_getglobal(L, "neomacs");
+    std.debug.assert(sys.lua_istable(L, -1));
 
-    luajitsys.lua_getfield(L, -1, "cmd");
-    std.debug.assert(luajitsys.lua_istable(L, -1));
+    sys.lua_getfield(L, -1, "cmd");
+    std.debug.assert(sys.lua_istable(L, -1));
 
     root.log(@src(), .info, "[zig] globals:", .{});
 
-    luajitsys.lua_pushnil(L); // first key
-    while (luajitsys.lua_next(L, -2) != 0) {
+    sys.lua_pushnil(L); // first key
+    while (sys.lua_next(L, -2) != 0) {
         // uses 'key' (at index -2) and 'value' (at index -1)
-        const key = luajitsys.lua_tolstring(L, -2, null); // may not be a string
-        const val = luajitsys.lua_typename(L, luajitsys.lua_type(L, -1));
+        const key = sys.lua_tolstring(L, -2, null); // may not be a string
+        const val = sys.lua_typename(L, sys.lua_type(L, -1));
 
         std.fmt.format(file.writer(), "\t- {s}: {s}\n", .{ mem.span(key), mem.span(val) }) catch unreachable;
         // removes 'value'; keeps 'key' for next iteration
-        luajitsys.lua_pop(L, 1);
+        sys.lua_pop(L, 1);
     }
     return 0;
 }
 
-fn nluaNotify(L: ?*LuaState) callconv(.C) c_int {
+fn nluaNotify(L: ?*State) callconv(.C) c_int {
     // const n = luajitsys.lua_gettop(L);
-    if (luajitsys.lua_isstring(L, 1) != 0) {
+    if (sys.lua_isstring(L, 1) != 0) {
         // TODO: error
         return 0;
     }
 
     var len: usize = undefined;
-    const str = luajitsys.lua_tolstring(L, 1, &len);
+    const str = sys.lua_tolstring(L, 1, &len);
     std.log.info("notify: {s}", .{str[0..len]});
 
     return 0;
@@ -213,30 +313,30 @@ fn nluaNotify(L: ?*LuaState) callconv(.C) c_int {
 // luajitsys.lua_newuserdata();
 
 /// Unpretty print, emulates default print function but just changes output
-fn luaPrint(L: ?*LuaState) callconv(.C) c_int {
-    const nargs = luajitsys.lua_gettop(L);
+fn luaPrint(L: ?*State) callconv(.C) c_int {
+    const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
     var buf = std.ArrayList(u8).initCapacity(a, 80) catch unreachable;
     defer buf.deinit();
 
-    luajitsys.lua_getglobal(L, "tostring");
+    sys.lua_getglobal(L, "tostring");
 
     // root.log(@src(), .info, "[zig] printing...", .{});
 
     var curargidx: c_int = 1;
     while (curargidx <= nargs) : (curargidx += 1) {
-        luajitsys.lua_pushvalue(L, -1); // tostring
-        luajitsys.lua_pushvalue(L, curargidx); // arg
+        sys.lua_pushvalue(L, -1); // tostring
+        sys.lua_pushvalue(L, curargidx); // arg
         //
-        if (luajitsys.lua_pcall(L, 1, 1, 0) != 0) {
+        if (sys.lua_pcall(L, 1, 1, 0) != 0) {
             var errmsg_len: usize = undefined;
-            const errmsg = luajitsys.lua_tolstring(L, -1, &errmsg_len);
+            const errmsg = sys.lua_tolstring(L, -1, &errmsg_len);
             return printError(L, curargidx, errmsg[0..errmsg_len]);
         }
 
         var len: usize = undefined;
-        const s = luajitsys.lua_tolstring(L, -1, &len);
+        const s = sys.lua_tolstring(L, -1, &len);
         if (s == null) {
             return printError(L, curargidx, "<Unknown error: lua_tolstring returned NULL for tostring result>");
         }
@@ -245,14 +345,14 @@ fn luaPrint(L: ?*LuaState) callconv(.C) c_int {
         if (curargidx < nargs) {
             buf.append(' ') catch unreachable;
         }
-        luajitsys.lua_pop(L, 1);
+        sys.lua_pop(L, 1);
     }
 
     std.log.info("[lua] {s}", .{buf.items});
     return 0;
 }
 
-fn printError(L: ?*LuaState, idx: c_int, msg: []const u8) c_int {
+fn printError(L: ?*State, idx: c_int, msg: []const u8) c_int {
     const a = std.heap.c_allocator;
 
     const fmtmsg = std.fmt.allocPrint(
@@ -262,17 +362,17 @@ fn printError(L: ?*LuaState, idx: c_int, msg: []const u8) c_int {
     ) catch unreachable;
     defer a.free(fmtmsg);
 
-    luajitsys.lua_pushlstring(L, msg.ptr, msg.len);
-    return luajitsys.lua_error(L);
+    sys.lua_pushlstring(L, msg.ptr, msg.len);
+    return sys.lua_error(L);
 }
 
-fn nluaKeymapDel(L: ?*LuaState) callconv(.C) c_int {
+fn nluaKeymapDel(L: ?*State) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.del not implemented", .{});
     _ = L; // autofix
     return 0;
 }
 
-fn nluaKeymapSet(L: ?*LuaState) callconv(.C) c_int {
+fn nluaKeymapSet(L: ?*State) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
     _ = L; // autofix
     return 0;
@@ -280,8 +380,8 @@ fn nluaKeymapSet(L: ?*LuaState) callconv(.C) c_int {
 
 /// Pretty print
 /// vim.print
-fn nluaPrint(L: ?*LuaState) callconv(.C) c_int {
-    const nargs = luajitsys.lua_gettop(L);
+fn nluaPrint(L: ?*State) callconv(.C) c_int {
+    const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
 
@@ -297,7 +397,7 @@ fn nluaPrint(L: ?*LuaState) callconv(.C) c_int {
     var idx: c_int = 1;
     while (idx <= nargs) : (idx += 1) {
         neomacsPrintInner(L, idx, &state) catch return 0;
-        luajitsys.lua_pop(L, 1);
+        sys.lua_pop(L, 1);
     }
 
     std.log.info("print: \n{s}", .{buf.items});
@@ -310,24 +410,29 @@ const PrintState = struct {
     functionCount: usize,
 };
 
-fn neomacsPrintInner(L: ?*LuaState, idx: c_int, state: *PrintState) !void {
-    const ty = luajitsys.lua_type(L, idx);
+fn neomacsPrintInner(L: ?*State, idx: c_int, state: *PrintState) !void {
+    const ty = sys.lua_type(L, idx);
 
     switch (ty) {
-        luajitsys.LUA_TNIL => try state.buf.appendSlice("nil"),
-        luajitsys.LUA_TFUNCTION => {
+        sys.LUA_TNIL => try state.buf.appendSlice("nil"),
+        sys.LUA_TSTRING => {
+            var len: usize = undefined;
+            const ptr = sys.lua_tolstring(L, idx, &len);
+            try state.buf.appendSlice(ptr[0..len]);
+        },
+        sys.LUA_TFUNCTION => {
             try std.fmt.format(state.buf.writer(), "<function {}>", .{state.functionCount});
             state.functionCount += 1;
         },
-        luajitsys.LUA_TTABLE => {
+        sys.LUA_TTABLE => {
             try state.buf.appendSlice("{");
 
             state.indent += 2;
 
             // iter the table
             var first = true;
-            luajitsys.lua_pushnil(L); // first key
-            while (luajitsys.lua_next(L, -2) != 0) {
+            sys.lua_pushnil(L); // first key
+            while (sys.lua_next(L, -2) != 0) {
                 if (first) {
                     try state.buf.append('\n');
                     first = false;
@@ -336,7 +441,7 @@ fn neomacsPrintInner(L: ?*LuaState, idx: c_int, state: *PrintState) !void {
                 }
 
                 // uses 'key' (at index -2) and 'value' (at index -1)
-                const key = luajitsys.lua_tolstring(L, -2, null); // may not be a string
+                const key = sys.lua_tolstring(L, -2, null); // may not be a string
                 //
                 try state.buf.appendNTimes(' ', state.indent);
 
@@ -344,7 +449,7 @@ fn neomacsPrintInner(L: ?*LuaState, idx: c_int, state: *PrintState) !void {
 
                 neomacsPrintInner(L, -1, state) catch unreachable;
                 // removes 'value'; keeps 'key' for next iteration
-                luajitsys.lua_pop(L, 1);
+                sys.lua_pop(L, 1);
             }
 
             state.indent -= 2;
@@ -356,16 +461,16 @@ fn neomacsPrintInner(L: ?*LuaState, idx: c_int, state: *PrintState) !void {
 
             try state.buf.appendSlice("}");
         },
-        luajitsys.LUA_TNUMBER => {
-            const val = luajitsys.lua_tonumber(L, idx);
+        sys.LUA_TNUMBER => {
+            const val = sys.lua_tonumber(L, idx);
             const v: isize = @intFromFloat(val);
             try std.fmt.format(state.buf.writer(), "{}", .{v});
         },
-        luajitsys.LUA_TBOOLEAN => {
-            const val = luajitsys.lua_toboolean(L, idx);
+        sys.LUA_TBOOLEAN => {
+            const val = sys.lua_toboolean(L, idx);
             try std.fmt.format(state.buf.writer(), "{}", .{val != 0});
         },
-        luajitsys.LUA_TNONE => {},
+        sys.LUA_TNONE => {},
         else => unreachable,
     }
 }
@@ -432,4 +537,180 @@ fn neomacsPrintInner(L: ?*LuaState, idx: c_int, state: *PrintState) !void {
 //   lua_pushboolean(L, true);
 //   return 1;
 // }
+
+pub fn is(L: ?*State, idx: c_int, comptime T: type) bool {
+    switch (@typeInfo(T)) {
+        .Void => return sys.lua_isnil(L, idx),
+        .Bool => return sys.lua_isboolean(L, idx),
+        .Int, .Float => return sys.lua_isnumber(L, idx) != 0,
+        .Array => return sys.lua_istable(L, idx),
+        .Pointer => |ptrdata| {
+            if (T == []const u8) {
+                return sys.lua_isstring(L, idx) != 0;
+            }
+
+            _ = ptrdata;
+            // if (T == *anyopaque) {
+            //     return sys.lua_topointer(L, idx);
+            // }
+
+            @compileError("NYI");
+        },
+        .Optional => |N| {
+            if (sys.lua_isnoneornil(L, idx)) return true;
+            return is(L, idx, N.child);
+        },
+        else => @compileError("unable to coerce to type: " ++ @typeName(T)),
+    }
+}
+
+/// Gets idx as a type T, if you are not sure will match then use ?T
+pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
+    if (!is(L, idx, T)) {
+        return null;
+        // _ = sys.luaL_argerror(L, idx, "expected " ++ @typeName(T));
+        // unreachable;
+    }
+
+    switch (@typeInfo(T)) {
+        .Void => return {},
+        .Bool => return sys.lua_toboolean(L, idx) != 0,
+        .Int => return @intCast(sys.lua_tointeger(L, idx)),
+        .Float => return @floatCast(sys.lua_tonumber(L, idx)),
+        .Array => |AT| {
+            // assume it is a table
+            var A: T = undefined;
+            for (&A, 0..) |*p, i| {
+                _ = sys.lua_geti(L, idx, @intCast(i + 1));
+                p.* = check(L, -1, AT.child);
+                sys.lua_pop(L, 1);
+            }
+            return A;
+        },
+        .Pointer => |_| {
+            if (T == *anyopaque) {
+                return sys.lua_topointer(L, idx);
+            }
+
+            if (T == []const u8) {
+                var len: usize = undefined;
+                const ptr = sys.lua_tolstring(L, idx, &len);
+                return ptr[0..len];
+            }
+
+            // const t = sys.lua_type(L, idx);
+            // if (t != sys.LUA_TUSERDATA) {
+            //     _ = sys.luaL_argerror(L, idx, "expected userdata");
+            //     unreachable;
+            // }
+
+            // if (sys.lua_getmetatable(L, idx) == 0) {
+            //     _ = sys.luaL_argerror(L, idx, "unexpected userdata metatable");
+            //     unreachable;
+            // }
+
+            // TODO: check if metatable is valid for Pointer type
+            @panic("unable to coerce to type: " ++ @typeName(T));
+
+            // sys.lua_pop(L, 1);
+            // const ptr = sys.lua_touserdata(L, idx);
+            // return @as(T, @alignCast(@ptrCast(ptr)));
+        },
+        .Optional => |N| {
+            if (sys.lua_isnoneornil(L, idx)) {
+                return null;
+            }
+            return check(L, idx, N.child);
+        },
+        else => @compileError("unable to coerce to type: " ++ @typeName(T)),
+    }
+}
+
+// /// Wraps an arbitrary function in a Lua C-API using version
+// pub fn wrap(comptime func: anytype) sys.lua_CFunction {
+//     const Args: type = std.meta.ArgsTuple(@TypeOf(func));
+//     // See https://github.com/ziglang/zig/issues/229
+//     return struct {
+//         fn thunk(L: ?*State) callconv(.C) c_int {
+//             var args: Args = undefined;
+//             comptime var i = 0;
+//             inline while (i < args.len) : (i += 1) {
+//                 args[i] = check(L, i + 1, @TypeOf(args[i]));
+//             }
+//             const result = @call(.auto, func, args);
 //
+//             if (@TypeOf(result) == void) {
+//                 return 0;
+//             } else {
+//                 // state.push(result);
+//                 return 0; // 1
+//             }
+//         }
+//     }.thunk;
+// }
+
+// if (!luajitsys.lua_isboolean(L, VAL_INDEX)) return 0;
+// const val = luajitsys.lua_toboolean(L, VAL_INDEX);
+
+// if (luajitsys.lua_isnumber(L, VAL_INDEX) != 0) return 0;
+// const val = luajitsys.lua_tonumber(L, VAL_INDEX); // val
+
+fn nluaOptNewIndex(L: ?*State) callconv(.C) c_int {
+    // const TBL = 1;
+    const KEY = 2;
+    const VAL = 3;
+
+    var len: usize = undefined;
+    const ptr = sys.lua_tolstring(L, KEY, &len);
+    const key = ptr[0..len];
+
+    inline for (@typeInfo(Config).Struct.fields) |field| {
+        if (std.mem.eql(u8, field.name, key)) {
+            const val = check(L, VAL, field.type) orelse return 0;
+
+            @field(root.state().config, field.name) = val;
+
+            root.log(@src(), .debug, "set({s}={any})", .{ field.name, val });
+
+            return 0;
+        }
+    }
+    root.log(@src(), .warn, "set(\"{s}\", ...): does not exist", .{key});
+
+    // if (false) {
+    //     lua.sys.lua_getglobal(L, "rawset");
+    //     lua.sys.lua_pushvalue(L, TBL);
+    //     lua.sys.lua_pushvalue(L, KEY);
+    //     lua.sys.lua_pushvalue(L, VAL);
+    //     if (lua.sys.lua_pcall(L, 3, 0, 0) != 0) {
+    //         var errmsglen: usize = undefined;
+    //         const errmsg = lua.sys.lua_tolstring(L, -1, &errmsglen);
+    //         root.log(@src(), .err, "could not rawset: {s}", .{errmsg[0..errmsglen]});
+    //         return 0;
+    //     }
+    // }
+
+    return 0;
+}
+
+fn nluaOptIndex(L: ?*State) callconv(.C) c_int {
+    // const TBL = 1;
+    const KEY = 2; // key
+
+    var len: usize = undefined;
+    const ptr = sys.lua_tolstring(L, KEY, &len);
+    const key = ptr[0..len];
+
+    root.log(@src(), .debug, "get(\"{s}\")", .{key});
+
+    inline for (@typeInfo(Config).Struct.fields) |field| {
+        if (std.mem.eql(u8, field.name, key)) {
+            const val = @field(root.state().config, field.name);
+            push(L.?, val);
+            return 1;
+        }
+    }
+
+    // nothing found
+    return 0;
+}

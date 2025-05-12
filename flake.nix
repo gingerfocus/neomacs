@@ -13,12 +13,14 @@
         pkgs = import nixpkgs { inherit system; };
         neon = self.packages."${system}";
       in {
+        # cp config/* ~/.config/neomacs/
         devShells.default = pkgs.mkShell {
-          inputsFrom = with neon; [ 
+          inputsFrom = with neon; [
             # TODO: i want to use the packages but not the zig hook
             # neomacs
             wev
             # surf
+            # neovide
           ];
 
           packages = with pkgs; [ 

@@ -5,34 +5,46 @@ const scu = root.scu;
 const thr = scu.thermit;
 
 const State = @import("State.zig");
-const Buffer = @import("Buffer.zig");
 
 pub fn handleCursorShape(state: *State) !void {
+    // @setCold(true);
     try thr.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
         .insert => .SteadyBar,
         else => .SteadyBlock,
     });
 }
 
-// pub fn free_undo(arg_undo: *Undo) void {
-//     var undo = arg_undo;
-//     _ = &undo;
-//     free(@as(?*anyopaque, @ptrCast(undo.*.data.data)));
-// }
-//
-// pub fn free_undo_stack(arg_undo: *Undo_Stack) void {
-//     var undo = arg_undo;
-//     _ = &undo;
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < undo.*.count) : (i +%= 1) {
-//             free_undo(&undo.*.data[i]);
-//         }
-//     }
-//     free(@as(?*anyopaque, @ptrCast(undo.*.data)));
-// }
-//
+/// TODO: make a key bind for this
+pub fn bufferNext(state: *State) void {
+    if (state.buffers.items.len < 2) return;
+
+    for (state.buffers.items, 0..) |buf, i| {
+        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
+            if (i == state.buffers.items.len - 1) {
+                state.buffer = state.buffers.items[0];
+            } else {
+                state.buffer = state.buffers.items[i + 1];
+            }
+        }
+        return;
+    }
+}
+
+pub fn bufferPrev(state: *State) void {
+    if (state.buffers.items.len < 2) return;
+
+    for (state.buffers.items, 0..) |buf, i| {
+        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
+            if (i == 0) {
+                state.buffer = state.buffers.items[state.buffers.items.len - 1];
+            } else {
+                state.buffer = state.buffers.items[i - 1];
+            }
+        }
+        return;
+    }
+}
+
 // pub fn handle_save(arg_buffer: *Buffer) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -41,7 +53,6 @@ pub fn handleCursorShape(state: *State) !void {
 //     _ = fwrite(@as(?*const anyopaque, @ptrCast(buffer.*.data.data)), buffer.*.data.count, @sizeOf(u8), file);
 //     _ = fclose(file);
 // }
-
 // pub fn shift_str_left(arg_str: *u8, arg_str_s: *usize, arg_index_1: usize) void {
 //     var str = arg_str;
 //     _ = &str;
@@ -173,28 +184,11 @@ pub fn handleCursorShape(state: *State) !void {
 //     return @import("std").mem.zeroes(Brace);
 // }
 
-// /// Looks through config defined key maps and runs the relevant ones
-// pub fn check_keymaps(buffer: *Buffer, state: *State) bool {
-//     _ = buffer; // autofix
-//
-//     for (state.config.key_maps.items) |key_map| {
-//         if (state.ch.character.b() == key_map.a) {
-//             // var j: usize = 0;
-//             // while (j < key_map.b_s) : (j += 1) {
-//             //     state.*.ch = @as(c_int, @bitCast(@as(c_uint, state.*.config.key_maps.data[i].b[j])));
-//             //     state.key_func[state.*.config.mode](buffer, &buffer, state);
-//             // }
-//             return true;
-//         }
-//     }
-//     return false;
-// }
-//
 // fn compareName(ctx: void, leftp: File, rightp: File) bool {
 //     _ = ctx;
 //     return std.mem.lessThan(u8, leftp.name, rightp.name);
 // }
-//
+
 // pub fn scanFiles(state: *State, directory: []const u8) !void {
 //     var dp = try std.fs.cwd().openDir(directory, .{ .iterate = true });
 //     defer dp.close();
@@ -220,22 +214,7 @@ pub fn handleCursorShape(state: *State) !void {
 //     }
 //     std.mem.sort(File, state.files.items, {}, compareName);
 // }
-//
-// pub fn free_files(arg_files: **Files) void {
-//     var files = arg_files;
-//     _ = &files;
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < files.*.*.count) : (i +%= 1) {
-//             free(@as(?*anyopaque, @ptrCast(files.*.*.data[i].name)));
-//             free(@as(?*anyopaque, @ptrCast(files.*.*.data[i].path)));
-//         }
-//     }
-//     free(@as(?*anyopaque, @ptrCast(files.*.*.data)));
-//     free(@as(?*anyopaque, @ptrCast(files.*)));
-// }
-//
+
 // pub fn load_config_from_file(state: *State, buffer: *Buffer, config_file: ?[*:0]const u8, syntax_filename: ?[*:0]u8) void {
 //     _ = buffer; // autofix
 //     _ = syntax_filename; // autofix
@@ -315,7 +294,6 @@ pub fn handleCursorShape(state: *State) !void {
 //         }
 //     }
 // }
-//
 // pub fn contains_c_extension(str: [*:0]const u8) c_int {
 //     const extension: [*:0]const u8 = ".c";
 //
@@ -467,12 +445,6 @@ pub fn handleCursorShape(state: *State) !void {
 //         }
 //     }
 //     return @as(?*anyopaque, @ptrFromInt(@as(c_int, 0)));
-// }
-
-// pub fn reset_command(command: [*:0]u8, command_s: *usize) void {
-//     const cmd = command[0..command_s.*];
-//     @memset(cmd, 0);
-//     command_s.* = 0;
 // }
 
 // pub const UndoType = enum {

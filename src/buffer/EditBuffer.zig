@@ -1,11 +1,13 @@
-const Buffer = @This();
+const EditBuffer = @This();
 
 const std = @import("std");
 const root = @import("root");
+const km = @import("../keymaps.zig");
 
-const State = @import("State.zig");
+const State = @import("../State.zig");
 
 pub const Rows = std.ArrayListUnmanaged(Row);
+
 pub const Row = struct {
     start: usize,
     end: usize,
@@ -29,13 +31,13 @@ col: usize = 0,
 filename: []const u8,
 // visual: ?Visual = null,
 
-mode: Mode = .normal,
+// keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
 
 // TODO: make a desired x and y
 // when the y is change the desired x stays the same
 // the col is set the to desired x or the most valid position
 
-pub fn init(a: std.mem.Allocator, filename: []const u8) !Buffer {
+pub fn init(a: std.mem.Allocator, filename: []const u8) !EditBuffer {
     const file = try std.fs.cwd().openFile(filename, .{}); // a+
     defer file.close();
 
@@ -47,7 +49,7 @@ pub fn init(a: std.mem.Allocator, filename: []const u8) !Buffer {
     // @call(.always_inline, Buffer.deinit, .{});
     const id = std.hash.murmur.Murmur2_64.hash(filename);
 
-    var buffer = Buffer{
+    var buffer = EditBuffer{
         .id = id,
         .filename = try a.dupe(u8, filename),
         .data = list.moveToUnmanaged(),
@@ -58,7 +60,7 @@ pub fn init(a: std.mem.Allocator, filename: []const u8) !Buffer {
     return buffer;
 }
 
-pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
+pub fn deinit(buffer: *EditBuffer, a: std.mem.Allocator) void {
     buffer.data.deinit(a);
     buffer.rows.deinit(a);
 
@@ -93,7 +95,7 @@ pub const Visual = struct {
 // const Map = defs.Map;
 // const Maps = defs.Maps;
 
-pub fn recalculateRows(buffer: *Buffer, a: std.mem.Allocator) !void {
+pub fn recalculateRows(buffer: *EditBuffer, a: std.mem.Allocator) !void {
     buffer.rows.clearRetainingCapacity();
 
     var start: usize = 0;
@@ -111,7 +113,7 @@ pub fn recalculateRows(buffer: *Buffer, a: std.mem.Allocator) !void {
     try buffer.rows.append(a, Row{ .start = start, .end = buffer.data.items.len });
 }
 
-pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
+pub fn insertCharacter(buffer: *EditBuffer, a: std.mem.Allocator, ch: u8) !void {
     // if (buffer.cursor > buffer.data.items.len) {
     //     buffer.cursor = buffer.data.items.len;
     // }
@@ -148,7 +150,7 @@ pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
     }
 }
 
-pub fn buffer_delete_char(buffer: *Buffer, a: std.mem.Allocator) !void {
+pub fn buffer_delete_char(buffer: *EditBuffer, a: std.mem.Allocator) !void {
     std.debug.assert(buffer.cursor < buffer.data.items.len);
 
     // nothing to delete
@@ -498,12 +500,12 @@ pub fn buffer_delete_char(buffer: *Buffer, a: std.mem.Allocator) !void {
 //     buffer_calculate_rows(buffer);
 // }
 
-pub fn moveRight(buffer: *Buffer, count: usize) void {
+pub fn moveRight(buffer: *EditBuffer, count: usize) void {
     buffer.cursor += count;
     buffer.updatePostionKeepPos();
 }
 
-pub fn moveLeft(buffer: *Buffer, count: usize) void {
+pub fn moveLeft(buffer: *EditBuffer, count: usize) void {
     buffer.cursor = if (buffer.cursor < count) 0 else buffer.cursor - count;
     buffer.updatePostionKeepPos();
 }
@@ -511,7 +513,7 @@ pub fn moveLeft(buffer: *Buffer, count: usize) void {
 /// Moves the cursor to the best position it can using the current row as the
 /// authoritive value
 /// TODO: inline?
-pub fn updatePostionKeepRow(buffer: *Buffer) void {
+pub fn updatePostionKeepRow(buffer: *EditBuffer) void {
     if (buffer.row >= buffer.rows.items.len)
         buffer.row = buffer.rows.items.len - 1;
 
@@ -527,7 +529,7 @@ pub fn updatePostionKeepRow(buffer: *Buffer) void {
 /// Moves the cursor to the best position it can using the cursor position as
 /// the authoritive value
 /// TODO: inline?
-pub fn updatePostionKeepPos(buffer: *Buffer) void {
+pub fn updatePostionKeepPos(buffer: *EditBuffer) void {
     if (buffer.cursor >= buffer.data.items.len)
         buffer.cursor = buffer.data.items.len - 1;
 
@@ -644,7 +646,7 @@ pub fn updatePostionKeepPos(buffer: *Buffer) void {
 //     }
 // }
 
-pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
+pub fn newlineInsert(buffer: *EditBuffer, a: std.mem.Allocator) !void {
     try buffer.data.insert(a, buffer.cursor, '\n');
     try buffer.recalculateRows(a);
     // TODO: indent the curosr
@@ -673,22 +675,9 @@ pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
 //     return root;
 // }
 
-pub const Mode = enum(usize) {
-    normal = 0,
-    insert = 1,
-    search = 2,
-    comand = 3,
-    visual = 4,
-
-    pub const COUNT = @typeInfo(Mode).Enum.fields.len;
-
-    pub fn toString(self: Mode) []const u8 {
-        return switch (self) {
-            .normal => "NORMAL",
-            .insert => "INSERT",
-            .search => "SEARCH",
-            .comand => "COMMAND",
-            .visual => "VISUAL",
-        };
-    }
-};
+pub fn makebuffer(self: *EditBuffer) root.Buffer {
+    return root.Buffer{
+        .dataptr = self,
+        .vtable = &.{},
+    };
+}

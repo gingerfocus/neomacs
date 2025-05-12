@@ -18,13 +18,23 @@ pub fn build(b: *std.Build) void {
     neomacsExe.linkSystemLibrary("luajit-5.1");
     neomacsExe.linkLibC();
 
+    // neomacsExe.addCSourceFile(.{
+    //     .file = b.path("ts/zig-parser.c"),
+    //     .flags = &.{"-Its"},
+    // });
+
     // install neomacs
     b.installArtifact(neomacsExe);
 
     // run neomacs
     const neomacs = b.addRunArtifact(neomacsExe);
     // neomacs.step.dependOn(b.getInstallStep());
-    if (b.args) |argumnets| neomacs.addArgs(argumnets);
+    if (b.args) |argumnets| {
+        neomacs.addArgs(argumnets);
+    } else {
+        // open a demo file
+        neomacs.addArg("demo.txt");
+    }
     const run = b.step("run", "run neomacs");
     run.dependOn(&neomacs.step);
 
@@ -58,4 +68,18 @@ pub fn build(b: *std.Build) void {
     check.dependOn(&neomacsExe.step);
     // check.dependOn(&zssExe.step);
     // check.dependOn(&wevExe.step);
+
+    // -------------------------------------------------------------------------
+    const tests = b.addTest(.{
+        .optimize = optimize,
+        .target = target,
+        .root_source_file = b.path("test/01.zig"),
+    });
+    // tests.root_module.addImport("scured", terminal.module("scured"));
+    // tests.linkSystemLibrary("tree-sitter");
+    // tests.linkSystemLibrary("luajit-5.1");
+    // tests.linkLibC();
+
+    const testStep = b.step("test", "run the tests");
+    testStep.dependOn(&tests.step);
 }

@@ -22,14 +22,38 @@ pub fn render(state: *State) !void {
         state.main_win = state.term.makeScreen(sidebarWidth, 0, null, size.y - statusbarHeight);
     }
 
-    const realRow = state.buffer.row;
+    // ---- clear status bar --------
+    {
+        var x: u16 = 0;
+        while (x < state.status_bar.w) : (x += 1) {
+            var y: u16 = 0;
+            while (y < state.status_bar.h) : (y += 1) {
+                const cell = state.term.getScreenCell(state.status_bar, x, y).?;
+                cell.setSymbol(' ');
+                // cell.bg = .Cyan;
+            }
+        }
+    }
+    // ------------------------------
+
+    if (state.command.is) {
+        // if (state.buffer.mode == .comand or state.buffer.mode == .search) {
+        const command = try std.fmt.allocPrint(state.a, ":{s}", .{state.command.buffer.items});
+        defer state.a.free(command);
+        state.term.writeBuffer(state.status_bar, 0, 1, command);
+
+        state.term.moveCursor(state.status_bar, @intCast(1 + state.command.buffer.items.len), 1); // state.x
+    }
+
+    const buffer = state.getEditBuffer() orelse return;
+    const realRow = buffer.row;
 
     // TODO: should be in state
     const row_render_start = std.math.sub(usize, realRow, state.term.size.y) catch 0;
     const col_render_start = 0;
 
-    const viewportRow = state.buffer.row - row_render_start;
-    const viewportCol = state.buffer.col - col_render_start;
+    const viewportRow = buffer.row - row_render_start;
+    const viewportCol = buffer.col - col_render_start;
 
     // const row: usize = bf.bufferGetRow(state.buffer.?);
     // if (state.is_exploring) {
@@ -58,22 +82,9 @@ pub fn render(state: *State) !void {
         state.term.writeBuffer(state.status_bar, 0, 1, print_msg);
         state.status_bar_msg = null;
     }
-    // ---- clear status bar --------
-    {
-        var x: u16 = 0;
-        while (x < state.status_bar.w) : (x += 1) {
-            var y: u16 = 0;
-            while (y < state.status_bar.h) : (y += 1) {
-                const cell = state.term.getScreenCell(state.status_bar, x, y).?;
-                cell.setSymbol(' ');
-                // cell.bg = .Cyan;
-            }
-        }
-    }
-    // ------------------------------
 
     {
-        const position = try std.fmt.allocPrint(state.a, "{}:{}", .{ state.buffer.row + 1, state.buffer.col + 1 });
+        const position = try std.fmt.allocPrint(state.a, "{}:{}", .{ buffer.row + 1, buffer.col + 1 });
         defer state.a.free(position);
         state.term.writeBuffer(
             state.status_bar,
@@ -86,21 +97,15 @@ pub fn render(state: *State) !void {
     const mode = state.buffer.mode.toString();
     state.term.writeBuffer(state.status_bar, 0, 0, mode);
 
-    {
-        state.term.writeBuffer(state.status_bar, state.status_bar.w - 1, 1, switch (state.leader) {
-            .R => "r",
-            .D => "d",
-            .Y => "y",
-            .NONE => " ", // clear an previous state
-        });
-        // state.term.writeBuffer(state.status_bar, state.status_bar.w - 5, 0, state.num.items);
-    }
-
-    if (state.buffer.mode == .comand or state.buffer.mode == .search) {
-        const command = try std.fmt.allocPrint(state.a, ":{s}", .{state.command.items});
-        defer state.a.free(command);
-        state.term.writeBuffer(state.status_bar, 0, 1, command);
-    }
+    // {
+    //     state.term.writeBuffer(state.status_bar, state.status_bar.w - 1, 1, switch (state.leader) {
+    //         .R => "r",
+    //         .D => "d",
+    //         .Y => "y",
+    //         .NONE => " ", // clear an previous state
+    //     });
+    //     // state.term.writeBuffer(state.status_bar, state.status_bar.w - 5, 0, state.num.items);
+    // }
 
     // if (state.*.is_exploring) {
     //     _ = wattr_on(state.*.main_win, @as(attr_t, @bitCast((@as(chtype, @bitCast(BLUE_COLOR)) << @intCast(@as(c_int, 0) + @as(c_int, 8))) & (@as(chtype, @bitCast((@as(c_uint, 1) << @intCast(8)) -% @as(c_uint, 1))) << @intCast(@as(c_int, 0) + @as(c_int, 8))))), @as(?*anyopaque, @ptrFromInt(@as(c_int, 0))));
@@ -135,9 +140,9 @@ pub fn render(state: *State) !void {
     // ----- main buffer ----------------------------
     {
         var renderRow: usize = row_render_start;
-        while (renderRow < state.buffer.rows.items.len and renderRow < row_render_start + state.main_win.h) : (renderRow += 1) {
-            const row = state.buffer.rows.items[renderRow];
-            const bufdata = state.buffer.data.items[row.start..row.end];
+        while (renderRow < buffer.rows.items.len and renderRow < row_render_start + state.main_win.h) : (renderRow += 1) {
+            const row = buffer.rows.items[renderRow];
+            const bufdata = buffer.data.items[row.start..row.end];
             var c: u16 = 1;
             for (bufdata) |ch| {
                 const cell = state.term.getScreenCell(state.main_win, c, @intCast(renderRow)) orelse break;
@@ -188,12 +193,10 @@ pub fn render(state: *State) !void {
     }
     // -------------------------------------------
 
-    if (state.buffer.mode == .comand or state.buffer.mode == .search) {
-        state.term.moveCursor(state.status_bar, @intCast(1 + state.command.items.len), 1); // state.x
-    } else {
-        // TODO: account for tab characters
-        // const col = cur_row; // + countTabs() * 3;
+    // TODO: account for tab characters
+    // const col = cur_row; // + countTabs() * 3;
 
+    if (!state.command.is) {
         state.term.moveCursor(state.main_win, @intCast(viewportCol + 1), @intCast(viewportRow));
     }
 

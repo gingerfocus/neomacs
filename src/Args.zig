@@ -3,7 +3,7 @@ const Args = @This();
 progname: [*:0]const u8,
 help: ?[]const u8,
 // config: ?[*:0]const u8,
-positional: []const [*:0]const u8,
+positionals: []const [*:0]const u8,
 
 const std = @import("std");
 const mem = std.mem;
@@ -15,7 +15,7 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]const u8) !Args {
         .progname = args[i],
         .help = null,
         // .config = null,
-        .positional = &.{},
+        .positionals = &.{},
     };
     i += 1;
 
@@ -52,7 +52,7 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]const u8) !Args {
         // if it doesnt match an argument try to use it as a file
         break;
     }
-    opts.positional = args[i..];
+    opts.positionals = args[i..];
 
     return opts;
 }
@@ -67,4 +67,14 @@ fn getHelpPage(a: std.mem.Allocator, page: [*:0]const u8) ![]const u8 {
     const help_page = try std.fmt.allocPrint(a, "{s}/.local/share/neomacs/help/{s}", .{ env, page });
 
     return help_page;
+}
+
+test "arg parse" {
+    const a = std.testing.allocator;
+    const args = try parse(a, &.{ "echo", "hello" });
+    std.testing.expectEqual(args, Args{
+        .progname = "echo",
+        .positionals = &.{"hello"},
+        .help = "hal",
+    });
 }

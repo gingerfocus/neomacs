@@ -3,7 +3,6 @@ const root = @import("root");
 
 const lua = @import("lua.zig");
 const scu = root.scu;
-const luajitsys = root.luajitsys;
 
 const State = @import("State.zig");
 
@@ -13,9 +12,10 @@ fn fallbackNone(state: *State) !void {
 }
 
 fn targeterMove(state: *State) !void {
+    const buffer = state.getEditBuffer() orelse return;
     if (state.target) |target| {
-        state.buffer.cursor = target.cursor;
-        state.buffer.updatePostionKeepPos();
+        buffer.cursor = target.cursor;
+        buffer.updatePostionKeepPos();
     }
     state.target = null;
     state.currentKeyMap = null;
@@ -68,8 +68,10 @@ pub const KeyMaps = struct {
     }
 };
 
+const Id = usize;
+
 pub const KeyMap = union(enum) {
-    const Callback = *const fn (*State) anyerror!void;
+    const Callback = *const fn (*State) anyerror!void; // Id
     const LuaRef = c_int;
 
     Native: Callback,
@@ -86,7 +88,7 @@ pub const KeyMap = union(enum) {
         }
     }
 
-    pub fn initLua(L: *lua.LuaState, index: c_int) !KeyMap {
+    pub fn initLua(L: *lua.State, index: c_int) !KeyMap {
         if (lua.lua_type(L, index) != lua.LUA_TFUNCTION) {
             return error.NotALuaFunction;
             // lua.lua_pushliteral(L, "vim.schedule: expected function");
@@ -113,11 +115,11 @@ pub const KeyMap = union(enum) {
             .LuaFnc => |id| {
                 std.debug.assert(id > 0);
 
-                luajitsys.lua_rawgeti(state.L, luajitsys.LUA_REGISTRYINDEX, id);
-                luajitsys.luaL_unref(state.L, luajitsys.LUA_REGISTRYINDEX, id);
+                lua.sys.lua_rawgeti(state.L, lua.sys.LUA_REGISTRYINDEX, id);
+                lua.sys.luaL_unref(state.L, lua.sys.LUA_REGISTRYINDEX, id);
                 // ref_state->ref_count--;
 
-                if (luajitsys.lua_pcall(state.L, 0, 0, 0) != 0) {
+                if (lua.sys.lua_pcall(state.L, 0, 0, 0) != 0) {
                     // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
                     return error.ExecuteLuaCallback;
                 }
