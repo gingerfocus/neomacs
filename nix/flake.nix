@@ -41,10 +41,10 @@
 
         packages = {
           default = neon.neomacs;
-          wev = pkgs.callPackage ./sub/wev/wev.nix { };
-          # surf = pkgs.callPackage ./sub/surf/surf.nix { };
-          neomacs = pkgs.callPackage ./nix/neomacs.nix { };
-          neovide = pkgs.callPackage ./sub/neovide-0.12.2/neovide.nix {};
+          neomacs = pkgs.callPackage ./neomacs.nix { };
+          wev = pkgs.callPackage ../sub/wev/wev.nix { };
+          # surf = pkgs.callPackage ../sub/surf/surf.nix { };
+          neovide = pkgs.callPackage ../sub/neovide/neovide.nix {};
         };
       });
 }

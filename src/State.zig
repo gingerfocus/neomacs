@@ -69,6 +69,8 @@ main_win: scu.Term.Screen,
 status_bar: scu.Term.Screen,
 
 pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
+    try checkfirstrun(a);
+
     var buffers = std.ArrayListUnmanaged(*Buffer){};
     const buffer = try a.create(Buffer);
     if (file) |f| {
@@ -84,6 +86,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
     try buffers.append(a, buffer);
 
     const t = try scu.Term.init(a);
+
     const L = lua.init();
 
     var state = State{
@@ -190,3 +193,21 @@ pub const Repeating = struct {
         self.count = 0;
     }
 };
+
+fn checkfirstrun(a: std.mem.Allocator) !void {
+    const home = std.posix.getenv("HOME") orelse unreachable;
+    const initFile = try std.fmt.allocPrint(a, "{s}/.config/neomacs/init.lua", .{home});
+    defer a.free(initFile);
+
+    if (std.fs.accessAbsolute(initFile, .{})) |_| {
+        std.log.info("Welcome back vet!", .{});
+        return;
+    } else |_| {
+        // welcome FNG
+        const DEFAULTCONFIG = @embedFile("config.lua");
+        const file = try std.fs.openFileAbsolute(initFile, .{ .mode = .write_only });
+        defer file.close();
+        try file.writeAll(DEFAULTCONFIG);
+        return;
+    }
+}

@@ -11,8 +11,6 @@ neomacs.cmd.NeonTex = function()
     vim.notify("neon tex")
 end
 
--- _G.vim = neomacs
-
 -- print("hello world")
 --
 -- neomacs.print(neomacs.opt)
@@ -40,4 +38,16 @@ end
 -- helper.main()
 --
 -- require("config.options")
+
+
+
+-- vim.opt.autoindent = false
+-- print("hello from the inner file")
+
+-- local M = {}
 --
+-- M.main = function()
+--     print("required object function call")
+-- end
+--
+-- return M
