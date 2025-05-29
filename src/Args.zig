@@ -5,6 +5,9 @@ help: ?[]const u8,
 // config: ?[*:0]const u8,
 positionals: []const [*:0]const u8,
 
+/// Run only the pager, no other functionality
+pager: bool = false,
+
 const std = @import("std");
 const mem = std.mem;
 
@@ -48,6 +51,12 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]const u8) !Args {
         //     i += 1;
         //     continue;
         // }
+
+        if (mem.eql(u8, arg, "-P") or mem.eql(u8, arg, "--pager")) {
+            i += 1;
+            opts.pager = true;
+            continue;
+        }
 
         // if it doesnt match an argument try to use it as a file
         break;

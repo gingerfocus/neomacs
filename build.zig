@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
     });
     const terminal = b.dependency("terminal", .{ .target = target, .optimize = optimize });
     neomacsExe.root_module.addImport("scured", terminal.module("scured"));
+    neomacsExe.root_module.addImport("thermit", terminal.module("thermit"));
 
     neomacsExe.linkSystemLibrary("tree-sitter");
     neomacsExe.linkSystemLibrary("luajit-5.1");
@@ -39,47 +40,40 @@ pub fn build(b: *std.Build) void {
     run.dependOn(&neomacs.step);
 
     // -------------------------------------------------------------------------
-    //
-    // // install zss
-    // const zssExe = b.dependency("zss", .{}).artifact("zss");
-    // b.installArtifact(zssExe);
-    //
-    // // run zss
-    // const zss = b.addRunArtifact(zssExe);
-    // if (b.args) |argumnets| zss.addArgs(argumnets);
-    // const zssstep = b.step("zss", "run zss");
-    // zssstep.dependOn(&zss.step);
-    //
-    // -------------------------------------------------------------------------
-    //
-    // // install wev
-    // const wevExe = b.dependency("wev", .{}).artifact("wev");
-    // b.installArtifact(wevExe);
-    //
-    // // run wev
-    // const wev = b.addRunArtifact(wevExe);
-    // if (b.args) |argumnets| wev.addArgs(argumnets);
-    // const wevstep = b.step("wev", "run wev");
-    // wevstep.dependOn(&wev.step);
-    //
-    // -------------------------------------------------------------------------
 
-    const check = b.step("check", "Lsp Check Step");
-    check.dependOn(&neomacsExe.step);
-    // check.dependOn(&zssExe.step);
-    // check.dependOn(&wevExe.step);
-
-    // -------------------------------------------------------------------------
     const tests = b.addTest(.{
         .optimize = optimize,
         .target = target,
         .root_source_file = b.path("test/01.zig"),
     });
-    // tests.root_module.addImport("scured", terminal.module("scured"));
-    // tests.linkSystemLibrary("tree-sitter");
-    // tests.linkSystemLibrary("luajit-5.1");
-    // tests.linkLibC();
-
     const testStep = b.step("test", "run the tests");
     testStep.dependOn(&tests.step);
+
+    // -------------------------------------------------------------------------
+
+    const zssMod = b.createModule(.{
+        .root_source_file = b.path("src/zss.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zssMod.addImport("thermit", terminal.module("thermit"));
+
+    const zssExe = b.addExecutable(.{
+        .name = "zss",
+        .root_source_file = b.path("src/bin/zss.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zssExe.root_module.addImport("zss", zssMod);
+    // neomacsExe.root_module.addImport("zss", zssMod);
+
+    const zssStep = b.step("zss", "build zss");
+    zssStep.dependOn(&b.addInstallArtifact(zssExe, .{}).step);
+
+    // -------------------------------------------------------------------------
+
+    const check = b.step("check", "Lsp Check Step");
+    check.dependOn(&zssExe.step);
+    check.dependOn(&neomacsExe.step);
+    // check.dependOn(&wevExe.step);
 }

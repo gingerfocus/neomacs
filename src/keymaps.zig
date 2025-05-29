@@ -6,26 +6,35 @@ const scu = root.scu;
 
 const State = @import("State.zig");
 
-fn fallbackNone(state: *State) !void {
-    _ = state; // autofix
+fn fallbackNone(_: *State) !void {
     // state.currentKeyMap = null;
 }
 
-fn targeterMove(state: *State) !void {
-    const buffer = state.getEditBuffer() orelse return;
-    if (state.target) |target| {
-        buffer.cursor = target.cursor;
-        buffer.updatePostionKeepPos();
+pub const action = struct {
+    fn move(state: *State) !void {
+        try moveKeep(state);
+
+        const buffer = state.getCurrentBuffer() orelse return;
+
+        buffer.target = null; // reset the target
+        state.currentKeyMap = null;
     }
-    state.target = null;
-    state.currentKeyMap = null;
-}
+
+    pub fn moveKeep(state: *State) !void {
+        const buffer = state.getCurrentBuffer() orelse return;
+
+        if (buffer.target) |target| {
+            buffer.row = target.end.row;
+            buffer.col = target.end.col;
+        }
+    }
+};
 
 pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
 pub const KeyMaps = struct {
     keys: KeyMapings = .{},
     fallback: KeyMap = .{ .Native = fallbackNone },
-    targeter: *const fn (*State) anyerror!void = targeterMove,
+    targeter: *const fn (*State) anyerror!void = action.move,
 
     pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
         var iter = self.keys.iterator();

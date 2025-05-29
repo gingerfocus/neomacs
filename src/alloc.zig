@@ -1,11 +1,11 @@
 const std = @import("std");
-const treesitter = @import("root").treesitter;
+const ts = @import("root").ts;
 
 var alloc: std.heap.GeneralPurposeAllocator(.{}) = .{};
 const galloc = alloc.allocator();
 
 pub fn init() void {
-    treesitter.ts_set_allocator(malloc, calloc, realloc, free);
+    ts.ts_set_allocator(malloc, calloc, realloc, free);
 }
 pub fn deinit() void {
     _ = alloc.deinit();

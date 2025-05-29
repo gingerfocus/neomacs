@@ -1,19 +1,20 @@
 const std = @import("std");
 const mem = std.mem;
+const zss = @import("zss.zig");
 
 pub const scu = @import("scured");
-pub const trm = scu.thermit;
+pub const trm = @import("thermit"); // scu.thermit;
+pub const lib = @import("lib.zig");
 
 const front = @import("frontend.zig");
 const tools = @import("tools.zig");
-const lua = @import("lua.zig");
 const alloc = @import("alloc.zig");
+const lua = @import("lua.zig");
 
-pub const Buffer = @import("buffer/Mod.zig");
-
+pub const Buffer = @import("Buffer.zig");
 pub const State = @import("State.zig");
 
-pub const treesitter = @cImport({
+pub const ts = @cImport({
     @cInclude("tree_sitter/api.h");
 });
 
@@ -78,6 +79,16 @@ fn neomacs() !void {
     defer args.deinit(a);
 
     const filename: ?[]const u8 = if (args.positionals.len > 0) mem.span(args.positionals[0]) else null;
+
+    // run just the terminal pager when comfigured to do so
+    if (args.pager) {
+        if (filename) |file| {
+            const f = std.fs.File{ .handle = try std.posix.open(file, .{}, 0) };
+            defer f.close();
+            try zss.page(f);
+        }
+        return;
+    }
 
     const file: ?[]const u8 = args.help orelse filename;
 

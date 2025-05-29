@@ -1,172 +1,166 @@
-const EditBuffer = @This();
+const root = @import("root");
 
 const std = @import("std");
-const root = @import("root");
-const km = @import("../keymaps.zig");
+const lib = root.lib;
+const km = @import("keymaps.zig");
 
-const State = @import("../State.zig");
+const State = root.State;
 
-pub const Rows = std.ArrayListUnmanaged(Row);
+const Buffer = @This();
 
-pub const Row = struct {
-    start: usize,
-    end: usize,
-};
+/// Unique id for this buffer, never changes once created
+id: usize,
+/// File mode
+mode: Mode = .normal,
 
-/// Unique id of the buffer
-id: u64,
+/// Motion keys have two ways in which they select text, a region and a
+/// point. A motion can set this structure to not null to indicate what it
+/// wants. Then a selector runs using this data. The default one just sets the
+/// cursor to target position. Some other common ones are `d` which deletes
+/// text in the selection. The can also be user defined.
+target: ?Visual = null,
 
 /// literal data in the buffer
-data: std.ArrayListUnmanaged(u8),
-/// position in the data above
-cursor: usize = 0,
+lines: std.ArrayListUnmanaged(Line),
 
-/// Calculated from the above
-rows: Rows,
-/// Derived value from position
 row: usize = 0,
-/// Derived value from position
 col: usize = 0,
 
+/// Row and Col in buffer
+// cursor: lib.Vec2 = .{ .row = 0, .col = 0 },
+// desired: lib.Vec2 = .{ .row = 0, .col = 0 },
+
 filename: []const u8,
-// visual: ?Visual = null,
 
-// keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
+// keymaps: std.AutoArrayHashMapUnmanaged(u8, *km.KeyMaps) = .{},
 
-// TODO: make a desired x and y
-// when the y is change the desired x stays the same
-// the col is set the to desired x or the most valid position
+const Line = struct {
+    data: std.ArrayListUnmanaged(u8) = .{},
+};
 
-pub fn init(a: std.mem.Allocator, filename: []const u8) !EditBuffer {
-    const file = try std.fs.cwd().openFile(filename, .{}); // a+
-    defer file.close();
+pub const Mode = enum {
+    normal,
+    insert,
+    visual,
 
-    var list = std.ArrayList(u8).init(a);
-    defer list.deinit();
-    try file.reader().readAllArrayList(&list, 128 * 1024 * 1024);
+    pub const COUNT = @typeInfo(Mode).Enum.fields.len;
 
-    // std.builtin.CallModifier
-    // @call(.always_inline, Buffer.deinit, .{});
-    const id = std.hash.murmur.Murmur2_64.hash(filename);
+    pub fn toString(self: Mode) []const u8 {
+        return switch (self) {
+            .normal => "NORMAL",
+            .insert => "INSERT",
+            .visual => "VISUAL",
+        };
+    }
+};
 
-    var buffer = EditBuffer{
-        .id = id,
-        .filename = try a.dupe(u8, filename),
-        .data = list.moveToUnmanaged(),
-        .rows = .{},
-    };
-    try buffer.recalculateRows(a);
-
-    return buffer;
-}
-
-pub fn deinit(buffer: *EditBuffer, a: std.mem.Allocator) void {
-    buffer.data.deinit(a);
-    buffer.rows.deinit(a);
-
-    a.free(buffer.filename);
-}
-
-// pub const NO_ERROR: c_int = 0;
-// pub const NOT_ENOUGH_ARGS: c_int = 1;
-// pub const INVALID_ARGS: c_int = 2;
-// pub const UNKNOWN_COMMAND: c_int = 3;
-// pub const INVALID_IDENT: c_int = 4;
-// pub const Command_Error = c_uint;
-
-const Point = root.scu.thermit.Size;
-const VisualMode = enum {
+pub const Visual = struct {
+    mode: VisualMode = .Range,
+    start: lib.Vec2,
+    end: lib.Vec2,
+};
+pub const VisualMode = enum {
     Range,
     Line,
     Block,
 };
-pub const Visual = struct {
-    start: Point,
-    end: Point,
-    mode: VisualMode,
-};
 
-// pub const Positions = extern struct {
-//     data: *usize = @import("std").mem.zeroes(*usize),
-//     count: usize = @import("std").mem.zeroes(usize),
-//     capacity: usize = @import("std").mem.zeroes(usize),
-// };
+// keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
 
-// const Map = defs.Map;
-// const Maps = defs.Maps;
+// pub fn edit(a: std.mem.Allocator, file: []const u8) !Buffer {
+//     return .{
+//         .id = id.next(),
+//         .data = .{ .Edit = try Buffer.init(a, file) },
+//         .mode = .normal,
+//     };
+// }
 
-pub fn recalculateRows(buffer: *EditBuffer, a: std.mem.Allocator) !void {
-    buffer.rows.clearRetainingCapacity();
-
-    var start: usize = 0;
-    for (buffer.data.items, 0..) |ch, i| {
-        if (i == buffer.cursor) {
-            buffer.row = buffer.rows.items.len;
-            buffer.col = i - start;
-        }
-
-        if (ch == '\n') {
-            try buffer.rows.append(a, Row{ .start = start, .end = i });
-            start = i + 1;
-        }
-    }
-    try buffer.rows.append(a, Row{ .start = start, .end = buffer.data.items.len });
+pub fn initEmpty() Buffer {
+    return Buffer{ .id = id.next(), .filename = "", .lines = .{} };
 }
 
-pub fn insertCharacter(buffer: *EditBuffer, a: std.mem.Allocator, ch: u8) !void {
-    // if (buffer.cursor > buffer.data.items.len) {
-    //     buffer.cursor = buffer.data.items.len;
-    // }
+pub fn initFile(a: std.mem.Allocator, filename: []const u8) !Buffer {
+    const file = try std.fs.cwd().openFile(filename, .{}); // a+
+    defer file.close();
+
+    var lines = std.ArrayList(Line).init(a);
+    while (true) {
+        const line = try file.reader().readUntilDelimiterOrEofAlloc(a, '\n', 128 * 1024) orelse break;
+        // if (line.len == 0) break;
+
+        const l = Line{ .data = std.ArrayListUnmanaged(u8){
+            .items = line,
+            .capacity = line.len,
+        } };
+
+        try lines.append(l);
+    }
+
+    // not stable
+    // const fid = std.hash.murmur.Murmur2_64.hash(filename);
+    // _ = fid; // autofix
+
+    return Buffer{
+        .id = id.next(),
+        .filename = try a.dupe(u8, filename),
+        .lines = lines.moveToUnmanaged(),
+    };
+}
+
+pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
+    for (buffer.lines.items) |*line| {
+        line.data.deinit(a);
+    }
+    buffer.lines.deinit(a);
+
+    a.free(buffer.filename);
+}
+
+pub fn position(buffer: *Buffer) lib.Vec2 {
+    return .{
+        .row = buffer.row,
+        .col = buffer.col,
+    };
+}
+
+pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
     if (ch == '\n') {
         try buffer.newlineInsert(a);
         return;
     }
 
-    if (buffer.cursor >= buffer.data.items.len) {
-        try buffer.data.append(a, ch);
-    } else {
-        try buffer.data.insert(a, buffer.cursor, ch);
-    }
-    buffer.cursor += 1;
+    var line = &buffer.lines.items[buffer.row];
+    try line.data.insert(a, buffer.col, ch);
+    // root.log(@src(), .debug, "inserted character {c} at row {d}, col {d}", .{ ch, buffer.row, buffer.col });
+    buffer.col += 1;
 
     // state.cur_undo.end = buffer.cursor;
-
-    try buffer.recalculateRows(a);
-    if (true) return;
-
-    // PERF: time this to see if this is a real optimization, I think it is
-    // beacuse it will be on debug as it has no error path but on release mode
-    // it may be the same
-    buffer.col += 1;
-    for (buffer.rows.items) |*row| {
-        // skip if you need
-        if (row.end < buffer.cursor) continue;
-
-        // add if you are not in it
-        if (row.start >= buffer.cursor) row.start += 1;
-
-        // always add after
-        row.end += 1;
-    }
 }
 
-pub fn buffer_delete_char(buffer: *EditBuffer, a: std.mem.Allocator) !void {
-    std.debug.assert(buffer.cursor < buffer.data.items.len);
-
-    // nothing to delete
-    if (buffer.cursor == 0) return;
-
-    buffer.cursor -= 1;
-
-    var i: usize = buffer.cursor;
-    while (i < buffer.data.items.len - 1) : (i += 1) {
-        buffer.data.items[i] = buffer.data.items[i + 1];
+pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
+    if (buffer.col == 0 and buffer.row == 0) {
+        // nothing to delete
+        return;
     }
-    // reduce capacity
-    buffer.data.items.len -= 1;
 
-    // recalculate
-    try buffer.recalculateRows(a);
+    if (buffer.col == 0) {
+        // get the coluimn now before its length changes
+        buffer.col = buffer.lines.items[buffer.row - 1].data.items.len;
+
+        // delete the last character of the previous line
+        const line = &buffer.lines.items[buffer.row];
+        const prev = &buffer.lines.items[buffer.row - 1];
+        try prev.data.appendSlice(a, line.data.items);
+        _ = buffer.lines.orderedRemove(buffer.row);
+
+        buffer.row -= 1;
+    } else {
+        // delete the character before the cursor
+        buffer.col -= 1;
+
+        var line = &buffer.lines.items[buffer.row];
+        _ = line.data.orderedRemove(buffer.col);
+    }
 }
 
 // pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
@@ -432,7 +426,8 @@ pub fn buffer_delete_char(buffer: *EditBuffer, a: std.mem.Allocator) !void {
 //     }
 //     _ = strncpy(state.*.clipboard.str, buffer.*.data.data + start, state.*.clipboard.len);
 // }
-// pub fn buffer_delete_selection(arg_buffer: *Buffer, arg_state: *State, arg_start: usize, arg_end: usize) void {
+
+// pub fn bufferDeleteSelection(buffer: *EditBuffer, selection: Tar) !void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
 //     var state = arg_state;
@@ -500,76 +495,80 @@ pub fn buffer_delete_char(buffer: *EditBuffer, a: std.mem.Allocator) !void {
 //     buffer_calculate_rows(buffer);
 // }
 
-pub fn moveRight(buffer: *EditBuffer, count: usize) void {
-    buffer.cursor += count;
-    buffer.updatePostionKeepPos();
-}
+/// Takes a point `start` and moves it right `count` units in the buffers space
+pub fn moveRight(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
+    var end = start;
 
-pub fn moveLeft(buffer: *EditBuffer, count: usize) void {
-    buffer.cursor = if (buffer.cursor < count) 0 else buffer.cursor - count;
-    buffer.updatePostionKeepPos();
-}
-
-/// Moves the cursor to the best position it can using the current row as the
-/// authoritive value
-/// TODO: inline?
-pub fn updatePostionKeepRow(buffer: *EditBuffer) void {
-    if (buffer.row >= buffer.rows.items.len)
-        buffer.row = buffer.rows.items.len - 1;
-
-    const row = buffer.rows.items[buffer.row];
-    if (buffer.col > row.end - row.start) {
-        buffer.col = row.end - row.start;
-        if (buffer.col > 0) buffer.col -= 1;
+    var c = count;
+    while (c > 0) {
+        if (end.row >= buffer.lines.items.len) break;
+        if (end.col + c >= buffer.lines.items[end.row].data.items.len) {
+            c -= buffer.lines.items[end.row].data.items.len - end.col;
+            if (end.row < buffer.lines.items.len - 1) {
+                end.col = 0;
+                end.row += 1;
+            } else {
+                // no where left to go
+                end.col = buffer.lines.items[end.row].data.items.len - 1;
+                break;
+            }
+        } else {
+            end.col += c;
+            c = 0;
+        }
     }
 
-    buffer.cursor = row.start + buffer.col;
+    return end;
 }
 
-/// Moves the cursor to the best position it can using the cursor position as
-/// the authoritive value
-/// TODO: inline?
-pub fn updatePostionKeepPos(buffer: *EditBuffer) void {
-    if (buffer.cursor >= buffer.data.items.len)
-        buffer.cursor = buffer.data.items.len - 1;
+pub fn moveLeft(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
+    var end = start;
 
-    for (buffer.rows.items, 0..) |row, r| {
-        if (row.start <= buffer.cursor and buffer.cursor <= row.end) {
-            buffer.row = r;
-            buffer.col = buffer.cursor - row.start;
-            return;
+    var c = count;
+    while (c > 0) {
+        if (end.col >= c) {
+            end.col -= c;
+            c = 0;
+        } else {
+            c -= end.col + 1;
+            if (end.row > 0) {
+                end.row -= 1;
+                end.col = buffer.lines.items[end.row].data.items.len;
+            } else {
+                end.col = 0; // can't go left anymore
+                c = 0;
+            }
         }
-    } else unreachable;
+    }
+    // buffer.desired = end;
+
+    return end;
 }
 
-// pub fn skip_to_char(arg_buffer: *Buffer, arg_cur_pos: c_int, arg_direction: c_int, arg_c: u8) c_int {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var cur_pos = arg_cur_pos;
-//     _ = &cur_pos;
-//     var direction = arg_direction;
-//     _ = &direction;
-//     var c = arg_c;
-//     _ = &c;
-//     if (@as(c_int, @bitCast(@as(c_uint, (blk: {
-//         const tmp = cur_pos;
-//         if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//     }).*))) == @as(c_int, @bitCast(@as(c_uint, c)))) {
-//         cur_pos += direction;
-//         while (((cur_pos > @as(c_int, 0)) and (cur_pos <= @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) and (@as(c_int, @bitCast(@as(c_uint, (blk: {
-//             const tmp = cur_pos;
-//             if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//         }).*))) != @as(c_int, @bitCast(@as(c_uint, c))))) {
-//             if (((cur_pos > @as(c_int, 1)) and (cur_pos < @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) and (@as(c_int, @bitCast(@as(c_uint, (blk: {
-//                 const tmp = cur_pos;
-//                 if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//             }).*))) == @as(c_int, '\\'))) {
-//                 cur_pos += direction;
-//             }
-//             cur_pos += direction;
-//         }
-//     }
-//     return cur_pos;
+// pub fn skip_to_char(buffer: *EditBuffer, target: u8, right: bool, count: usize) c_int {
+//     _ = right; // autofix
+//     _ = buffer; // autofix
+//     _ = target; // autofix
+//     _ = count; // autofix
+//     // if (@as(c_int, @bitCast(@as(c_uint, (blk: {
+//     //     const tmp = cur_pos;
+//     //     if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
+//     // }).*))) == @as(c_int, @bitCast(@as(c_uint, c)))) {
+//     //     cur_pos += direction;
+//     //     while (((cur_pos > @as(c_int, 0)) and (cur_pos <= @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) and (@as(c_int, @bitCast(@as(c_uint, (blk: {
+//     //         const tmp = cur_pos;
+//     //         if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
+//     //     }).*))) != @as(c_int, @bitCast(@as(c_uint, c))))) {
+//     //         if (((cur_pos > @as(c_int, 1)) and (cur_pos < @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) and (@as(c_int, @bitCast(@as(c_uint, (blk: {
+//     //             const tmp = cur_pos;
+//     //             if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
+//     //         }).*))) == @as(c_int, '\\'))) {
+//     //             cur_pos += direction;
+//     //         }
+//     //         cur_pos += direction;
+//     //     }
+//     // }
+//     // return cur_pos;
 // }
 
 // pub fn buffer_next_brace(arg_buffer: *Buffer) void {
@@ -612,15 +611,6 @@ pub fn updatePostionKeepPos(buffer: *EditBuffer) void {
 //         }
 //     }
 // }
-// pub fn isword(arg_ch: u8) c_int {
-//     var ch = arg_ch;
-//     _ = &ch;
-//     if (((@as(c_int, @bitCast(@as(c_uint, (blk: {
-//         const tmp = @as(c_int, @bitCast(@as(c_uint, ch)));
-//         if (tmp >= 0) break :blk __ctype_b_loc().* + @as(usize, @intCast(tmp)) else break :blk __ctype_b_loc().* - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//     }).*))) & @as(c_int, @bitCast(@as(c_uint, @as(c_ushort, @bitCast(@as(c_short, @truncate(_ISalnum)))))))) != 0) or (@as(c_int, @bitCast(@as(c_uint, ch))) == @as(c_int, '_'))) return 1;
-//     return 0;
-// }
 
 // pub fn buffer_create_indent(arg_buffer: *Buffer, arg_state: *State) void {
 //     var buffer = arg_buffer;
@@ -646,38 +636,111 @@ pub fn updatePostionKeepPos(buffer: *EditBuffer) void {
 //     }
 // }
 
-pub fn newlineInsert(buffer: *EditBuffer, a: std.mem.Allocator) !void {
-    try buffer.data.insert(a, buffer.cursor, '\n');
-    try buffer.recalculateRows(a);
-    // TODO: indent the curosr
+pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
+    var line = &buffer.lines.items[buffer.row];
+
+    const after = try a.dupe(u8, line.data.items[buffer.col..]);
+
+    line.data.items.len = buffer.col;
+
+    const nl = Line{ .data = .{ .items = after, .capacity = after.len } };
+
+    buffer.row += 1;
+    buffer.col = 0;
+
+    try buffer.lines.insert(a, buffer.row, nl);
+
+    // TODO: indent the cursor
 }
 
-// const ROPE_SPLIT_LENGTH = 128;
-// const RopeString = struct {
-//     data: []const u8,
-//     indx: usize, // the start index of the string
-//     left: ?*RopeString = null,
-//     rigt: ?*RopeString = null,
-// };
-// fn ropeFromBuffer(a: std.mem.Allocator, buffer: []const u8) !RopeString {
-//     _ = a; // autofix
-//     var remaining = buffer;
-//     var root = RopeString{
-//         .data = "",
-//         .indx = 0,
+pub fn save(buffer: *Buffer) !void {
+    const f = try std.fs.cwd().createFile(buffer.filename, .{});
+    defer f.close();
+
+    for (buffer.lines.items) |line| {
+        const line_str = line.data.items;
+        try f.writeAll(line_str);
+        try f.writer().writeByte('\n');
+    }
+}
+
+// pub fn makebuffer(self: *EditBuffer) root.Buffer {
+//     return root.Buffer{
+//         .dataptr = self,
+//         .vtable = &.{},
 //     };
-//     var curr = &root;
-//
-//     while (remaining.len > ROPE_SPLIT_LENGTH) {
-//         curr.data = remaining[0..ROPE_SPLIT_LENGTH];
-//     }
-//     curr.data = remaining;
-//     return root;
 // }
 
-pub fn makebuffer(self: *EditBuffer) root.Buffer {
-    return root.Buffer{
-        .dataptr = self,
-        .vtable = &.{},
-    };
-}
+/// using static for id assignment
+const id = struct {
+    var count: usize = 0;
+    fn next() usize {
+        count += 1;
+        return count;
+    }
+};
+
+// pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
+//     switch (buffer.data) {
+//         .Edit => |*ed| ed.deinit(a),
+//         .Empty => {},
+//         .Custom => |*custom| custom.deinit(a),
+//     }
+// }
+
+// const Target = struct {
+//     down: ?isize = null,
+//     left: ?isize = null,
+// };
+
+// pub const BufferVtable = struct {
+//     /// Function called for all buffers, when this returns true that means the
+//     /// key was handled, it doesnt need to have done anything just agknowledged.
+//     /// When returning false the caller will then resolve global key mappings
+//     /// if possible. This could be used for implementing local buffer key maps
+//     press: *const fn (*anyopaque, u8) bool,
+//
+//     move: *const fn (*anyopaque, Target) void,
+//     edit: *const fn (*anyopaque, u8) void,
+//
+//     pub fn nullMove(_: *anyopaque, _: Target) void {}
+//     pub fn nullEdit(_: *anyopaque, _: u8) void {}
+// };
+
+// dataptr: *anyopaque,
+// vtable: *const BufferVtable,
+
+// pub inline fn move(self: Self, target: Target) void {
+//     self.vtable.move(self.dataptr, target);
+// }
+//
+// pub inline fn edit(self: Self, ch: u8) void {
+//     self.vtable.edit(self.dataptr, ch);
+// }
+
+// const Edit = struct {
+// };
+
+// const Custom = struct {
+//     edit: Edit,
+//     changes: void,
+//
+//     pub fn deinit(buffer: *Custom, a: std.mem.Allocator) void {
+//         buffer.edit.deinit(a);
+//         // buffer.changes.deinit(); // Assuming changes is a collection that needs deinitialization
+//     }
+// };
+
+const Empty = struct {
+    _empty: void,
+
+    // pub fn buffer() Buffer {
+    //     return Buffer{
+    //         .dataptr = undefined,
+    //         .vtable = &.{
+    //             .edit = root.Buffer.BufferVtable.nullEdit,
+    //             .move = root.Buffer.BufferVtable.nullMove,
+    //         },
+    //     };
+    // }
+};

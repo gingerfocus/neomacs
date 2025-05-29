@@ -5,9 +5,7 @@ stdenv.mkDerivation {
 
     src = ./..;
 
-    nativeBuildInputs = [
-      zig.hook
-    ];
+    nativeBuildInputs = [ zig.hook ];
 
     buildInputs = [
       luajit
@@ -17,5 +15,5 @@ stdenv.mkDerivation {
       tree-sitter-grammars.tree-sitter-zig
     ];
 
-    zigBuildFlags = [ "--system" "${ callPackage ./zig-zon.nix { } }" ];
+    zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" ];
 }

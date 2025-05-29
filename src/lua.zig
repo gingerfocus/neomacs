@@ -1,8 +1,11 @@
 // https://raw.githubusercontent.com/daurnimator/zig-autolua/refs/heads/master/src/autolua.zig
 
-const root = @import("root");
-const std = @import("std");
+// TODO: this file should have an event pipe to the main state and then it
+// sends its requests back. Managing a global state is hard. :<
 
+const root = @import("root");
+
+const std = @import("std");
 const mem = std.mem;
 const scu = root.scu;
 const tools = @import("tools.zig");
@@ -227,7 +230,14 @@ fn nluaQuit(_: ?*State) callconv(.C) c_int {
 }
 
 fn nluaWrite(_: ?*State) callconv(.C) c_int {
-    root.log(@src(), .info, "[zig] Should write", .{});
+    const state = root.state();
+
+    const buffer = state.getCurrentBuffer() orelse return 0;
+    buffer.save() catch |err| {
+        root.log(@src(), .err, "could not save buffer {s}: {any}", .{ buffer.filename, err });
+        return 0;
+    };
+
     return 0;
 }
 
@@ -246,7 +256,7 @@ fn nluaEdit(L: ?*lua.State) callconv(.C) c_int {
     };
 
     const buf = state.a.create(root.Buffer) catch return 0;
-    buf.* = root.Buffer.edit(state.a, file) catch return 0;
+    buf.* = root.Buffer.initFile(state.a, file) catch return 0;
 
     state.buffers.append(state.a, buf) catch return 0;
     state.buffer = state.buffers.items[state.buffers.items.len - 1];
@@ -479,64 +489,75 @@ fn neomacsPrintInner(L: ?*State, idx: c_int, state: *PrintState) !void {
 //
 // Returns true if the language is correctly loaded in the language map
 // int tslua_add_language(lua_State *L)
-// {
-//   const char *path = luaL_checkstring(L, 1);
-//   const char *lang_name = luaL_checkstring(L, 2);
-//   const char *symbol_name = lang_name;
-//
-//   if (lua_gettop(L) >= 3 && !lua_isnil(L, 3)) {
-//     symbol_name = luaL_checkstring(L, 3);
-//   }
-//
-//   if (pmap_has(cstr_t)(&langs, lang_name)) {
-//     lua_pushboolean(L, true);
-//     return 1;
-//   }
-//
-// #define BUFSIZE 128
-//   char symbol_buf[BUFSIZE];
-//   snprintf(symbol_buf, BUFSIZE, "tree_sitter_%s", symbol_name);
-// #undef BUFSIZE
-//
-//   uv_lib_t lib;
-//   if (uv_dlopen(path, &lib)) {
-//     snprintf(IObuff, IOSIZE, "Failed to load parser for language '%s': uv_dlopen: %s",
-//              lang_name, uv_dlerror(&lib));
-//     uv_dlclose(&lib);
-//     lua_pushstring(L, IObuff);
-//     return lua_error(L);
-//   }
-//
-//   TSLanguage *(*lang_parser)(void);
-//   if (uv_dlsym(&lib, symbol_buf, (void **)&lang_parser)) {
-//     snprintf(IObuff, IOSIZE, "Failed to load parser: uv_dlsym: %s",
-//              uv_dlerror(&lib));
-//     uv_dlclose(&lib);
-//     lua_pushstring(L, IObuff);
-//     return lua_error(L);
-//   }
-//
-//   TSLanguage *lang = lang_parser();
-//   if (lang == NULL) {
-//     uv_dlclose(&lib);
-//     return luaL_error(L, "Failed to load parser %s: internal error", path);
-//   }
-//
-//   uint32_t lang_version = ts_language_version(lang);
-//   if (lang_version < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION
-//       || lang_version > TREE_SITTER_LANGUAGE_VERSION) {
-//     return luaL_error(L,
-//                       "ABI version mismatch for %s: supported between %d and %d, found %d",
-//                       path,
-//                       TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION,
-//                       TREE_SITTER_LANGUAGE_VERSION, lang_version);
-//   }
-//
-//   pmap_put(cstr_t)(&langs, xstrdup(lang_name), lang);
-//
-//   lua_pushboolean(L, true);
-//   return 1;
-// }
+fn tsLuaAddLanguage(L: ?*State) callconv(.C) c_int {
+    const path = check(L, 1, []const u8) orelse return 0;
+    const lang_name = check(L, 2, []const u8) orelse return 0;
+    const symbol_name = check(L, 3, []const u8) orelse return 0;
+
+    _ = path; // autofix
+    _ = symbol_name; // autofix
+
+    const state = root.state();
+
+    for (state.tsmap) |*lang| {
+        if (std.mem.eql(u8, lang.name, lang_name)) {
+            root.log(@src(), .info, "language already loaded: {s}", .{lang_name});
+
+            push(L, true);
+            return 1;
+        }
+    }
+
+    // put(
+    //     root.state().a,
+    //     mem.span(lang_name),
+    //     mem.span(path),
+    // ) catch return 0;
+
+    // #define BUFSIZE 128
+    //   char symbol_buf[BUFSIZE];
+    //   snprintf(symbol_buf, BUFSIZE, "tree_sitter_%s", symbol_name);
+    // #undef BUFSIZE
+    //
+    //   uv_lib_t lib;
+    //   if (uv_dlopen(path, &lib)) {
+    //     snprintf(IObuff, IOSIZE, "Failed to load parser for language '%s': uv_dlopen: %s",
+    //              lang_name, uv_dlerror(&lib));
+    //     uv_dlclose(&lib);
+    //     lua_pushstring(L, IObuff);
+    //     return lua_error(L);
+    //   }
+    //
+    //   TSLanguage *(*lang_parser)(void);
+    //   if (uv_dlsym(&lib, symbol_buf, (void **)&lang_parser)) {
+    //     snprintf(IObuff, IOSIZE, "Failed to load parser: uv_dlsym: %s",
+    //              uv_dlerror(&lib));
+    //     uv_dlclose(&lib);
+    //     lua_pushstring(L, IObuff);
+    //     return lua_error(L);
+    //   }
+    //
+    //   TSLanguage *lang = lang_parser();
+    //   if (lang == NULL) {
+    //     uv_dlclose(&lib);
+    //     return luaL_error(L, "Failed to load parser %s: internal error", path);
+    //   }
+    //
+    //   uint32_t lang_version = ts_language_version(lang);
+    //   if (lang_version < TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION
+    //       || lang_version > TREE_SITTER_LANGUAGE_VERSION) {
+    //     return luaL_error(L,
+    //                       "ABI version mismatch for %s: supported between %d and %d, found %d",
+    //                       path,
+    //                       TREE_SITTER_MIN_COMPATIBLE_LANGUAGE_VERSION,
+    //                       TREE_SITTER_LANGUAGE_VERSION, lang_version);
+    //   }
+    //
+    //   pmap_put(cstr_t)(&langs, xstrdup(lang_name), lang);
+    //
+    //   lua_pushboolean(L, true);
+    //   return 1;
+}
 
 pub fn is(L: ?*State, idx: c_int, comptime T: type) bool {
     switch (@typeInfo(T)) {
@@ -675,6 +696,7 @@ fn nluaOptNewIndex(L: ?*State) callconv(.C) c_int {
             return 0;
         }
     }
+
     root.log(@src(), .warn, "set(\"{s}\", ...): does not exist", .{key});
 
     // if (false) {

@@ -1,6 +1,8 @@
-const std = @import("std");
 const root = @import("root");
+
+const std = @import("std");
 const scu = root.scu;
+const lib = @import("lib.zig");
 
 const State = @import("State.zig");
 
@@ -9,7 +11,7 @@ pub const statusbarHeight = 2;
 
 pub fn render(state: *State) !void {
     try state.term.start(state.resized);
-    defer state.term.finish() catch |err| std.log.err("{any}", .{err});
+    defer state.term.finish() catch |err| root.log(@src(), .err, "{any}", .{err});
 
     if (state.resized) {
         // nothing
@@ -45,12 +47,17 @@ pub fn render(state: *State) !void {
         state.term.moveCursor(state.status_bar, @intCast(1 + state.command.buffer.items.len), 1); // state.x
     }
 
-    const buffer = state.getEditBuffer() orelse return;
+    const buffer = state.getCurrentBuffer() orelse return;
     const realRow = buffer.row;
 
     // TODO: should be in state
-    const row_render_start = std.math.sub(usize, realRow, state.term.size.y) catch 0;
-    const col_render_start = 0;
+
+    const scroll = .{
+        .row = std.math.sub(usize, realRow, state.term.size.y) catch 0,
+        .col = 0,
+    };
+    const row_render_start = scroll.row;
+    const col_render_start = scroll.col;
 
     const viewportRow = buffer.row - row_render_start;
     const viewportCol = buffer.col - col_render_start;
@@ -63,20 +70,6 @@ pub fn render(state: *State) !void {
 
     // const col: usize = state.buffer.?.cursor - cur.start;
     // if (state.is_exploring) col = 0;
-
-    //     if (cur_row <= row_render_start.static) {
-    //         row_render_start.static = cur_row;
-    //     }
-    //     if (cur_row >= (row_render_start.static +% @as(usize, @bitCast(@as(c_long, state.*.main_row))))) {
-    //         row_render_start.static = (cur_row -% @as(usize, @bitCast(@as(c_long, state.*.main_row)))) +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
-    //     }
-    //     if (col <= col_render_start.static) {
-    //         col_render_start.static = col;
-    //     }
-    //     if (col >= (col_render_start.static +% @as(usize, @bitCast(@as(c_long, state.*.main_col))))) {
-    //         col_render_start.static = (col -% @as(usize, @bitCast(@as(c_long, state.*.main_col)))) +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
-    //     }
-    //     state.*.num_of_braces = num_of_open_braces(state.*.buffer);
 
     if (state.status_bar_msg) |print_msg| {
         state.term.writeBuffer(state.status_bar, 0, 1, print_msg);
@@ -140,9 +133,10 @@ pub fn render(state: *State) !void {
     // ----- main buffer ----------------------------
     {
         var renderRow: usize = row_render_start;
-        while (renderRow < buffer.rows.items.len and renderRow < row_render_start + state.main_win.h) : (renderRow += 1) {
-            const row = buffer.rows.items[renderRow];
-            const bufdata = buffer.data.items[row.start..row.end];
+        while (renderRow < buffer.lines.items.len and renderRow < row_render_start + state.main_win.h) : (renderRow += 1) {
+            const line = buffer.lines.items[renderRow];
+            const bufdata = line.data.items;
+            // root.log(@src(), .debug, "rendering row {d} with {d} chars ({s})", .{ renderRow, bufdata.len, bufdata });
             var c: u16 = 1;
             for (bufdata) |ch| {
                 const cell = state.term.getScreenCell(state.main_win, c, @intCast(renderRow)) orelse break;
@@ -193,6 +187,29 @@ pub fn render(state: *State) !void {
     }
     // -------------------------------------------
 
+    if (buffer.target) |visual| {
+        // root.log(@src(), .debug, "got visual selection {any}", .{visual});
+        _ = visual.mode;
+
+        var cur = visual.start;
+
+        const end = visual.end;
+        while (true) {
+            if (cur.row > end.row) break;
+            if (cur.row == end.row and cur.col >= end.col) break;
+
+            const row: u16 = @intCast(cur.row);
+            const col: u16 = @intCast(cur.col + 1); // add buffer row
+
+            if (state.term.getScreenCell(state.main_win, col, row)) |cell| {
+                // root.log(@src(), .debug, "highlight cell {} {}", .{ row, col });
+                cell.bg = .Reset;
+            }
+
+            cur = buffer.moveRight(cur, 1);
+        }
+    }
+
     // TODO: account for tab characters
     // const col = cur_row; // + countTabs() * 3;
 
@@ -203,4 +220,18 @@ pub fn render(state: *State) !void {
     // we just finised rendering so we know that the current buffer is the
     // right size
     state.resized = false;
+}
+
+fn bufferSpaceToScreen(
+    screen: *const scu.Term.Screen,
+    point: lib.Vec2,
+    scroll: lib.Vec2,
+) ?lib.Vec2 {
+    _ = scroll; // autofix
+
+    if (point.row > screen.w or point.col > screen.h) return null;
+    return lib.Vec2{
+        .row = point.row + screen.x,
+        .col = point.col + screen.y,
+    };
 }

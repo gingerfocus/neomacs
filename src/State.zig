@@ -1,5 +1,6 @@
 const std = @import("std");
-const root = @import("root");
+const root = @import("main.zig");
+// const root = @import("root");
 const keys = @import("keys.zig");
 const lua = @import("lua.zig");
 const tools = @import("tools.zig");
@@ -20,6 +21,7 @@ const State = @This();
 //     // __none: std.meta.Tuple(),
 // };
 
+/// Must be an allocator that can handle races
 a: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 
@@ -30,16 +32,6 @@ term: scu.Term,
 // undo: Undo,
 
 ch: trm.KeyEvent = @bitCast(@as(u16, 0)),
-
-/// Motion keys have two ways in which they select text, a region and a
-/// point. A motion can set this structure to not null to indicate what it
-/// wants. Then a selector runs using this data. The default one just sets the
-/// cursor to target position. Some other common ones are `d` which deletes
-/// text in the selection. The can also be user defined.
-target: ?struct {
-    select: struct { x1: usize, y1: usize, x2: usize, y2: usize },
-    cursor: usize,
-} = null,
 
 repeating: Repeating = .{},
 
@@ -61,12 +53,16 @@ config: Config = .{},
 buffers: std.ArrayListUnmanaged(*Buffer),
 /// Always a memeber of the buffers array
 buffer: *Buffer, // todo: might be better to make it an index
+// bufferindex: usize = 0,
 
 resized: bool,
 
 line_num_win: scu.Term.Screen,
 main_win: scu.Term.Screen,
 status_bar: scu.Term.Screen,
+
+// TreeSitter Parsers
+tsmap: std.ArrayListUnmanaged(void) = .{},
 
 pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
     try checkfirstrun(a);
@@ -75,13 +71,13 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
     const buffer = try a.create(Buffer);
     if (file) |f| {
         root.log(@src(), .debug, "opening file ({s})", .{f});
-        buffer.* = Buffer.edit(a, f) catch |err| {
+        buffer.* = Buffer.initFile(a, f) catch |err| {
             root.log(@src(), .err, "File Not Found: {s}", .{f});
             a.destroy(buffer);
             return err;
         };
     } else {
-        buffer.* = Buffer.empty();
+        buffer.* = Buffer.initEmpty();
     }
     try buffers.append(a, buffer);
 
@@ -142,12 +138,12 @@ pub fn deinit(state: *State) void {
     state.arena.deinit();
 }
 
-pub fn getEditBuffer(state: *State) ?*Buffer.Edit {
-    switch (state.buffer.data) {
-        .Edit => |*edit| return edit,
-        .Custom => |*custom| return &custom.edit,
-        .Empty => return null,
-    }
+// pub fn getBuffer(state: *const State) *Buffer {
+//     return state.buffers.items[state.bufferindex];
+// }
+
+pub fn getCurrentBuffer(state: *State) ?*Buffer {
+    return state.buffer;
 }
 
 pub fn press(state: *State) !void {
@@ -170,20 +166,6 @@ fn getKeyMaps(state: *const State) *const km.KeyMaps {
     return &state.keyMaps[@intFromEnum(state.buffer.mode)];
 }
 
-// pub fn getConfig(state: *State) *const Config {
-//     if (state.config) |*config| {
-//         return config;
-//     }
-//     state.config = Config.get(state.L);
-//     return &state.config.?;
-// }
-
-// pub fn slowExit(state: *State) void {
-//     _ = state; // autofix
-//     State.Static.config.QUIT = true;
-//     // Config.set(state.L, "QUIT", true);
-// }
-
 pub const Repeating = struct {
     is: bool = false,
     count: usize = 0,
@@ -193,6 +175,13 @@ pub const Repeating = struct {
         self.count = 0;
     }
 };
+
+pub fn takeRepeating(state: *State) usize {
+    const count = if (state.repeating.is) state.repeating.count else 1;
+    state.repeating.count = 0;
+    state.repeating.is = false;
+    return count;
+}
 
 fn checkfirstrun(a: std.mem.Allocator) !void {
     const home = std.posix.getenv("HOME") orelse unreachable;
@@ -204,10 +193,10 @@ fn checkfirstrun(a: std.mem.Allocator) !void {
         return;
     } else |_| {
         // welcome FNG
-        const DEFAULTCONFIG = @embedFile("config.lua");
-        const file = try std.fs.openFileAbsolute(initFile, .{ .mode = .write_only });
-        defer file.close();
-        try file.writeAll(DEFAULTCONFIG);
+        // const DEFAULTCONFIG = @embedFile("config.lua");
+        // const file = try std.fs.openFileAbsolute(initFile, .{ .mode = .write_only });
+        // defer file.close();
+        // try file.writeAll(DEFAULTCONFIG);
         return;
     }
 }
