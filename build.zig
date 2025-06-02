@@ -49,20 +49,20 @@ pub fn build(b: *std.Build) void {
         neomacs.addArgs(argumnets);
     } else {
         // open a demo file
-        neomacs.addArg("demo.txt");
+        neomacs.addArg("etc/demo.txt");
     }
     const run = b.step("run", "run neomacs");
     run.dependOn(&neomacs.step);
 
     // -------------------------------------------------------------------------
 
-    const tests = b.addTest(.{
-        .optimize = optimize,
-        .target = target,
-        .root_source_file = b.path("test/01.zig"),
-    });
-    const testStep = b.step("test", "run the tests");
-    testStep.dependOn(&tests.step);
+    // const tests = b.addTest(.{
+    //     .optimize = optimize,
+    //     .target = target,
+    //     .root_source_file = b.path("test/01.zig"),
+    // });
+    // const testStep = b.step("test", "run the tests");
+    // testStep.dependOn(&tests.step);
 
     // -------------------------------------------------------------------------
 

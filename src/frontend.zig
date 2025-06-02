@@ -175,13 +175,25 @@ pub fn render(state: *State) !void {
                 var buf: [BUFSIZE]u8 = undefined;
                 const data = try std.fmt.bufPrint(&buf, "{}", .{lineNumber});
 
-                c = 0;
-                for (data) |ch| {
-                    const cell = state.term.getScreenCell(state.line_num_win, c, @intCast(renderRow)) orelse break;
-                    cell.fg = .Yellow;
-                    cell.setSymbol(ch);
-                    c += 1;
+                for (0..state.line_num_win.w) |c2| {
+                    const c6: u16 = @intCast(c2);
+                    const cell = state.term.getScreenCell(state.line_num_win, c6, @intCast(renderRow)) orelse break;
+                    if (c2 >= data.len) {
+                        cell.setSymbol(' ');
+                    } else {
+                        const ch = data[c2];
+                        cell.fg = .Yellow;
+                        cell.setSymbol(ch);
+                    }
                 }
+
+                // c = 0;
+                // for (data) |ch| {
+                //     const cell = state.term.getScreenCell(state.line_num_win, c, @intCast(renderRow)) orelse break;
+                //     cell.fg = .Yellow;
+                //     cell.setSymbol(ch);
+                //     c += 1;
+                // }
             } else unreachable; // I think this is a bug not sure
             // -------------------------------------------
         }

@@ -40,6 +40,7 @@
 
             zig
             zls
+            bun
           ];
         };
 
