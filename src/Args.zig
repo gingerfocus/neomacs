@@ -11,7 +11,7 @@ pager: bool = false,
 const std = @import("std");
 const mem = std.mem;
 
-pub fn parse(a: std.mem.Allocator, args: [][*:0]const u8) !Args {
+pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
     var i: usize = 0;
 
     var opts = Args{

@@ -43,7 +43,7 @@ pub const Mode = enum {
     insert,
     visual,
 
-    pub const COUNT = @typeInfo(Mode).Enum.fields.len;
+    pub const COUNT = @typeInfo(Mode).@"enum".fields.len;
 
     pub fn toString(self: Mode) []const u8 {
         return switch (self) {
@@ -76,7 +76,7 @@ pub const VisualMode = enum {
 // }
 
 pub fn initEmpty() Buffer {
-    return Buffer{ .id = id.next(), .filename = "", .lines = .{} };
+    return Buffer{ .id = idgen.next(), .filename = "", .lines = .{} };
 }
 
 pub fn initFile(a: std.mem.Allocator, filename: []const u8) !Buffer {
@@ -98,10 +98,9 @@ pub fn initFile(a: std.mem.Allocator, filename: []const u8) !Buffer {
 
     // not stable
     // const fid = std.hash.murmur.Murmur2_64.hash(filename);
-    // _ = fid; // autofix
 
     return Buffer{
-        .id = id.next(),
+        .id = idgen.next(),
         .filename = try a.dupe(u8, filename),
         .lines = lines.moveToUnmanaged(),
     };
@@ -664,15 +663,8 @@ pub fn save(buffer: *Buffer) !void {
     }
 }
 
-// pub fn makebuffer(self: *EditBuffer) root.Buffer {
-//     return root.Buffer{
-//         .dataptr = self,
-//         .vtable = &.{},
-//     };
-// }
-
 /// using static for id assignment
-const id = struct {
+const idgen = struct {
     var count: usize = 0;
     fn next() usize {
         count += 1;
@@ -706,41 +698,3 @@ const id = struct {
 //     pub fn nullMove(_: *anyopaque, _: Target) void {}
 //     pub fn nullEdit(_: *anyopaque, _: u8) void {}
 // };
-
-// dataptr: *anyopaque,
-// vtable: *const BufferVtable,
-
-// pub inline fn move(self: Self, target: Target) void {
-//     self.vtable.move(self.dataptr, target);
-// }
-//
-// pub inline fn edit(self: Self, ch: u8) void {
-//     self.vtable.edit(self.dataptr, ch);
-// }
-
-// const Edit = struct {
-// };
-
-// const Custom = struct {
-//     edit: Edit,
-//     changes: void,
-//
-//     pub fn deinit(buffer: *Custom, a: std.mem.Allocator) void {
-//         buffer.edit.deinit(a);
-//         // buffer.changes.deinit(); // Assuming changes is a collection that needs deinitialization
-//     }
-// };
-
-const Empty = struct {
-    _empty: void,
-
-    // pub fn buffer() Buffer {
-    //     return Buffer{
-    //         .dataptr = undefined,
-    //         .vtable = &.{
-    //             .edit = root.Buffer.BufferVtable.nullEdit,
-    //             .move = root.Buffer.BufferVtable.nullMove,
-    //         },
-    //     };
-    // }
-};

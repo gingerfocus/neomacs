@@ -1,5 +1,6 @@
 {
-  inputs.nixpkgs.url = "nixpkgs";
+  # inputs.nixpkgs.url = "nixpkgs";
+  inputs.nixpkgs.url = github:nixos/nixpkgs/b3582c75c7f21ce0b429898980eddbbf05c68e55;
 
   outputs = { self, nixpkgs, }:
     let
@@ -36,6 +37,9 @@
 
             tree-sitter
             tree-sitter-grammars.tree-sitter-zig
+
+            zig
+            zls
           ];
         };
 

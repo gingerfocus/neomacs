@@ -13,6 +13,8 @@ stdenv.mkDerivation {
 
       tree-sitter
       tree-sitter-grammars.tree-sitter-zig
+
+      libuv
     ];
 
     zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" ];

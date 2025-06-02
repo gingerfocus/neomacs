@@ -1074,7 +1074,7 @@ const targeter = struct {
 
         const buffer = state.getCurrentBuffer() orelse return;
 
-        const start = .{ .row = buffer.row, .col = 0 };
+        const start = lib.Vec2{ .row = buffer.row, .col = 0 };
 
         const count = state.takeRepeating();
         const row = @min(buffer.row + count, buffer.lines.items.len - 1);

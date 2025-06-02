@@ -20,7 +20,7 @@ const thunk = struct {
     }
 
     fn delete(state: *State) !void {
-        _ = state.command.buffer.popOrNull();
+        _ = state.command.buffer.pop();
     }
 
     fn gotoNormal(state: *State) !void {

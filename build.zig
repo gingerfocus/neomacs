@@ -1,7 +1,8 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    const static = b.option(bool, "static", "try to complile everything statically") orelse false;
+    const target = b.standardTargetOptions(if (static) .{ .default_target = .{ .abi = .musl } } else .{});
     const optimize = b.standardOptimizeOption(.{});
 
     // build neomacs
@@ -10,19 +11,33 @@ pub fn build(b: *std.Build) void {
         .name = "neomacs",
         .target = target,
         .optimize = optimize,
+        .linkage = if (static) .static else .dynamic,
     });
     const terminal = b.dependency("terminal", .{ .target = target, .optimize = optimize });
     neomacsExe.root_module.addImport("scured", terminal.module("scured"));
     neomacsExe.root_module.addImport("thermit", terminal.module("thermit"));
 
-    neomacsExe.linkSystemLibrary("tree-sitter");
-    neomacsExe.linkSystemLibrary("luajit-5.1");
+    // neomacsExe.linkSystemLibrary("tree-sitter");
     neomacsExe.linkLibC();
 
-    // neomacsExe.addCSourceFile(.{
-    //     .file = b.path("ts/zig-parser.c"),
-    //     .flags = &.{"-Its"},
-    // });
+    // ---------
+    if (true) {
+        const luajit_build_dep = b.dependency("luajit-build", .{
+            .target = target,
+            .optimize = optimize,
+            .link_as = .static,
+        });
+        const luajit_build = luajit_build_dep.module("luajit-build");
+        neomacsExe.root_module.addImport("syslua", luajit_build);
+    } else {
+        neomacsExe.linkSystemLibrary("luajit-5.1");
+        // b.addTranslateC(.{
+        //     .root_source_file = b.addConfigHeader()
+        // })
+        // b.addModule()
+        // neomacsExe.root_module.addImport()
+    }
+    // ---------
 
     // install neomacs
     b.installArtifact(neomacsExe);

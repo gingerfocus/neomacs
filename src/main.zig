@@ -7,16 +7,15 @@ pub const trm = @import("thermit"); // scu.thermit;
 pub const lib = @import("lib.zig");
 
 const front = @import("frontend.zig");
-const tools = @import("tools.zig");
 const alloc = @import("alloc.zig");
 const lua = @import("lua.zig");
 
 pub const Buffer = @import("Buffer.zig");
 pub const State = @import("State.zig");
 
-pub const ts = @cImport({
-    @cInclude("tree_sitter/api.h");
-});
+// pub const ts = @cImport({
+//     @cInclude("tree_sitter/api.h");
+// });
 
 //-----------------------------------------------------------------------------
 
@@ -97,7 +96,6 @@ fn neomacs() !void {
     defer s.deinit();
 
     while (!(trm.keys.bits(s.ch) == trm.keys.ctrl('q')) and !s.config.QUIT) {
-        try tools.handleCursorShape(s);
         try front.render(s);
 
         const ev = try s.term.tty.read(10000);

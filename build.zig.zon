@@ -1,5 +1,6 @@
 .{
-    .name = "neomacs",
+    .name = .neomacs,
+    .fingerprint = 0x23b0098f58addd0,
     .version = "0.1.0",
     .paths = .{
         "src",
@@ -11,12 +12,21 @@
     },
     .dependencies = .{
         .terminal = .{
-            .url = "https://github.com/gingerfocus/thermit/archive/00117a6864a1e9e2ad746c1d123470965f7992db.tar.gz",
-            .hash = "1220fb80d5cadb5dc38ed605a9748ba4549f16b0b25e480fff2a2ceb30e1fe760667",
+            .url = "https://github.com/gingerfocus/thermit/archive/9505f45ee9cef06eba1b31faaa6f0ce919844590.tar.gz",
+            // .hash = "thermit-0.1.0-wTQBCPikAAAHxU2I32O-c75NT1uiZJKKiCy_dfplPfPo",
+            .hash = "thermit-0.1.0-wTQBCKinAADUFPoCk74TBjGv85nt88SrVXsrKizqZy_y",
         },
         // .zss = .{
         //     .url = "https://github.com/gingerfocus/zss/archive/1d69097543647376073a9877ed24d6771456d0ee.tar.gz",
         //     // .hash = "",
         // },
+
+        .@"luajit-build" = .{
+            // .url = "git+https://github.com/sackosoft/zig-luajit-build#205386cedc14c919eaed387f9c12156c3ef3d43c",
+            // .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
+
+            .url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz",
+            .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
+        },
     },
 }

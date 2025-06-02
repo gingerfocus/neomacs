@@ -3,7 +3,6 @@ const root = @import("main.zig");
 // const root = @import("root");
 const keys = @import("keys.zig");
 const lua = @import("lua.zig");
-const tools = @import("tools.zig");
 const fr = @import("frontend.zig");
 const km = @import("keymaps.zig");
 
@@ -91,7 +90,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
         .term = t,
         .L = L,
 
-        .keyMaps = .{.{}} ** Buffer.Mode.COUNT,
+        .keyMaps = .{km.KeyMaps{}} ** Buffer.Mode.COUNT,
 
         // .undo_stack = Undo_Stack.init(a),
         // .redo_stack = Undo_Stack.init(a),
@@ -197,6 +196,36 @@ fn checkfirstrun(a: std.mem.Allocator) !void {
         // const file = try std.fs.openFileAbsolute(initFile, .{ .mode = .write_only });
         // defer file.close();
         // try file.writeAll(DEFAULTCONFIG);
+        return;
+    }
+}
+
+// TODO: fix these and make them better
+pub fn bufferNext(state: *State) void {
+    if (state.buffers.items.len < 2) return;
+
+    for (state.buffers.items, 0..) |buf, i| {
+        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
+            if (i == state.buffers.items.len - 1) {
+                state.buffer = state.buffers.items[0];
+            } else {
+                state.buffer = state.buffers.items[i + 1];
+            }
+        }
+        return;
+    }
+}
+pub fn bufferPrev(state: *State) void {
+    if (state.buffers.items.len < 2) return;
+
+    for (state.buffers.items, 0..) |buf, i| {
+        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
+            if (i == 0) {
+                state.buffer = state.buffers.items[state.buffers.items.len - 1];
+            } else {
+                state.buffer = state.buffers.items[i - 1];
+            }
+        }
         return;
     }
 }

@@ -37,5 +37,5 @@ I should just implement the basics.
 # Devolopment
 
 ## Binary Size
-Best kept small, currently about 380k on Fast and 100k on Small. Might want to
-statically compile to see the size there.
+Best kept small, size is currently about 670k on Small when statically
+compiled.

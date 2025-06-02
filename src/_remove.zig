@@ -1,58 +1,10 @@
-const std = @import("std");
-const root = @import("root");
-
-const scu = root.scu;
-const thr = scu.thermit;
-
-const State = @import("State.zig");
-
-pub fn handleCursorShape(state: *State) !void {
-    // @setCold(true);
-    try thr.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
-        .insert => .SteadyBar,
-        else => .SteadyBlock,
-    });
-}
-
-/// TODO: make a key bind for this
-pub fn bufferNext(state: *State) void {
-    if (state.buffers.items.len < 2) return;
-
-    for (state.buffers.items, 0..) |buf, i| {
-        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
-            if (i == state.buffers.items.len - 1) {
-                state.buffer = state.buffers.items[0];
-            } else {
-                state.buffer = state.buffers.items[i + 1];
-            }
-        }
-        return;
-    }
-}
-
-pub fn bufferPrev(state: *State) void {
-    if (state.buffers.items.len < 2) return;
-
-    for (state.buffers.items, 0..) |buf, i| {
-        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
-            if (i == 0) {
-                state.buffer = state.buffers.items[state.buffers.items.len - 1];
-            } else {
-                state.buffer = state.buffers.items[i - 1];
-            }
-        }
-        return;
-    }
-}
-
-// pub fn handle_save(arg_buffer: *Buffer) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var file: *FILE = fopen(buffer.*.filename, "w");
-//     _ = &file;
-//     _ = fwrite(@as(?*const anyopaque, @ptrCast(buffer.*.data.data)), buffer.*.data.count, @sizeOf(u8), file);
-//     _ = fclose(file);
-// }
+// const std = @import("std");
+// const root = @import("root");
+//
+// const scu = root.scu;
+// const thr = scu.thermit;
+//
+// const State = @import("State.zig");
 // pub fn shift_str_left(arg_str: *u8, arg_str_s: *usize, arg_index_1: usize) void {
 //     var str = arg_str;
 //     _ = &str;

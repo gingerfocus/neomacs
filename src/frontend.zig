@@ -2,6 +2,7 @@ const root = @import("root");
 
 const std = @import("std");
 const scu = root.scu;
+const thr = @import("thermit");
 const lib = @import("lib.zig");
 
 const State = @import("State.zig");
@@ -217,21 +218,31 @@ pub fn render(state: *State) !void {
         state.term.moveCursor(state.main_win, @intCast(viewportCol + 1), @intCast(viewportRow));
     }
 
+    try handleCursorShape(state);
+
     // we just finised rendering so we know that the current buffer is the
     // right size
     state.resized = false;
 }
 
-fn bufferSpaceToScreen(
-    screen: *const scu.Term.Screen,
-    point: lib.Vec2,
-    scroll: lib.Vec2,
-) ?lib.Vec2 {
-    _ = scroll; // autofix
+// fn bufferSpaceToScreen(
+//     screen: *const scu.Term.Screen,
+//     point: lib.Vec2,
+//     scroll: lib.Vec2,
+// ) ?lib.Vec2 {
+//     _ = scroll; // autofix
+//
+//     if (point.row > screen.w or point.col > screen.h) return null;
+//     return lib.Vec2{
+//         .row = point.row + screen.x,
+//         .col = point.col + screen.y,
+//     };
+// }
 
-    if (point.row > screen.w or point.col > screen.h) return null;
-    return lib.Vec2{
-        .row = point.row + screen.x,
-        .col = point.col + screen.y,
-    };
+pub fn handleCursorShape(state: *State) !void {
+    // @setCold(true);
+    try thr.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
+        .insert => .SteadyBar,
+        else => .SteadyBlock,
+    });
 }

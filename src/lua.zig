@@ -8,18 +8,18 @@ const root = @import("root");
 const std = @import("std");
 const mem = std.mem;
 const scu = root.scu;
-const tools = @import("tools.zig");
 const lua = @This();
 
 const Config = @import("Config.zig");
 const Global = @import("State.zig");
 
-pub const sys = @cImport({
-    @cInclude("lua.h");
-    @cInclude("lualib.h");
-    @cInclude("luajit.h");
-    @cInclude("luajit-2.1/lauxlib.h");
-});
+// pub const sys = @cImport({
+//     @cInclude("lua.h");
+//     @cInclude("lualib.h");
+//     @cInclude("luajit.h");
+//     @cInclude("luajit-2.1/lauxlib.h");
+// });
+pub const sys = @import("syslua");
 
 pub const State = sys.lua_State;
 
@@ -143,12 +143,12 @@ pub fn push(L: *State, value: anytype) void {
     const typeInfo = @typeInfo(Value);
 
     switch (typeInfo) {
-        .ComptimeInt, .Int => sys.lua_pushinteger(L, value),
-        .Bool => sys.lua_pushboolean(L, @intFromBool(value)),
-        .Struct => {
+        .comptime_int, .int => sys.lua_pushinteger(L, value),
+        .bool => sys.lua_pushboolean(L, @intFromBool(value)),
+        .@"struct" => {
             sys.lua_newtable(L);
 
-            inline for (typeInfo.Struct.fields) |field| {
+            inline for (typeInfo.@"struct".fields) |field| {
                 const f = @field(value, field.name);
 
                 push(L, f);
@@ -160,8 +160,8 @@ pub fn push(L: *State, value: anytype) void {
                 }
             }
         },
-        .Fn => sys.lua_pushcfunction(L, value),
-        .Enum => {
+        .@"fn" => sys.lua_pushcfunction(L, value),
+        .@"enum" => {
             const name = @tagName(value);
             sys.lua_pushlstring(L, name.ptr, name.len);
         },
@@ -265,12 +265,12 @@ fn nluaEdit(L: ?*lua.State) callconv(.C) c_int {
 }
 
 fn nluaBufferNext(_: ?*State) callconv(.C) c_int {
-    tools.bufferNext(root.state());
+    root.state().bufferNext();
     return 0;
 }
 
 fn nluaBufferPrev(_: ?*State) callconv(.C) c_int {
-    tools.bufferPrev(root.state());
+    root.state().bufferPrev();
     return 0;
 }
 
@@ -561,11 +561,11 @@ fn tsLuaAddLanguage(L: ?*State) callconv(.C) c_int {
 
 pub fn is(L: ?*State, idx: c_int, comptime T: type) bool {
     switch (@typeInfo(T)) {
-        .Void => return sys.lua_isnil(L, idx),
-        .Bool => return sys.lua_isboolean(L, idx),
-        .Int, .Float => return sys.lua_isnumber(L, idx) != 0,
-        .Array => return sys.lua_istable(L, idx),
-        .Pointer => |ptrdata| {
+        .void => return sys.lua_isnil(L, idx),
+        .bool => return sys.lua_isboolean(L, idx),
+        .int, .float => return sys.lua_isnumber(L, idx) != 0,
+        .array => return sys.lua_istable(L, idx),
+        .pointer => |ptrdata| {
             if (T == []const u8) {
                 return sys.lua_isstring(L, idx) != 0;
             }
@@ -577,7 +577,7 @@ pub fn is(L: ?*State, idx: c_int, comptime T: type) bool {
 
             @compileError("NYI");
         },
-        .Optional => |N| {
+        .optional => |N| {
             if (sys.lua_isnoneornil(L, idx)) return true;
             return is(L, idx, N.child);
         },
@@ -594,11 +594,11 @@ pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
     }
 
     switch (@typeInfo(T)) {
-        .Void => return {},
-        .Bool => return sys.lua_toboolean(L, idx) != 0,
-        .Int => return @intCast(sys.lua_tointeger(L, idx)),
-        .Float => return @floatCast(sys.lua_tonumber(L, idx)),
-        .Array => |AT| {
+        .void => return {},
+        .bool => return sys.lua_toboolean(L, idx) != 0,
+        .int => return @intCast(sys.lua_tointeger(L, idx)),
+        .float => return @floatCast(sys.lua_tonumber(L, idx)),
+        .array => |AT| {
             // assume it is a table
             var A: T = undefined;
             for (&A, 0..) |*p, i| {
@@ -608,7 +608,7 @@ pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
             }
             return A;
         },
-        .Pointer => |_| {
+        .pointer => |_| {
             if (T == *anyopaque) {
                 return sys.lua_topointer(L, idx);
             }
@@ -637,7 +637,7 @@ pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
             // const ptr = sys.lua_touserdata(L, idx);
             // return @as(T, @alignCast(@ptrCast(ptr)));
         },
-        .Optional => |N| {
+        .optional => |N| {
             if (sys.lua_isnoneornil(L, idx)) {
                 return null;
             }
@@ -685,7 +685,7 @@ fn nluaOptNewIndex(L: ?*State) callconv(.C) c_int {
     const ptr = sys.lua_tolstring(L, KEY, &len);
     const key = ptr[0..len];
 
-    inline for (@typeInfo(Config).Struct.fields) |field| {
+    inline for (@typeInfo(Config).@"struct".fields) |field| {
         if (std.mem.eql(u8, field.name, key)) {
             const val = check(L, VAL, field.type) orelse return 0;
 
@@ -725,7 +725,7 @@ fn nluaOptIndex(L: ?*State) callconv(.C) c_int {
 
     root.log(@src(), .debug, "get(\"{s}\")", .{key});
 
-    inline for (@typeInfo(Config).Struct.fields) |field| {
+    inline for (@typeInfo(Config).@"struct".fields) |field| {
         if (std.mem.eql(u8, field.name, key)) {
             const val = @field(root.state().config, field.name);
             push(L.?, val);
