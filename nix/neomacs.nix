@@ -5,8 +5,6 @@ stdenv.mkDerivation {
 
     src = ./..;
 
-    nativeBuildInputs = [ zig.hook ];
-
     buildInputs = [
       luajit
       (luajit.withPackages (ps: (with ps; [ fennel ])))
@@ -14,8 +12,12 @@ stdenv.mkDerivation {
       tree-sitter
       tree-sitter-grammars.tree-sitter-zig
 
-      libuv
+      # libuv
     ];
 
-    zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" ];
+    # nativeBuildInputs = [ zig.hook ];
+    # zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" ];
+
+    nativeBuildInputs = [ zig ];
+    buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
 }

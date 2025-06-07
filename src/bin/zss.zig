@@ -1,6 +1,6 @@
 const std = @import("std");
-const root = @import("neomacs");
-const zss = root.zss;
+const neomacs = @import("neomacs");
+const zss = neomacs.zss;
 
 pub fn main() !void {
     // the file that data is read from

@@ -4,7 +4,7 @@ pub const scu = @import("scured");
 pub const trm = @import("thermit"); // scu.thermit;
 pub const lib = @import("lib.zig");
 
-const render = @import("render/root.zig");
+const render = @import("render.zig");
 const alloc = @import("alloc.zig");
 const lua = @import("lua.zig");
 
@@ -96,14 +96,17 @@ fn neomacs() !void {
     const s = state();
     defer s.deinit();
 
-    while (!(trm.keys.bits(s.ch) == trm.keys.ctrl('q')) and !s.config.QUIT) {
+    while (!s.config.QUIT) {
         try render.draw(s);
 
-        const ev = try s.term.tty.read(10000);
+        const ev = s.backend.pollEvent(10000) orelse break;
+
         switch (ev) {
             .Key => |ke| {
-                s.ch = ke;
-                try s.press();
+                if (trm.keys.bits(ke) == trm.keys.ctrl('q')) break;
+                s.ch = ke; // used by bad events that reference state directly
+
+                try s.press(ke);
             },
             .End => s.config.QUIT = true,
             .Resize => s.resized = true,

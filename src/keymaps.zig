@@ -1,5 +1,6 @@
 const std = @import("std");
 const root = @import("root");
+const trm = root.trm;
 
 const lua = @import("lua.zig");
 const scu = root.scu;
@@ -43,8 +44,8 @@ pub const KeyMaps = struct {
         self.keys.deinit(a);
     }
 
-    pub fn run(self: KeyMaps, state: *State) !void {
-        if (self.keys.get(scu.thermit.keys.bits(state.ch))) |function| {
+    pub fn run(self: KeyMaps, state: *State, ke: trm.KeyEvent) !void {
+        if (self.keys.get(scu.thermit.keys.bits(ke))) |function| {
             // if there is a custom handler then run it
             try function.run(state);
         } else {

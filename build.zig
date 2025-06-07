@@ -2,9 +2,22 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const static = b.option(bool, "static", "try to complile everything statically") orelse false;
+    const windows = b.option(bool, "windows", "add window backend") orelse true;
 
+    if (windows and static) {
+        std.debug.print("error: Executable can't link in a windowing system and be built statically!\n", .{});
+        std.process.exit(1);
+    }
+    const options = b.addOptions();
+    options.addOption(bool, "windows", windows);
+
+    // ---------
+
+    // b.graph.host
     const target = b.standardTargetOptions(if (static) .{ .default_target = .{ .abi = .musl } } else .{});
     const optimize = b.standardOptimizeOption(.{});
+
+    // ---------
 
     // build neomacs
     const neomacs = b.addModule("neomacs", .{
@@ -15,14 +28,14 @@ pub fn build(b: *std.Build) void {
     const terminal = b.dependency("terminal", .{ .target = target, .optimize = optimize });
     neomacs.addImport("scured", terminal.module("scured"));
     neomacs.addImport("thermit", terminal.module("thermit"));
+    neomacs.addImport("options", options.createModule());
 
     // neomacsExe.linkSystemLibrary("tree-sitter");
     neomacs.link_libc = true;
-    // neomacs.linkLibC();
 
     // ---------
 
-    if (true) {
+    if (static) {
         const luajit_build_dep = b.dependency("luajit-build", .{
             .target = target,
             .optimize = optimize,
@@ -31,27 +44,37 @@ pub fn build(b: *std.Build) void {
         const luajit_build = luajit_build_dep.module("luajit-build");
         neomacs.addImport("syslua", luajit_build);
     } else {
-        // @cImport()
-        // const headers = .{
-        //     std.Build.LazyPath{ .cwd_relative = "/nix/store/ljg715ss1zhk6ibwf6alm6idl3k41m6w-luajit-2.1.1741730670-env/include/luajit.h" },
-        //     std.Build.LazyPath{ .cwd_relative = "/nix/store/ljg715ss1zhk6ibwf6alm6idl3k41m6w-luajit-2.1.1741730670-env/include/lua.h" },
-        //     std.Build.LazyPath{ .cwd_relative = "/nix/store/ljg715ss1zhk6ibwf6alm6idl3k41m6w-luajit-2.1.1741730670-env/include/lualib.h" },
-        //     std.Build.LazyPath{ .cwd_relative = "/nix/store/ljg715ss1zhk6ibwf6alm6idl3k41m6w-luajit-2.1.1741730670-env/include/luajit-2.1/lauxlib.h" },
-        // };
-        // const trans = b.addTranslateC(.{
-        //     .root_source_file = luajitheader,
-        //     .target = target,
-        //     .optimize = optimize,
-        // });
-        //
-        // const luajit = b.addModule("luajit", .{
-        //     .root_source_file = trans.getOutput(),
-        //     .target = target,
-        //     .optimize = optimize,
-        // });
-        //
-        // neomacs.addImport("syslua", luajit);
-        // neomacs.linkSystemLibrary("luajit-5.1", .{});
+        const luajit_c = b.addModule("syslua", .{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("etc/luajitc.zig"),
+        });
+        neomacs.addImport("syslua", luajit_c);
+        neomacs.linkSystemLibrary("luajit-5.1", .{});
+    }
+
+    // ---------
+
+    // if (b.lazyDependency("mach", .{ .target = target, .optimize = optimize })) |mach| {
+    //     neomacs.addImport("mach", mach.module("mach"));
+    // }
+
+    // ---------
+
+    if (windows) {
+        const clientHeaderCommand = b.addSystemCommand(&.{ "wayland-scanner", "client-header" });
+        clientHeaderCommand.addFileArg(b.path("etc/xdg-shell.xml"));
+        const clientHeader = clientHeaderCommand.addOutputFileArg("xdg-shell-protocol.h");
+
+        const privateCodeCommand = b.addSystemCommand(&.{ "wayland-scanner", "private-code" });
+        privateCodeCommand.addFileArg(b.path("etc/xdg-shell.xml"));
+        const privateCode = privateCodeCommand.addOutputFileArg("xdg-shell-protocol.c");
+
+        neomacs.addCSourceFile(.{ .file = privateCode });
+        neomacs.addIncludePath(clientHeader.dirname());
+
+        neomacs.linkSystemLibrary("wayland-client", .{});
+        neomacs.linkSystemLibrary("xkbcommon", .{});
     }
 
     // ---------
@@ -66,9 +89,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(neomacsExe);
 
     const neomacsRun = b.addRunArtifact(neomacsExe);
-    if (b.args) |argumnets| {
-        neomacsRun.addArgs(argumnets);
-    } else {
+    if (b.args) |args| neomacsRun.addArgs(args) else {
         // open a demo file
         neomacsRun.addArg("etc/demo.txt");
     }
@@ -98,21 +119,6 @@ pub fn build(b: *std.Build) void {
 
     // -------------------------------------------------------------------------
 
-    const clientHeaderCommand = b.addSystemCommand(&.{ "wayland-scanner", "client-header" });
-    clientHeaderCommand.addFileArg(b.path("wayland/xdg-shell.xml"));
-    const clientHeader = clientHeaderCommand.addOutputFileArg("xdg-shell-protocol.h");
-
-    const privateCodeCommand = b.addSystemCommand(&.{ "wayland-scanner", "private-code" });
-    privateCodeCommand.addFileArg(b.path("wayland/xdg-shell.xml"));
-    const privateCode = privateCodeCommand.addOutputFileArg("xdg-shell-protocol.c");
-
-    wevExe.addCSourceFile(.{ .file = privateCode });
-    wevExe.addIncludePath(clientHeader.dirname());
-
-    wevExe.linkLibC();
-    wevExe.linkSystemLibrary("wayland-client");
-    wevExe.linkSystemLibrary("xkbcommon");
-
     wevExe.root_module.addImport("neomacs", neomacs);
 
     const graphi = b.dependency("graphi", .{
@@ -128,8 +134,8 @@ pub fn build(b: *std.Build) void {
 
     const check = b.step("check", "Lsp Check Step");
     check.dependOn(&zssExe.step);
-    check.dependOn(&neomacsExe.step);
     check.dependOn(&wevExe.step);
+    check.dependOn(&neomacsExe.step);
 
     // -------------------------------------------------------------------------
 

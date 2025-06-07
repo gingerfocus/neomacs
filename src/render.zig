@@ -11,18 +11,23 @@ pub const sidebarWidth = 3;
 pub const statusbarHeight = 2;
 
 pub fn draw(state: *State) !void {
-    try state.term.start(state.resized);
-    defer state.term.finish() catch |err| root.log(@src(), .err, "{any}", .{err});
+    const BackendTerminal = @import("backend/BackendTerminal.zig");
+    const backend = @as(*BackendTerminal, @ptrCast(@alignCast(state.backend.dataptr)));
+    const term = &backend.terminal;
+
+    // state.backend.query()
+    try term.start(state.resized);
+    defer term.finish() catch |err| root.log(@src(), .err, "{any}", .{err});
 
     if (state.resized) {
         // nothing
         root.log(@src(), .info, "starting window resize render", .{});
 
-        const size = state.term.size;
+        const size = term.size;
 
-        state.line_num_win = state.term.makeScreen(0, 0, sidebarWidth, size.y - statusbarHeight);
-        state.status_bar = state.term.makeScreen(0, size.y - statusbarHeight, null, null);
-        state.main_win = state.term.makeScreen(sidebarWidth, 0, null, size.y - statusbarHeight);
+        state.line_num_win = term.makeScreen(0, 0, sidebarWidth, size.y - statusbarHeight);
+        state.status_bar = term.makeScreen(0, size.y - statusbarHeight, null, null);
+        state.main_win = term.makeScreen(sidebarWidth, 0, null, size.y - statusbarHeight);
     }
 
     // ---- clear status bar --------
@@ -31,7 +36,7 @@ pub fn draw(state: *State) !void {
         while (x < state.status_bar.w) : (x += 1) {
             var y: u16 = 0;
             while (y < state.status_bar.h) : (y += 1) {
-                const cell = state.term.getScreenCell(state.status_bar, x, y).?;
+                const cell = term.getScreenCell(state.status_bar, x, y).?;
                 cell.setSymbol(' ');
                 // cell.bg = .Cyan;
             }
@@ -43,9 +48,9 @@ pub fn draw(state: *State) !void {
         // if (state.buffer.mode == .comand or state.buffer.mode == .search) {
         const command = try std.fmt.allocPrint(state.a, ":{s}", .{state.command.buffer.items});
         defer state.a.free(command);
-        state.term.writeBuffer(state.status_bar, 0, 1, command);
+        term.writeBuffer(state.status_bar, 0, 1, command);
 
-        state.term.moveCursor(state.status_bar, @intCast(1 + state.command.buffer.items.len), 1); // state.x
+        term.moveCursor(state.status_bar, @intCast(1 + state.command.buffer.items.len), 1); // state.x
     }
 
     const buffer = state.getCurrentBuffer() orelse return;
@@ -54,7 +59,7 @@ pub fn draw(state: *State) !void {
     // TODO: should be in state
 
     const scroll = .{
-        .row = std.math.sub(usize, realRow, state.term.size.y) catch 0,
+        .row = std.math.sub(usize, realRow, term.size.y) catch 0,
         .col = 0,
     };
     const row_render_start = scroll.row;
@@ -73,14 +78,14 @@ pub fn draw(state: *State) !void {
     // if (state.is_exploring) col = 0;
 
     if (state.status_bar_msg) |print_msg| {
-        state.term.writeBuffer(state.status_bar, 0, 1, print_msg);
+        term.writeBuffer(state.status_bar, 0, 1, print_msg);
         state.status_bar_msg = null;
     }
 
     {
         const position = try std.fmt.allocPrint(state.a, "{}:{}", .{ buffer.row + 1, buffer.col + 1 });
         defer state.a.free(position);
-        state.term.writeBuffer(
+        term.writeBuffer(
             state.status_bar,
             @intCast(state.status_bar.w - position.len),
             0,
@@ -89,7 +94,7 @@ pub fn draw(state: *State) !void {
     }
 
     const mode = state.buffer.mode.toString();
-    state.term.writeBuffer(state.status_bar, 0, 0, mode);
+    term.writeBuffer(state.status_bar, 0, 0, mode);
 
     // {
     //     state.term.writeBuffer(state.status_bar, state.status_bar.w - 1, 1, switch (state.leader) {
@@ -123,7 +128,7 @@ pub fn draw(state: *State) !void {
         while (x < state.main_win.w) : (x += 1) {
             var y: u16 = 0;
             while (y < state.main_win.h) : (y += 1) {
-                const cell = state.term.getScreenCell(state.main_win, x, y).?;
+                const cell = term.getScreenCell(state.main_win, x, y).?;
                 cell.setSymbol(' ');
                 cell.bg = .Black;
             }
@@ -140,7 +145,7 @@ pub fn draw(state: *State) !void {
             // root.log(@src(), .debug, "rendering row {d} with {d} chars ({s})", .{ renderRow, bufdata.len, bufdata });
             var c: u16 = 1;
             for (bufdata) |ch| {
-                const cell = state.term.getScreenCell(state.main_win, c, @intCast(renderRow)) orelse break;
+                const cell = term.getScreenCell(state.main_win, c, @intCast(renderRow)) orelse break;
                 cell.fg = .DarkBlue;
                 cell.bg = .Black;
 
@@ -177,7 +182,7 @@ pub fn draw(state: *State) !void {
 
                 for (0..state.line_num_win.w) |c2| {
                     const c6: u16 = @intCast(c2);
-                    const cell = state.term.getScreenCell(state.line_num_win, c6, @intCast(renderRow)) orelse break;
+                    const cell = term.getScreenCell(state.line_num_win, c6, @intCast(renderRow)) orelse break;
                     if (c2 >= data.len) {
                         cell.setSymbol(' ');
                     } else {
@@ -214,7 +219,7 @@ pub fn draw(state: *State) !void {
             const row: u16 = @intCast(cur.row);
             const col: u16 = @intCast(cur.col + 1); // add buffer row
 
-            if (state.term.getScreenCell(state.main_win, col, row)) |cell| {
+            if (term.getScreenCell(state.main_win, col, row)) |cell| {
                 // root.log(@src(), .debug, "highlight cell {} {}", .{ row, col });
                 cell.bg = .Reset;
             }
@@ -227,7 +232,7 @@ pub fn draw(state: *State) !void {
     // const col = cur_row; // + countTabs() * 3;
 
     if (!state.command.is) {
-        state.term.moveCursor(state.main_win, @intCast(viewportCol + 1), @intCast(viewportRow));
+        term.moveCursor(state.main_win, @intCast(viewportCol + 1), @intCast(viewportRow));
     }
 
     try handleCursorShape(state);
@@ -238,8 +243,9 @@ pub fn draw(state: *State) !void {
 }
 
 pub fn handleCursorShape(state: *State) !void {
-    try trm.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
-        .insert => .SteadyBar,
-        else => .SteadyBlock,
-    });
+    _ = state;
+    // try trm.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
+    //     .insert => .SteadyBar,
+    //     else => .SteadyBlock,
+    // });
 }

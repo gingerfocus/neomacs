@@ -1,9 +1,13 @@
 const std = @import("std");
+const Backend = @import("Backend.zig");
+const root = @import("root");
+const lib = root.lib;
 const mem = std.mem;
-const neomacs = @import("neomacs");
-const shm = neomacs.shm;
+const shm = root.shm;
 
-// #define _POSIX_C_SOURCE 200809L
+const Window = @This();
+const BackendWayland = @This();
+
 const wl = @cImport({
     @cInclude("wayland-client-core.h");
     @cInclude("wayland-client-protocol.h");
@@ -26,10 +30,6 @@ const wl = @cImport({
     // #include <xkbcommon/xkbcommon.h>
 });
 
-const graphi = @cImport({
-    @cInclude("graphi.h");
-});
-
 // const State = opaque {};
 //
 // const Backend = struct {
@@ -43,119 +43,150 @@ const graphi = @cImport({
 //     runFn: fn (*anyopaque) bool,
 // };
 
-const Window = struct {
-    closed: bool = false,
+closed: bool = false,
 
-    display: ?*wl.wl_display = null,
-    registry: ?*wl.wl_registry = null,
-    compositor: ?*wl.wl_compositor = null,
-    seat: ?*wl.wl_seat = null,
-    shm: ?*wl.wl_shm = null,
-    wm_base: ?*wl.xdg_wm_base = null,
-    data_device_manager: ?*wl.wl_data_device_manager = null,
+display: ?*wl.wl_display = null,
+registry: ?*wl.wl_registry = null,
+compositor: ?*wl.wl_compositor = null,
+seat: ?*wl.wl_seat = null,
+wshm: ?*wl.wl_shm = null,
+wm_base: ?*wl.xdg_wm_base = null,
+data_device_manager: ?*wl.wl_data_device_manager = null,
 
-    surface: ?*wl.wl_surface = null,
-    xdg_surface: ?*wl.xdg_surface = null,
-    xdg_toplevel: ?*wl.xdg_toplevel = null,
+surface: ?*wl.wl_surface = null,
+xdg_surface: ?*wl.xdg_surface = null,
+xdg_toplevel: ?*wl.xdg_toplevel = null,
 
-    width: i32 = 0,
-    height: i32 = 0,
+width: i32 = 0,
+height: i32 = 0,
 
-    xkb_state: ?*wl.xkb_state = null,
-    xkb_context: ?*wl.xkb_context = null,
-    xkb_keymap: ?*wl.xkb_keymap = null,
+xkb_state: ?*wl.xkb_state = null,
+xkb_context: ?*wl.xkb_context = null,
+xkb_keymap: ?*wl.xkb_keymap = null,
 
-    selection: ?*wl.wl_data_offer = null,
-    dnd: ?*wl.wl_data_offer = null,
+selection: ?*wl.wl_data_offer = null,
+dnd: ?*wl.wl_data_offer = null,
 
-    a: std.mem.Allocator,
+a: std.mem.Allocator,
 
-    fn init(a: std.mem.Allocator) !*Window {
-        const state = try a.create(Window);
-        state.* = .{
-            .closed = false,
+pub fn init(a: std.mem.Allocator) !*Window {
+    if (true) return error.NoWayland;
 
-            .display = null,
-            .registry = null,
-            .compositor = null,
-            .seat = null,
-            .shm = null,
-            .wm_base = null,
-            .data_device_manager = null,
+    const state = try a.create(Window);
+    state.* = .{
+        .closed = false,
 
-            .surface = null,
-            .xdg_surface = null,
-            .xdg_toplevel = null,
+        .display = null,
+        .registry = null,
+        .compositor = null,
+        .seat = null,
+        .wshm = null,
+        .wm_base = null,
+        .data_device_manager = null,
 
-            .width = 0,
-            .height = 0,
+        .surface = null,
+        .xdg_surface = null,
+        .xdg_toplevel = null,
 
-            .xkb_state = null,
-            .xkb_context = wl.xkb_context_new(wl.XKB_CONTEXT_NO_FLAGS),
-            .xkb_keymap = null,
+        .width = 0,
+        .height = 0,
 
-            .selection = null,
-            .dnd = null,
+        .xkb_state = null,
+        .xkb_context = wl.xkb_context_new(wl.XKB_CONTEXT_NO_FLAGS),
+        .xkb_keymap = null,
 
-            .a = a,
-        };
+        .selection = null,
+        .dnd = null,
 
-        state.display = wl.wl_display_connect(null) orelse {
-            std.debug.print("Failed to connect to Wayland display\n", .{});
-            return error.NoDisplay;
-        };
+        .a = a,
+    };
 
-        state.registry = wl.wl_display_get_registry(state.display) orelse {
-            std.debug.print("Failed to obtain Wayland registry\n", .{});
-            return error.NoRegistry;
-        };
-        _ = wl.wl_registry_add_listener(state.registry, &wl_registry_listener, state);
+    state.display = wl.wl_display_connect(null) orelse {
+        std.debug.print("Failed to connect to Wayland display\n", .{});
+        return error.NoDisplay;
+    };
 
-        // _ = wl.wl_display_dispatch(state.display);
-        _ = wl.wl_display_roundtrip(state.display);
+    state.registry = wl.wl_display_get_registry(state.display) orelse {
+        std.debug.print("Failed to obtain Wayland registry\n", .{});
+        return error.NoRegistry;
+    };
+    _ = wl.wl_registry_add_listener(state.registry, &wl_registry_listener, state);
 
-        // check what the compositor has given us in the first roundtrip
-        const required: []const struct { name: []const u8, ptr: ?*anyopaque } = &.{
-            .{ .name = "wl_compositor", .ptr = state.compositor },
-            .{ .name = "wl_seat", .ptr = state.seat },
-            .{ .name = "wl_shm", .ptr = state.shm },
-            .{ .name = "xdg_wm_base", .ptr = state.wm_base },
-            .{ .name = "wl_data_device_manager", .ptr = state.data_device_manager },
-        };
-        for (required) |require| {
-            if (require.ptr == null) {
-                std.debug.print("{s} is required but is not present.\n", .{require.name});
-                return error.MissingModules;
-            }
+    // _ = wl.wl_display_dispatch(state.display);
+    _ = wl.wl_display_roundtrip(state.display);
+
+    // check what the compositor has given us in the first roundtrip
+    const required: []const struct { name: []const u8, ptr: ?*anyopaque } = &.{
+        .{ .name = "wl_compositor", .ptr = state.compositor },
+        .{ .name = "wl_seat", .ptr = state.seat },
+        .{ .name = "wl_shm", .ptr = state.wshm },
+        .{ .name = "xdg_wm_base", .ptr = state.wm_base },
+        .{ .name = "wl_data_device_manager", .ptr = state.data_device_manager },
+    };
+    for (required) |require| {
+        if (require.ptr == null) {
+            std.debug.print("{s} is required but is not present.\n", .{require.name});
+            return error.MissingModules;
         }
-
-        _ = wl.xdg_wm_base_add_listener(state.wm_base, &xdg_wm_base_listener, null);
-
-        state.surface = wl.wl_compositor_create_surface(state.compositor); // important
-        state.xdg_surface = wl.xdg_wm_base_get_xdg_surface(state.wm_base, state.surface);
-        _ = wl.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state); // size used here
-
-        state.xdg_toplevel = wl.xdg_surface_get_toplevel(state.xdg_surface);
-        wl.xdg_toplevel_set_title(state.xdg_toplevel, "wev");
-        wl.xdg_toplevel_set_app_id(state.xdg_toplevel, "wev");
-        _ = wl.xdg_toplevel_add_listener(state.xdg_toplevel, &xdg_toplevel_listener, state); // size set here
-
-        _ = wl.wl_seat_add_listener(state.seat, &wl_seat_listener, state);
-
-        const data_device: ?*wl.wl_data_device = wl.wl_data_device_manager_get_data_device(state.data_device_manager, state.seat);
-        _ = wl.wl_data_device_add_listener(data_device, &wl_data_device_listener, state);
-
-        wl.wl_surface_commit(state.surface);
-        _ = wl.wl_display_roundtrip(state.display);
-
-        return state;
     }
 
-    fn deinit(window: *Window) void {
+    _ = wl.xdg_wm_base_add_listener(state.wm_base, &xdg_wm_base_listener, null);
+
+    state.surface = wl.wl_compositor_create_surface(state.compositor); // important
+    state.xdg_surface = wl.xdg_wm_base_get_xdg_surface(state.wm_base, state.surface);
+    _ = wl.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state); // size used here
+
+    state.xdg_toplevel = wl.xdg_surface_get_toplevel(state.xdg_surface);
+    wl.xdg_toplevel_set_title(state.xdg_toplevel, "wev");
+    wl.xdg_toplevel_set_app_id(state.xdg_toplevel, "wev");
+    _ = wl.xdg_toplevel_add_listener(state.xdg_toplevel, &xdg_toplevel_listener, state); // size set here
+
+    _ = wl.wl_seat_add_listener(state.seat, &wl_seat_listener, state);
+
+    const data_device: ?*wl.wl_data_device = wl.wl_data_device_manager_get_data_device(state.data_device_manager, state.seat);
+    _ = wl.wl_data_device_add_listener(data_device, &wl_data_device_listener, state);
+
+    wl.wl_surface_commit(state.surface);
+    _ = wl.wl_display_roundtrip(state.display);
+
+    return state;
+}
+
+const thunk = struct {
+    fn queryNode(ptr: *anyopaque, pos: lib.Vec2) ?*Backend.Node {
+        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        _ = window;
+        _ = pos;
+
+        return null;
+    }
+
+    fn pollEvent(ptr: *anyopaque, timeout: i32) ?Backend.Event {
+        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        _ = window;
+        _ = timeout;
+
+        return null;
+    }
+
+    fn deinit(ptr: *anyopaque) void {
+        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+
         wl.wl_display_disconnect(window.display);
         window.a.destroy(window);
     }
 };
+
+pub fn backend(window: *BackendWayland) Backend {
+    return Backend{
+        .dataptr = window,
+        .vtable = &Backend.VTable{
+            .queryNode = thunk.queryNode,
+            .pollEvent = thunk.pollEvent,
+            .deinit = thunk.deinit,
+        },
+    };
+}
 
 const SPACER: []const u8 = "                      ";
 
@@ -663,32 +694,34 @@ fn create_buffer(state: *Window) ?*wl.wl_buffer {
         break :blk ptr[0 .. data.len / 4];
     };
 
-    const pool: ?*wl.wl_shm_pool = wl.wl_shm_create_pool(state.shm, fd, size);
+    const pool: ?*wl.wl_shm_pool = wl.wl_shm_create_pool(state.wshm, fd, size);
     const buffer: ?*wl.wl_buffer = wl.wl_shm_pool_create_buffer(pool, 0, state.width, state.height, stride, wl.WL_SHM_FORMAT_XRGB8888);
     wl.wl_shm_pool_destroy(pool);
     std.posix.close(fd);
 
-    const width = @as(usize, @intCast(state.width));
-    const height = @as(usize, @intCast(state.height));
+    // const width = @as(usize, @intCast(state.width));
+    // const height = @as(usize, @intCast(state.height));
 
-    graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
+    // graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
     // const color = 0xFFc6a3ff;
     // const color = graphi.LILAC;
-    const color = 0xFFFFFFFF;
+    // const color = 0xFFFFFFFF;
 
-    graphi.fill_triangle(ddata.ptr, width, height, 100, 200, 200, 300, 0, 400, color);
-    graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
-    // var y: usize = 0;
-    // while (y < state.height) : (y += 1) {
-    //     var x: usize = 0;
-    //     while (x < state.width) : (x += 1) {
-    //         if ((x + y / 8 * 8) % 16 < 8) {
-    //             ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFF666666;
-    //         } else {
-    //             ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFFEEEEEE;
-    //         }
-    //     }
-    // }
+    // graphi.fill_triangle(ddata.ptr, width, height, 100, 200, 200, 300, 0, 400, color);
+    // graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
+
+    var y: usize = 0;
+    while (y < state.height) : (y += 1) {
+        var x: usize = 0;
+        while (x < state.width) : (x += 1) {
+            if ((x + y / 8 * 8) % 16 < 8) {
+                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFF666666;
+            } else {
+                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFFEEEEEE;
+            }
+        }
+    }
+
     std.posix.munmap(data);
 
     _ = wl.wl_buffer_add_listener(buffer, &wl_buffer_listener, null);
@@ -961,7 +994,7 @@ fn registry_global(
     } = &.{
         .{ .interface = &wl.wl_compositor_interface, .version = 4, .ptr = @as(*?*anyopaque, @ptrCast(&state.compositor)) },
         .{ .interface = &wl.wl_seat_interface, .version = 6, .ptr = @as(*?*anyopaque, @ptrCast(&state.seat)) },
-        .{ .interface = &wl.wl_shm_interface, .version = 1, .ptr = @as(*?*anyopaque, @ptrCast(&state.shm)) },
+        .{ .interface = &wl.wl_shm_interface, .version = 1, .ptr = @as(*?*anyopaque, @ptrCast(&state.wshm)) },
         .{ .interface = &wl.xdg_wm_base_interface, .version = 2, .ptr = @as(*?*anyopaque, @ptrCast(&state.wm_base)) },
         .{ .interface = &wl.wl_data_device_manager_interface, .version = 3, .ptr = @as(*?*anyopaque, @ptrCast(&state.data_device_manager)) },
     };
@@ -999,20 +1032,11 @@ const wl_registry_listener = wl.wl_registry_listener{
     .global_remove = registry_global_remove,
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-    defer _ = gpa.deinit();
-    const a = gpa.allocator();
-
-    const state = try Window.init(a);
-    defer state.deinit();
-
-    while (wl.wl_display_dispatch(state.display) != -1) {
-        // This space deliberately left blank
-        if (state.closed) break;
-
-        // wl.wl_surface_attach(state.surface, buffer, 0, 0);
-        wl.wl_surface_damage_buffer(state.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-        wl.wl_surface_commit(state.surface);
-    }
-}
+// while (wl.wl_display_dispatch(state.display) != -1) {
+//     // This space deliberately left blank
+//     if (state.closed) break;
+//
+//     // wl.wl_surface_attach(state.surface, buffer, 0, 0);
+//     wl.wl_surface_damage_buffer(state.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+//     wl.wl_surface_commit(state.surface);
+// }

@@ -12,13 +12,16 @@ const Buffer = root.Buffer;
 const Config = @import("Config.zig");
 const Command = @import("Command.zig");
 
+const Backend = @import("backend/Backend.zig");
+
 const State = @This();
 
 /// Must be an allocator that can handle races
 a: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 
-term: scu.Term,
+// term: scu.Term,
+backend: Backend,
 
 // undos: Undo_Stack,
 // redos: Undo_Stack,
@@ -57,7 +60,7 @@ status_bar: scu.Term.Screen,
 // TreeSitter Parsers
 tsmap: std.ArrayListUnmanaged(void) = .{},
 
-pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
+pub fn init(a: std.mem.Allocator, file: ?[]const u8) anyerror!State {
     try checkfirstrun(a);
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
@@ -74,19 +77,22 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8) !State {
     }
     try buffers.append(a, buffer);
 
-    const t = try scu.Term.init(a);
+    const backend = try Backend.init(a);
+    // const t = try scu.Term.init(a);
 
     const L = lua.init();
 
     var state = State{
         .a = a,
         .arena = std.heap.ArenaAllocator.init(a),
-        .term = t,
         .L = L,
+
+        // .term = t,
+        .backend = backend,
 
         .keyMaps = .{km.KeyMaps{}} ** Buffer.Mode.COUNT,
 
-        // .undo_stack = Undo_Stack.init(a),
+        // .undo_stack = Undo_Stack.init,
         // .redo_stack = Undo_Stack.init(a),
         // .cur_undo = Undo{},
 
@@ -126,7 +132,7 @@ pub fn deinit(state: *State) void {
     }
     state.buffers.deinit(state.a);
 
-    state.term.deinit();
+    state.backend.deinit();
 
     state.arena.deinit();
 }
@@ -139,10 +145,10 @@ pub fn getCurrentBuffer(state: *State) ?*Buffer {
     return state.buffer;
 }
 
-pub fn press(state: *State) !void {
+pub fn press(state: *State, ke: trm.KeyEvent) !void {
     // -- Command Thing --------------------
     if (state.command.is) {
-        if (state.command.maps.keys.get(trm.keys.bits(state.ch))) |function| {
+        if (state.command.maps.keys.get(trm.keys.bits(ke))) |function| {
             try function.run(state);
         } else {
             try state.command.maps.fallback.run(state);
@@ -151,7 +157,7 @@ pub fn press(state: *State) !void {
     }
     // -------------------------
 
-    try state.getKeyMaps().run(state);
+    try state.getKeyMaps().run(state, ke);
 }
 
 fn getKeyMaps(state: *const State) *const km.KeyMaps {

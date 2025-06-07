@@ -14,7 +14,6 @@ stdenv.mkDerivation {
 
   src = ./.;
 
-  nativeBuildInputs = [zig];
   buildInputs = [
     pkg-config
     wayland
@@ -23,5 +22,9 @@ stdenv.mkDerivation {
     libxkbcommon
   ];
 
-  buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
+  # nativeBuildInputs = [ zig.hook ];
+  # zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" "wev" ];
+
+  nativeBuildInputs = [zig];
+  buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe wev";
 }

@@ -17,30 +17,31 @@
         # cp config/* ~/.config/neomacs/
         devShells.default = pkgs.mkShell {
           inputsFrom = with neon; [
-            # TODO: i want to use the packages but not the zig hook
-            # neomacs
+            neomacs
             wev
+            zss
+            # graphi
             # foot
             # surf
-            # neovide
           ];
 
           WAYLAND_PROTOCOLS = pkgs.wayland-protocols;
 
           packages = with pkgs; [ 
-            valgrind
-            strace
+            # valgrind
+            # strace
             zon2nix
 
-            luajit
-            (luajit.withPackages (ps: (with ps; [ fennel ])))
+            # luajit
+            # (luajit.withPackages (ps: (with ps; [ fennel ])))
 
-            tree-sitter
-            tree-sitter-grammars.tree-sitter-zig
+            # tree-sitter
+            # tree-sitter-grammars.tree-sitter-zig
 
-            zig
+            # zig
+            # zig_0_13
             zls
-            bun
+            # bun
           ];
         };
 
@@ -51,9 +52,8 @@
           default = neon.neomacs;
           neomacs = pkgs.callPackage ./nix/neomacs.nix { };
           zss = pkgs.callPackage ./nix/zss.nix { };
-          wev = pkgs.callPackage ./sub/wev/wev.nix { };
-          # foot = pkgs.callPackage ../sub/foot/foot.nix { };
-          # neovide = pkgs.callPackage ../sub/neovide/neovide.nix {};
+          wev = pkgs.callPackage ./nix/wev.nix { };
+          # foot = pkgs.callPackage ./sub/foot/foot.nix { };
         };
       });
 }

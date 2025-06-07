@@ -5,9 +5,11 @@ stdenv.mkDerivation {
 
     src = ./..;
 
-    nativeBuildInputs = [ zig.hook ];
-
     buildInputs = [];
 
-    zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" "zss" ];
+    # nativeBuildInputs = [ zig.hook ];
+    # zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" "zss" ];
+
+    nativeBuildInputs = [zig];
+    buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe wev";
 }
