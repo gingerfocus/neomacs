@@ -2,15 +2,15 @@ const root = @import("root");
 
 const std = @import("std");
 const scu = root.scu;
-const thr = @import("thermit");
-const lib = @import("lib.zig");
+const trm = root.trm;
+const lib = root.lib;
 
-const State = @import("State.zig");
+const State = root.State;
 
 pub const sidebarWidth = 3;
 pub const statusbarHeight = 2;
 
-pub fn render(state: *State) !void {
+pub fn draw(state: *State) !void {
     try state.term.start(state.resized);
     defer state.term.finish() catch |err| root.log(@src(), .err, "{any}", .{err});
 
@@ -237,23 +237,8 @@ pub fn render(state: *State) !void {
     state.resized = false;
 }
 
-// fn bufferSpaceToScreen(
-//     screen: *const scu.Term.Screen,
-//     point: lib.Vec2,
-//     scroll: lib.Vec2,
-// ) ?lib.Vec2 {
-//     _ = scroll; // autofix
-//
-//     if (point.row > screen.w or point.col > screen.h) return null;
-//     return lib.Vec2{
-//         .row = point.row + screen.x,
-//         .col = point.col + screen.y,
-//     };
-// }
-
 pub fn handleCursorShape(state: *State) !void {
-    // @setCold(true);
-    try thr.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
+    try trm.setCursorStyle(state.term.tty.f.writer(), switch (state.buffer.mode) {
         .insert => .SteadyBar,
         else => .SteadyBlock,
     });

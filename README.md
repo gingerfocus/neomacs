@@ -1,5 +1,5 @@
 # Neomacs
-![Neomacs Banner Logo](./etc/logo.jpg)
+![Neomacs Banner Logo](./etc/neon.svg)
 
 a combination of many small projects I have worked on
 

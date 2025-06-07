@@ -12,7 +12,7 @@
     },
     .dependencies = .{
         .terminal = .{
-            .url = "https://github.com/gingerfocus/thermit/archive/9505f45ee9cef06eba1b31faaa6f0ce919844590.tar.gz",
+            .url = "https://github.com/gingerfocus/thermit/archive/b8713e0a9e88a48edc0dd9f743afe4de0decfbb4.tar.gz",
             // .hash = "thermit-0.1.0-wTQBCPikAAAHxU2I32O-c75NT1uiZJKKiCy_dfplPfPo",
             .hash = "thermit-0.1.0-wTQBCKinAADUFPoCk74TBjGv85nt88SrVXsrKizqZy_y",
         },
@@ -28,5 +28,8 @@
             .url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz",
             .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
         },
+        .graphi = .{
+            .path = "sub/graphi",
+        }
     },
 }

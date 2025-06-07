@@ -1,16 +1,17 @@
 const std = @import("std");
-const lib = @import("zss");
+const root = @import("neomacs");
+const zss = root.zss;
 
 pub fn main() !void {
     // the file that data is read from
-    const f = std.fs.File{ .handle = blk: {
-        if (std.os.argv.len < 2) break :blk std.posix.STDIN_FILENO;
+    const f = blk: {
+        if (std.os.argv.len < 2) break :blk std.io.getStdIn();
 
         const file = std.mem.span(std.os.argv[1]);
-        if (std.mem.eql(u8, file, "-")) break :blk std.posix.STDIN_FILENO;
-        break :blk try std.posix.open(file, .{}, 0);
-    } };
-    defer if (f.handle != std.posix.STDIN_FILENO) std.posix.close(f.handle);
+        if (std.mem.eql(u8, file, "-")) break :blk std.io.getStdIn();
+        break :blk try std.fs.cwd().openFile(file, .{});
+    };
+    defer if (f.handle != std.posix.STDIN_FILENO) f.close();
 
-    try lib.page(f);
+    try zss.page(f);
 }

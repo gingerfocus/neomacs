@@ -1,9 +1,8 @@
 const std = @import("std");
-const root = @import("main.zig");
-// const root = @import("root");
+const root = @import("root");
+
 const keys = @import("keys.zig");
 const lua = @import("lua.zig");
-const fr = @import("frontend.zig");
 const km = @import("keymaps.zig");
 
 const scu = root.scu;
@@ -14,11 +13,6 @@ const Config = @import("Config.zig");
 const Command = @import("Command.zig");
 
 const State = @This();
-
-// pub const Static = struct {
-//     pub var config = Config{};
-//     // __none: std.meta.Tuple(),
-// };
 
 /// Must be an allocator that can handle races
 a: std.mem.Allocator,

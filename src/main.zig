@@ -1,17 +1,18 @@
 const std = @import("std");
-const mem = std.mem;
-const zss = @import("zss.zig");
 
 pub const scu = @import("scured");
 pub const trm = @import("thermit"); // scu.thermit;
 pub const lib = @import("lib.zig");
 
-const front = @import("frontend.zig");
+const render = @import("render/root.zig");
 const alloc = @import("alloc.zig");
 const lua = @import("lua.zig");
 
 pub const Buffer = @import("Buffer.zig");
 pub const State = @import("State.zig");
+
+pub const shm = @import("shm.zig");
+pub const zss = @import("zss.zig");
 
 // pub const ts = @cImport({
 //     @cInclude("tree_sitter/api.h");
@@ -77,7 +78,7 @@ fn neomacs() !void {
     const args = try Args.parse(a, std.os.argv);
     defer args.deinit(a);
 
-    const filename: ?[]const u8 = if (args.positionals.len > 0) mem.span(args.positionals[0]) else null;
+    const filename: ?[]const u8 = if (args.positionals.len > 0) std.mem.span(args.positionals[0]) else null;
 
     // run just the terminal pager when comfigured to do so
     if (args.pager) {
@@ -96,7 +97,7 @@ fn neomacs() !void {
     defer s.deinit();
 
     while (!(trm.keys.bits(s.ch) == trm.keys.ctrl('q')) and !s.config.QUIT) {
-        try front.render(s);
+        try render.draw(s);
 
         const ev = try s.term.tty.read(10000);
         switch (ev) {

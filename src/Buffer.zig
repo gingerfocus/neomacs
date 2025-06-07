@@ -32,6 +32,8 @@ col: usize = 0,
 
 filename: []const u8,
 
+// arena: std.heap.ArenaAllocator,
+
 // keymaps: std.AutoArrayHashMapUnmanaged(u8, *km.KeyMaps) = .{},
 
 const Line = struct {
