@@ -32,9 +32,6 @@
             # strace
             zon2nix
 
-            # luajit
-            # (luajit.withPackages (ps: (with ps; [ fennel ])))
-
             # tree-sitter
             # tree-sitter-grammars.tree-sitter-zig
 

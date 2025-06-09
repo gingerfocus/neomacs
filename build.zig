@@ -79,6 +79,15 @@ pub fn build(b: *std.Build) void {
 
     // ---------
 
+    const graphi = b.dependency("graphi", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    neomacs.linkLibrary(graphi.artifact("graphi"));
+    neomacs.addIncludePath(graphi.namedLazyPath("include"));
+
+    // ---------
+
     const neomacsExe = b.addExecutable(.{
         .root_module = neomacs,
         .name = "neomacs",
@@ -117,16 +126,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // -------------------------------------------------------------------------
-
     wevExe.root_module.addImport("neomacs", neomacs);
-
-    const graphi = b.dependency("graphi", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    wevExe.linkLibrary(graphi.artifact("graphi"));
-    wevExe.addIncludePath(graphi.namedLazyPath("include"));
 
     addBuildAndRunSteps(b, "wev", wevExe);
 

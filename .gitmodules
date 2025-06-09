@@ -1,9 +1,0 @@
-[submodule "sub/zss"]
-	path = sub/zss
-	url = https://github.com/gingerfocus/zss.git
-[submodule "sub/luma"]
-	path = sub/luma
-	url = https://github.com/gingerfocus/luma.git
-[submodule "sub/pty"]
-	path = sub/pty
-	url = https://github.com/gingerfocus/pty.git

@@ -4,9 +4,14 @@ const root = @import("root");
 const lib = root.lib;
 const mem = std.mem;
 const shm = root.shm;
+const trm = @import("thermit");
 
 const Window = @This();
 const BackendWayland = @This();
+
+const graphi = @cImport({
+    @cInclude("graphi.h");
+});
 
 const wl = @cImport({
     @cInclude("wayland-client-core.h");
@@ -30,23 +35,29 @@ const wl = @cImport({
     // #include <xkbcommon/xkbcommon.h>
 });
 
-// const State = opaque {};
-//
-// const Backend = struct {
-//     data: *anyopaque,
-//     /// Waits for the next event from the backend, if an event ocurrs then run
-//     /// the event callback.
-//     pollFn: fn (*anyopaque) void,
-//     /// Uses the state to render the screen
-//     renderFn: fn (*anyopaque, *State) void,
-//     /// Checks weather the backend is requesting to close
-//     runFn: fn (*anyopaque) bool,
-// };
+const Mod = enum {
+    Super,
+};
+
+const WaylandEvent = struct {
+    pressed: bool,
+    ty: union(enum) {
+        key: u32,
+    },
+};
+
+events: std.ArrayListUnmanaged(WaylandEvent) = .{},
+modifiers: trm.KeyModifiers = .{},
 
 closed: bool = false,
 
-display: ?*wl.wl_display = null,
-registry: ?*wl.wl_registry = null,
+/// Current buffer that is submitted to render
+buffer: ?*wl.wl_buffer = null,
+/// Write buffer that will be swapped with `buffer` on next render
+swapbuffer: ?*wl.wl_buffer = null,
+
+display: *wl.wl_display,
+registry: *wl.wl_registry,
 compositor: ?*wl.wl_compositor = null,
 seat: ?*wl.wl_seat = null,
 wshm: ?*wl.wl_shm = null,
@@ -61,7 +72,7 @@ width: i32 = 0,
 height: i32 = 0,
 
 xkb_state: ?*wl.xkb_state = null,
-xkb_context: ?*wl.xkb_context = null,
+xkb_context: *wl.xkb_context,
 xkb_keymap: ?*wl.xkb_keymap = null,
 
 selection: ?*wl.wl_data_offer = null,
@@ -70,50 +81,51 @@ dnd: ?*wl.wl_data_offer = null,
 a: std.mem.Allocator,
 
 pub fn init(a: std.mem.Allocator) !*Window {
-    if (true) return error.NoWayland;
-
     const state = try a.create(Window);
-    state.* = .{
-        .closed = false,
 
-        .display = null,
-        .registry = null,
-        .compositor = null,
-        .seat = null,
-        .wshm = null,
-        .wm_base = null,
-        .data_device_manager = null,
-
-        .surface = null,
-        .xdg_surface = null,
-        .xdg_toplevel = null,
-
-        .width = 0,
-        .height = 0,
-
-        .xkb_state = null,
-        .xkb_context = wl.xkb_context_new(wl.XKB_CONTEXT_NO_FLAGS),
-        .xkb_keymap = null,
-
-        .selection = null,
-        .dnd = null,
-
-        .a = a,
-    };
-
-    state.display = wl.wl_display_connect(null) orelse {
+    const display = wl.wl_display_connect(null) orelse {
         std.debug.print("Failed to connect to Wayland display\n", .{});
         return error.NoDisplay;
     };
 
-    state.registry = wl.wl_display_get_registry(state.display) orelse {
+    const registry = wl.wl_display_get_registry(display) orelse {
         std.debug.print("Failed to obtain Wayland registry\n", .{});
         return error.NoRegistry;
     };
-    _ = wl.wl_registry_add_listener(state.registry, &wl_registry_listener, state);
+
+    _ = wl.wl_registry_add_listener(registry, &wl_registry_listener, state);
+
+    state.* = .{
+        // .closed = false,
+        //
+        .registry = registry,
+        .display = display,
+        // .compositor = null,
+        // .seat = null,
+        // .wshm = null,
+        // .wm_base = null,
+        // .data_device_manager = null,
+        //
+        // .surface = null,
+        // .xdg_surface = null,
+        // .xdg_toplevel = null,
+        //
+        // .width = 0,
+        // .height = 0,
+        //
+        // .xkb_state = null,
+        .xkb_context = wl.xkb_context_new(wl.XKB_CONTEXT_NO_FLAGS) orelse return error.NoKeyboard,
+        // .xkb_keymap = null,
+        //
+        // .selection = null,
+        // .dnd = null,
+
+        .a = a,
+    };
 
     // _ = wl.wl_display_dispatch(state.display);
     _ = wl.wl_display_roundtrip(state.display);
+    std.debug.print("after roundtrip\n", .{});
 
     // check what the compositor has given us in the first roundtrip
     const required: []const struct { name: []const u8, ptr: ?*anyopaque } = &.{
@@ -136,6 +148,8 @@ pub fn init(a: std.mem.Allocator) !*Window {
     state.xdg_surface = wl.xdg_wm_base_get_xdg_surface(state.wm_base, state.surface);
     _ = wl.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state); // size used here
 
+    std.debug.print("surface: {*}\n", .{state.surface});
+
     state.xdg_toplevel = wl.xdg_surface_get_toplevel(state.xdg_surface);
     wl.xdg_toplevel_set_title(state.xdg_toplevel, "wev");
     wl.xdg_toplevel_set_app_id(state.xdg_toplevel, "wev");
@@ -149,24 +163,120 @@ pub fn init(a: std.mem.Allocator) !*Window {
     wl.wl_surface_commit(state.surface);
     _ = wl.wl_display_roundtrip(state.display);
 
+    std.debug.print("surface: {*}\n", .{state.surface});
+
     return state;
 }
 
 const thunk = struct {
-    fn queryNode(ptr: *anyopaque, pos: lib.Vec2) ?*Backend.Node {
+    fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
-        _ = window;
-        _ = pos;
 
-        return null;
+        _ = pos;
+        _ = window;
+        _ = node;
+
+        // // Use graphi to render text into the window buffer.
+        // // Example: draw "Hello, wind!" at position (pos.x, pos.y)
+        // var text_buf: [32]u8 = undefined;
+        // const text = "Hello, wind!";
+        // @memcpy(text_buf[0..text.len], text);
+        // text_buf[text.len] = 0;
+
+        // // Get buffer pointer and dimensions from window
+        // if (window.buffer) |buf| {
+
+        //     // We don't have direct access to the pixel data here,
+        //     // but if we did, we'd call graphi.draw_text on it.
+        //     // This is a placeholder for where you'd integrate graphi drawing.
+        //     // graphi.draw_text(pixel_ptr, width, height, &text_buf, pos.x, pos.y, ...);
+        // }
+
+        return;
     }
 
-    fn pollEvent(ptr: *anyopaque, timeout: i32) ?Backend.Event {
+    fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
-        _ = window;
-        _ = timeout;
 
-        return null;
+        if (window.closed) {
+            _ = wl.wl_display_dispatch(window.display);
+            return Backend.Event.End;
+        }
+
+        _ = wl.wl_display_dispatch_pending(window.display); // do client stuff
+        _ = wl.wl_display_flush(window.display); // send everything to server
+
+        if (window.events.items.len == 0) {
+            const fd = wl.wl_display_get_fd(window.display);
+            // std.debug.print("fd: {d}\n", .{fd});
+            var fds = [1]std.posix.pollfd{std.posix.pollfd{
+                .fd = fd,
+                .events = std.posix.POLL.IN,
+                .revents = 0,
+            }};
+            const count = std.posix.poll(&fds, timeout) catch unreachable;
+
+            if (count == 0)
+                return Backend.Event.Timeout;
+        }
+
+        _ = wl.wl_display_dispatch(window.display);
+        // if (events < 0) return Backend.Event{ .Error = true };
+        // if (events == 0) return Backend.Event.Timeout;
+
+        if (window.events.items.len == 0) return Backend.Event.Timeout;
+
+        const event = window.events.orderedRemove(0);
+
+        // convert event
+        switch (event.ty) {
+            .key => |sym| switch (sym) {
+                65507, 65508 => window.modifiers.ctrl = event.pressed,
+                // 65515 => window.modifiers.supr = event.pressed,
+                65513, 65514 => window.modifiers.altr = event.pressed,
+                65505, 65506 => window.modifiers.shft = event.pressed,
+                65293 => {
+                    // ENTER
+                },
+                65289 => {
+                    // TAB
+                },
+                65509 => {
+                    // CAPS
+                },
+                // 65361 - arrow left
+                // 65362 - arrow up
+                // 65364 - arrow down
+                // 65363 - arrow right
+
+                // 65288 - delete
+
+                // 65470 - F1
+                // 65471 - F2
+                // ...
+
+                // 269025074
+
+                49...122 => {
+                    const ch: u8 = @intCast(sym);
+                    return Backend.Event{ .Key = .{
+                        .character = ch,
+                        .modifiers = window.modifiers,
+                    } };
+                },
+                32 => {
+                    return Backend.Event{ .Key = .{
+                        .character = trm.KeySymbol.Space.toBits(),
+                        .modifiers = window.modifiers,
+                    } };
+                },
+                else => {
+                    std.debug.print("unknown key: {} ({})\n", .{ sym, event.pressed });
+                },
+            },
+        }
+
+        return Backend.Event.Unknown;
     }
 
     fn deinit(ptr: *anyopaque) void {
@@ -175,17 +285,101 @@ const thunk = struct {
         wl.wl_display_disconnect(window.display);
         window.a.destroy(window);
     }
+
+    fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
+        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+
+        // _ = window;
+
+        switch (mode) {
+            .begin => {},
+            .end => {
+                const buffer = create_buffer(window);
+                wl.wl_surface_attach(window.surface, buffer, 0, 0);
+                wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+                wl.wl_surface_commit(window.surface);
+            },
+        }
+    }
 };
 
 pub fn backend(window: *BackendWayland) Backend {
     return Backend{
         .dataptr = window,
         .vtable = &Backend.VTable{
-            .queryNode = thunk.queryNode,
+            .drawFn = thunk.draw,
             .pollEvent = thunk.pollEvent,
             .deinit = thunk.deinit,
+            .render = thunk.render,
         },
     };
+}
+
+fn create_buffer(state: *Window) ?*wl.wl_buffer {
+    const stride = state.width * 4;
+    const size = stride * state.height;
+    const ssize = @as(usize, @intCast(size));
+
+    const fd = shm.allocateShmFile(ssize) catch {
+        // fprintf(stderr, "Failed to create shm pool file: %s", strerror(errno));
+        return null;
+    };
+
+    const data: []align(4096) u8 = std.posix.mmap(null, ssize, std.posix.PROT.READ | std.posix.PROT.WRITE, .{ .TYPE = .SHARED }, fd, 0) catch {
+        // fprintf(stderr, "shm buffer mmap failed\n");
+        std.posix.close(fd);
+        return null;
+    };
+    const ddata: []u32 = blk: {
+        const ptr: [*]u32 = @ptrCast(data.ptr);
+        break :blk ptr[0 .. data.len / 4];
+    };
+
+    const pool: ?*wl.wl_shm_pool = wl.wl_shm_create_pool(state.wshm, fd, size);
+    const buffer: ?*wl.wl_buffer = wl.wl_shm_pool_create_buffer(pool, 0, state.width, state.height, stride, wl.WL_SHM_FORMAT_XRGB8888);
+    wl.wl_shm_pool_destroy(pool);
+    std.posix.close(fd);
+
+    const width = @as(usize, @intCast(state.width));
+    const height = @as(usize, @intCast(state.height));
+
+    // graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
+    // const color = 0xFFc6a3ff;
+    // const color = 0xFFFFFFFF;
+
+    // graphi.fill_triangle(ddata.ptr, width, height, 100, 200, 200, 300, 0, 400, color);
+    // graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
+
+    var y: usize = 0;
+    while (y < state.height) : (y += 1) {
+        var x: usize = 0;
+        while (x < state.width) : (x += 1) {
+            if ((x + y / 8 * 8) % 16 < 8) {
+                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFF666666;
+            } else {
+                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFFEEEEEE;
+            }
+        }
+    }
+
+    const time = std.time.milliTimestamp();
+    var buf: [64]u8 = undefined;
+    const out = std.fmt.bufPrint(&buf, "{d}", .{time}) catch unreachable;
+    buf[out.len] = 0; // null terminat
+
+    const color2 = graphi.LILAC;
+    const rectheigh = 90;
+    graphi.fill_triangle(ddata.ptr, width, height, 0, 0, state.width, 0, 0, rectheigh, color2);
+    graphi.fill_triangle(ddata.ptr, width, height, 0, rectheigh, state.width, 0, state.width, rectheigh, color2);
+
+    const color1 = graphi.RED;
+    graphi.draw_text(ddata.ptr, width, height, &buf, 6, 6, 10, 5, 7, 1, color1);
+
+    std.posix.munmap(data);
+
+    _ = wl.wl_buffer_add_listener(buffer, &wl_buffer_listener, null);
+
+    return buffer;
 }
 
 const SPACER: []const u8 = "                      ";
@@ -492,26 +686,39 @@ fn key_state_str(state: u32) []const u8 {
     };
 }
 
-fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32, time: u32, key: u32, state: u32) callconv(.C) void {
-    const wevstate: *Window = @alignCast(@ptrCast(data));
-    const name = mem.span(wl.wl_proxy_get_class(@ptrCast(wl_keyboard)));
-    const id = wl.wl_proxy_get_id(@ptrCast(wl_keyboard));
-    std.debug.print(
-        "[{:2}:{s:16}] key: serial: {}; time: {}; key: {}; state: {} ({s})\n",
-        .{ id, name, serial, time, key + 8, state, key_state_str(state) },
-    );
+fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32, time: u32, key: u32, pressedstate: u32) callconv(.C) void {
+    const window: *Window = @alignCast(@ptrCast(data));
 
-    var buf: [128]u8 = undefined;
-    const sym: wl.xkb_keysym_t = wl.xkb_state_key_get_one_sym(wevstate.xkb_state, key + 8);
+    _ = wl_keyboard;
+    _ = serial;
+    _ = time;
 
-    const keycode: u32 = if (state == wl.WL_KEYBOARD_KEY_STATE_PRESSED) key + 8 else 0;
+    // const name = mem.span(wl.wl_proxy_get_class(@ptrCast(wl_keyboard)));
+    // const id = wl.wl_proxy_get_id(@ptrCast(wl_keyboard));
 
-    _ = wl.xkb_keysym_get_name(sym, &buf, buf.len);
-    std.debug.print(SPACER ++ "sym: {s} ({}), \n", .{ buf[0..12], sym });
+    const pressed = pressedstate == wl.WL_KEYBOARD_KEY_STATE_PRESSED;
 
-    _ = wl.xkb_state_key_get_utf8(wevstate.xkb_state, keycode, &buf, buf.len);
-    //     escape_utf8(buf);
-    // printf("utf8: '%s'\n", buf);
+    // std.debug.print(
+    //     "[{:2}:{s:16}] key: serial: {}; time: {}; key: {}; state: {} ({s})\n",
+    //     .{ id, name, serial, time, key + 8, pressed, key_state_str(pressedstate) },
+    // );
+
+    // var buf: [128]u8 = undefined;
+    const sym: wl.xkb_keysym_t = wl.xkb_state_key_get_one_sym(window.xkb_state, key + 8);
+
+    // _ = wl.xkb_keysym_get_name(sym, &buf, buf.len);
+    // std.debug.print(SPACER ++ "sym: {s} ({}), \n", .{ buf[0..12], sym });
+
+    // const keycode: u32 = if (pressed) key + 8 else 0;
+
+    // _ = wl.xkb_state_key_get_utf8(window.xkb_state, keycode, &buf, buf.len);
+    // escape_utf8(buf);
+    // std.debug.print(SPACER ++ "utf8: '{s}'\n", .{buf[0..12]});
+
+    window.events.append(window.a, .{
+        .pressed = pressed,
+        .ty = .{ .key = sym },
+    }) catch {};
 }
 
 // static void print_modifiers(struct Window *state, uint32_t mods) {
@@ -674,61 +881,6 @@ const wl_buffer_listener = wl.wl_buffer_listener{
     .release = wl_buffer_release,
 };
 
-fn create_buffer(state: *Window) ?*wl.wl_buffer {
-    const stride = state.width * 4;
-    const size = stride * state.height;
-    const ssize = @as(usize, @intCast(size));
-
-    const fd = shm.allocateShmFile(ssize) catch {
-        // fprintf(stderr, "Failed to create shm pool file: %s", strerror(errno));
-        return null;
-    };
-
-    const data: []align(4096) u8 = std.posix.mmap(null, ssize, std.posix.PROT.READ | std.posix.PROT.WRITE, .{ .TYPE = .SHARED }, fd, 0) catch {
-        // fprintf(stderr, "shm buffer mmap failed\n");
-        std.posix.close(fd);
-        return null;
-    };
-    const ddata: []u32 = blk: {
-        const ptr: [*]u32 = @ptrCast(data.ptr);
-        break :blk ptr[0 .. data.len / 4];
-    };
-
-    const pool: ?*wl.wl_shm_pool = wl.wl_shm_create_pool(state.wshm, fd, size);
-    const buffer: ?*wl.wl_buffer = wl.wl_shm_pool_create_buffer(pool, 0, state.width, state.height, stride, wl.WL_SHM_FORMAT_XRGB8888);
-    wl.wl_shm_pool_destroy(pool);
-    std.posix.close(fd);
-
-    // const width = @as(usize, @intCast(state.width));
-    // const height = @as(usize, @intCast(state.height));
-
-    // graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
-    // const color = 0xFFc6a3ff;
-    // const color = graphi.LILAC;
-    // const color = 0xFFFFFFFF;
-
-    // graphi.fill_triangle(ddata.ptr, width, height, 100, 200, 200, 300, 0, 400, color);
-    // graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
-
-    var y: usize = 0;
-    while (y < state.height) : (y += 1) {
-        var x: usize = 0;
-        while (x < state.width) : (x += 1) {
-            if ((x + y / 8 * 8) % 16 < 8) {
-                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFF666666;
-            } else {
-                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFFEEEEEE;
-            }
-        }
-    }
-
-    std.posix.munmap(data);
-
-    _ = wl.wl_buffer_add_listener(buffer, &wl_buffer_listener, null);
-
-    return buffer;
-}
-
 fn xdg_toplevel_configure(data: ?*anyopaque, xdg_toplevel: ?*wl.xdg_toplevel, width: i32, height: i32, states: ?*wl.wl_array) callconv(.C) void {
     _ = xdg_toplevel; // autofix
     const state: *Window = @alignCast(@ptrCast(data));
@@ -814,7 +966,8 @@ const xdg_surface_listener = wl.xdg_surface_listener{
 };
 
 fn wm_base_ping(data: ?*anyopaque, wm_base: ?*wl.xdg_wm_base, serial: u32) callconv(.C) void {
-    _ = data; // autofix
+    _ = data;
+    std.debug.print("[xdg_wm_base]: ping serial: {}\n", .{serial});
     wl.xdg_wm_base_pong(wm_base, serial);
 }
 
@@ -856,7 +1009,7 @@ const xdg_wm_base_listener = wl.xdg_wm_base_listener{
 //         return "unknown";
 //     }
 // }
-//
+
 // static void wl_data_offer_source_actions(void *data,
 //         struct wl_data_offer *offer, uint32_t actions) {
 //     struct Window *state = data;
@@ -870,13 +1023,15 @@ const xdg_wm_base_listener = wl.xdg_wm_base_listener{
 //     proxy_log(state, (struct wl_proxy *)offer, "action",
 //             "dnd_action: %u (%s)\n", dnd_action, dnd_actions_str(dnd_action));
 // }
-//
+
 // static const struct wl_data_offer_listener wl_data_offer_listener = {
 //     .offer = wl_data_offer_offer,
 //     .source_actions = wl_data_offer_source_actions,
 //     .action = wl_data_offer_action,
 // };
-//
+
+// --------
+
 fn wl_data_device_data_offer(data: ?*anyopaque, device: ?*wl.wl_data_device, id: ?*wl.wl_data_offer) callconv(.C) void {
     _ = data; // autofix
     _ = device; // autofix
@@ -978,6 +1133,8 @@ const wl_data_device_listener = wl.wl_data_device_listener{
     .selection = wl_data_device_selection,
 };
 
+// ---------------
+
 fn registry_global(
     data: ?*anyopaque,
     wl_registry: ?*wl.wl_registry,
@@ -999,44 +1156,27 @@ fn registry_global(
         .{ .interface = &wl.wl_data_device_manager_interface, .version = 3, .ptr = @as(*?*anyopaque, @ptrCast(&state.data_device_manager)) },
     };
 
-    //     char *xdg_current_desktop = getenv("XDG_CURRENT_DESKTOP");
-
-    //     /* Mutter currently implements wl_seat version 5, not 6 */
-    //     if (xdg_current_desktop && !strcmp(xdg_current_desktop, "GNOME"))
-    //         handles[1].version = 5;
-
     for (handles) |handle| {
         if (std.mem.orderZ(u8, interface, handle.interface.name) == .eq) {
-            // std.debug.print("connection to {s} (v{}) at verison {}\n", .{ std.mem.span(interface), version, handle.version });
+            std.debug.print("connection to {s} (v{}) at verison {}\n", .{ std.mem.span(interface), version, handle.version });
             // std.debug.assert(version >= handle.version);
             handle.ptr.* = wl.wl_registry_bind(wl_registry, name, handle.interface, handle.version);
         }
     }
 
-    if (false) {
-        std.debug.print("global interface: {s}, vertsion: {}, name: {}\n", .{ std.mem.span(interface), version, name });
-    }
+    // std.debug.print("global interface: {s}, vertsion: {}, name: {}\n", .{ std.mem.span(interface), version, name });
 }
 
 fn registry_global_remove(
     _: ?*anyopaque,
     _: ?*wl.wl_registry,
-    _: u32,
+    id: u32,
 ) callconv(.C) void {
     // Who cares
-    // std.debug.print("Got a registry losing event for {}\n", .{id});
+    std.debug.print("Got a registry losing event for {}\n", .{id});
 }
 
 const wl_registry_listener = wl.wl_registry_listener{
     .global = registry_global,
     .global_remove = registry_global_remove,
 };
-
-// while (wl.wl_display_dispatch(state.display) != -1) {
-//     // This space deliberately left blank
-//     if (state.closed) break;
-//
-//     // wl.wl_surface_attach(state.surface, buffer, 0, 0);
-//     wl.wl_surface_damage_buffer(state.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-//     wl.wl_surface_commit(state.surface);
-// }

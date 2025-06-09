@@ -3,6 +3,7 @@ const lib = root.lib;
 const std = @import("std");
 
 const scu = @import("scured");
+const trm = root.trm;
 
 const Backend = @import("Backend.zig");
 
@@ -25,17 +26,42 @@ pub fn init(a: std.mem.Allocator) !*Self {
 }
 
 const thunk = struct {
-    fn queryNode(ptr: *anyopaque, pos: lib.Vec2) ?*Backend.Node {
+    fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
         const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
 
         const row = @as(u16, @intCast(pos.row));
         const col = @as(u16, @intCast(pos.col));
-        return self.terminal.getCell(row, col);
+
+        const cell = self.terminal.getCell(row, col) orelse return;
+
+        if (node.background) |bg| cell.bg = bg;
+        if (node.foreground) |fg| cell.fg = fg;
+        if (node.content) |con| {
+            switch (con) {
+                .Text => |ch| cell.setSymbol(ch),
+                .Image => |_| {
+                    root.log(@src(), .warn, "cant draw images on terminal backend", .{});
+                    cell.setSymbol('');
+                },
+            }
+        }
+
+        return;
     }
 
-    fn pollEvent(ptr: *anyopaque, timeout: i32) ?Backend.Event {
+    fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
         const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
-        return self.terminal.tty.read(timeout) catch return null;
+        const event: trm.Event = self.terminal.tty.read(timeout) catch return .{ .Error = true };
+        switch (event) {
+            .Key => |ke| return Backend.Event{ .Key = ke },
+            else => {
+                return Backend.Event.Unknown;
+            },
+            // .Resize,
+            // .Timeout,
+            // .End,
+            // .Unknown,
+        }
     }
 
     fn deinit(ptr: *anyopaque) void {
@@ -44,15 +70,29 @@ const thunk = struct {
         self.terminal.deinit();
         self.a.destroy(self);
     }
+
+    fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
+        const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
+
+        switch (mode) {
+            .begin => {
+                self.terminal.start(false) catch {};
+            },
+            .end => {
+                self.terminal.finish() catch {};
+            },
+        }
+    }
 };
 
 pub fn backend(terminal: *TerminalBackend) Backend {
     return Backend{
         .dataptr = terminal,
         .vtable = &Backend.VTable{
-            .queryNode = thunk.queryNode,
+            .drawFn = thunk.draw,
             .pollEvent = thunk.pollEvent,
             .deinit = thunk.deinit,
+            .render = thunk.render,
         },
     };
 }

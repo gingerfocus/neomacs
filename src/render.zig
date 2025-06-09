@@ -11,6 +11,11 @@ pub const sidebarWidth = 3;
 pub const statusbarHeight = 2;
 
 pub fn draw(state: *State) !void {
+    state.backend.render(.begin);
+    defer state.backend.render(.end);
+
+    if (true) return;
+
     const BackendTerminal = @import("backend/BackendTerminal.zig");
     const backend = @as(*BackendTerminal, @ptrCast(@alignCast(state.backend.dataptr)));
     const term = &backend.terminal;
