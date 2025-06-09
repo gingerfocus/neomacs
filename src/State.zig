@@ -12,7 +12,7 @@ const Buffer = root.Buffer;
 const Config = @import("Config.zig");
 const Command = @import("Command.zig");
 
-const Backend = @import("backend/Backend.zig");
+pub const Backend = @import("backend/Backend.zig");
 
 const State = @This();
 
@@ -60,7 +60,7 @@ status_bar: scu.Term.Screen,
 // TreeSitter Parsers
 tsmap: std.ArrayListUnmanaged(void) = .{},
 
-pub fn init(a: std.mem.Allocator, file: ?[]const u8) anyerror!State {
+pub fn init(a: std.mem.Allocator, file: ?[]const u8, terminal: bool) anyerror!State {
     try checkfirstrun(a);
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
@@ -77,7 +77,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8) anyerror!State {
     }
     try buffers.append(a, buffer);
 
-    const backend = try Backend.init(a);
+    const backend = try Backend.init(a, terminal);
     // const t = try scu.Term.init(a);
 
     const L = lua.init();

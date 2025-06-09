@@ -36,14 +36,13 @@ const thunk = struct {
 
         if (node.background) |bg| cell.bg = bg;
         if (node.foreground) |fg| cell.fg = fg;
-        if (node.content) |con| {
-            switch (con) {
-                .Text => |ch| cell.setSymbol(ch),
-                .Image => |_| {
-                    root.log(@src(), .warn, "cant draw images on terminal backend", .{});
-                    cell.setSymbol('');
-                },
-            }
+        switch (node.content) {
+            .Text => |ch| cell.symbol = ch,
+            .Image => |_| {
+                root.log(@src(), .warn, "cant draw images on terminal backend", .{});
+                cell.symbol = '';
+            },
+            .None => {},
         }
 
         return;

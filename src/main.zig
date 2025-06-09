@@ -51,7 +51,7 @@ pub inline fn state() *State {
 pub fn main() u8 {
     const logFile = std.fs.cwd().createFile("neomacs.log", .{}) catch null;
     defer if (logFile) |file| file.close();
-    scu.log.setFile(logFile);
+    scu.log.file = logFile;
 
     neomacs() catch |err| {
         std.debug.print("Some unrecoverable error occorred. Check log file for details.\n", .{});
@@ -92,7 +92,7 @@ fn neomacs() !void {
 
     const file: ?[]const u8 = args.help orelse filename;
 
-    static.state = try State.init(a, file);
+    static.state = try State.init(a, file, args.terminal);
     const s = state();
     defer s.deinit();
 

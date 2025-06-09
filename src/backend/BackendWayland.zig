@@ -141,7 +141,6 @@ pub fn init(a: std.mem.Allocator) !*Window {
 
     // _ = wl.wl_display_dispatch(state.display);
     _ = wl.wl_display_roundtrip(state.display);
-    std.debug.print("after roundtrip\n", .{});
 
     // check what the compositor has given us in the first roundtrip
     const required: []const struct { name: []const u8, ptr: ?*anyopaque } = &.{
@@ -184,9 +183,8 @@ const thunk = struct {
     fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
 
-        _ = pos;
-        _ = window;
-        _ = node;
+        const width = @as(usize, @intCast(window.width));
+        const height = @as(usize, @intCast(window.height));
 
         // // Use graphi to render text into the window buffer.
         // // Example: draw "Hello, wind!" at position (pos.x, pos.y)
@@ -195,14 +193,54 @@ const thunk = struct {
         // @memcpy(text_buf[0..text.len], text);
         // text_buf[text.len] = 0;
 
-        // // Get buffer pointer and dimensions from window
-        // if (window.buffer) |buf| {
+        const FONTWIDTH: i32 = 5;
+        const FONTHEIGHT: i32 = 7;
 
-        //     // We don't have direct access to the pixel data here,
-        //     // but if we did, we'd call graphi.draw_text on it.
-        //     // This is a placeholder for where you'd integrate graphi drawing.
-        //     // graphi.draw_text(pixel_ptr, width, height, &text_buf, pos.x, pos.y, ...);
+        // if (node.background) |bg| {
+        //     const rs = pos.row * FONTHEIGHT;
+        //     const re = rs + FONTHEIGHT;
+
+        //     const cs = pos.col * FONTWIDTH;
+        //     const ce = cs + FONTWIDTH;
+
+        //     for (rs..re) |row| {
+        //         for (cs..ce) |col| {
+        //             const index = (row * width + col) * 4;
+        //             const rgb = bg.toRgb();
+        //             window.buffer.data[index] = rgb[0];
+        //             window.buffer.data[index + 1] = rgb[1];
+        //             window.buffer.data[index + 2] = rgb[2];
+        //             window.buffer.data[index + 3] = 255; // Alpha channel
+        //         }
+        //     }
         // }
+
+        const FONTSIZE = 7;
+
+        switch (node.content) {
+            .Text => |ch| {
+                const rendercolor = node.foreground orelse .Black;
+                const rgb = rendercolor.toRgb();
+                // std.mem.writeInt()
+                const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
+
+                var text_buf: [2]u8 = .{ ch, 0 };
+                // std.debug.print("ch: {c}\n", .{ch});
+                graphi.graphi_draw_text(
+                    @ptrCast(@alignCast(window.buffer.data.ptr)),
+                    width,
+                    height,
+                    &text_buf,
+                    @as(c_int, @intCast(pos.col * FONTWIDTH * FONTSIZE)),
+                    @as(c_int, @intCast(pos.row * FONTHEIGHT * FONTSIZE)),
+                    FONTSIZE,
+                    0,
+                    color, // graphi.BLACK,
+                );
+            },
+            .Image => |_| {},
+            .None => {},
+        }
 
         return;
     }
@@ -322,22 +360,17 @@ const thunk = struct {
                     return;
                 };
 
-                // // Save old buffer data
-                // const old_width = window.buffer.width;
-                // const old_height = window.buffer.height;
-                // const old_data = window.buffer.data;
-
-                // // Allocate new buffer
+                // const old = window.buffer;
 
                 // // Copy overlapping region from old buffer to new buffer
-                // const min_width = @min(old_width, window.width);
-                // const min_height = @min(old_height, window.height);
+                // const min_width: usize = @intCast(@min(old.width, window.width));
+                // const min_height: usize = @intCast(@min(old.height, window.height));
 
-                // // Copy row by row to handle stride
-                // var y: usize = 0;
+                // // // Copy row by row to handle stride
+                // var y: i32 = 0;
                 // while (y < min_height) : (y += 1) {
-                //     const old_row = old_data[(y * old_width * 4)..][0 .. min_width * 4];
-                //     const new_row = new_buffer.data[(y * window.width * 4)..][0 .. min_width * 4];
+                //     const old_row = window.buffer.data[@as(usize, @intCast(y * old.width * 4))..][0 .. min_width * 4];
+                //     const new_row = buffer.data[@as(usize, @intCast(y * window.width * 4))..][0 .. min_width * 4];
                 //     @memcpy(new_row, old_row);
                 // }
 
@@ -345,7 +378,7 @@ const thunk = struct {
                 window.buffer = buffer;
             },
             .end => {
-                defaultRender(&window.buffer);
+                // defaultRender(&window.buffer);
 
                 const buffer = createBuffer(window, window.buffer) catch |err| {
                     std.debug.print("Failed to create buffer: {any}\n", .{err});

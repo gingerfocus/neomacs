@@ -15,8 +15,8 @@ dataptr: *anyopaque,
 
 const Self = @This();
 
-pub fn init(a: std.mem.Allocator) !Self {
-    if (options.windows) {
+pub fn init(a: std.mem.Allocator, terminal: bool) !Self {
+    if (options.windows and !terminal) {
         if (BackendWayland.init(a)) |window| {
             return window.backend();
         } else |err| {
@@ -53,16 +53,19 @@ pub const VTable = struct {
     deinit: *const fn (self: *anyopaque) void,
 };
 
+pub const Color = trm.Color;
+
 pub const Node = struct {
-    foreground: ?scu.Color = null,
-    background: ?scu.Color = null,
-    content: ?Node.Content,
+    foreground: ?Color = null,
+    background: ?Color = null,
+    content: Node.Content = .None,
 
     /// TODO: convert this to generic api to allow setting images or other things
     /// in a node and just letting the backend of choice figure it out.
     pub const Content = union(enum) {
         Text: u8,
         Image: []const u8, // Placeholder for image data, could be a handle or struct
+        None,
     };
 };
 
