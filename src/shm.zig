@@ -20,7 +20,7 @@ fn createSharedMemoryFile() !std.posix.fd_t {
         };
         shmUnlink(name);
 
-        std.log.info("Using file: {s}", .{name});
+        // std.log.info("Using file: {s}", .{name});
         return fd;
     }
     return error.EXIST;

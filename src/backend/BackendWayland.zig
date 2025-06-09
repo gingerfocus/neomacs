@@ -35,15 +35,32 @@ const wl = @cImport({
     // #include <xkbcommon/xkbcommon.h>
 });
 
-const Mod = enum {
-    Super,
-};
-
 const WaylandEvent = struct {
     pressed: bool,
     ty: union(enum) {
         key: u32,
     },
+};
+
+const FrameBuffer = struct {
+    width: i32,
+    height: i32,
+    data: []align(4096) u8,
+    // wl: *wl.wl_buffer,
+
+    pub fn init(a: std.mem.Allocator, width: i32, height: i32) !FrameBuffer {
+        const amount = @as(usize, @intCast(width * height * 4));
+        const data = try a.alignedAlloc(u8, 4096, amount);
+        return FrameBuffer{
+            .width = width,
+            .height = height,
+            .data = data,
+        };
+    }
+
+    pub fn deinit(self: FrameBuffer, a: std.mem.Allocator) void {
+        a.free(self.data);
+    }
 };
 
 events: std.ArrayListUnmanaged(WaylandEvent) = .{},
@@ -52,9 +69,7 @@ modifiers: trm.KeyModifiers = .{},
 closed: bool = false,
 
 /// Current buffer that is submitted to render
-buffer: ?*wl.wl_buffer = null,
-/// Write buffer that will be swapped with `buffer` on next render
-swapbuffer: ?*wl.wl_buffer = null,
+buffer: FrameBuffer,
 
 display: *wl.wl_display,
 registry: *wl.wl_registry,
@@ -100,6 +115,7 @@ pub fn init(a: std.mem.Allocator) !*Window {
         //
         .registry = registry,
         .display = display,
+        .buffer = FrameBuffer{ .width = 0, .height = 0, .data = &.{} },
         // .compositor = null,
         // .seat = null,
         // .wshm = null,
@@ -148,8 +164,6 @@ pub fn init(a: std.mem.Allocator) !*Window {
     state.xdg_surface = wl.xdg_wm_base_get_xdg_surface(state.wm_base, state.surface);
     _ = wl.xdg_surface_add_listener(state.xdg_surface, &xdg_surface_listener, state); // size used here
 
-    std.debug.print("surface: {*}\n", .{state.surface});
-
     state.xdg_toplevel = wl.xdg_surface_get_toplevel(state.xdg_surface);
     wl.xdg_toplevel_set_title(state.xdg_toplevel, "wev");
     wl.xdg_toplevel_set_app_id(state.xdg_toplevel, "wev");
@@ -162,8 +176,6 @@ pub fn init(a: std.mem.Allocator) !*Window {
 
     wl.wl_surface_commit(state.surface);
     _ = wl.wl_display_roundtrip(state.display);
-
-    std.debug.print("surface: {*}\n", .{state.surface});
 
     return state;
 }
@@ -282,6 +294,9 @@ const thunk = struct {
     fn deinit(ptr: *anyopaque) void {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
 
+        window.buffer.deinit(window.a);
+        window.events.deinit(window.a);
+
         wl.wl_display_disconnect(window.display);
         window.a.destroy(window);
     }
@@ -289,12 +304,53 @@ const thunk = struct {
     fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
 
-        // _ = window;
-
         switch (mode) {
-            .begin => {},
+            .begin => if (window.width != window.buffer.width or window.height != window.buffer.height) {
+                root.log(@src(), .debug, "resizing buffer from {d}x{d} to {d}x{d}", .{
+                    window.buffer.width,
+                    window.buffer.height,
+                    window.width,
+                    window.height,
+                });
+
+                const buffer = FrameBuffer.init(
+                    window.a,
+                    window.width,
+                    window.height,
+                ) catch {
+                    std.debug.print("Failed to create swap buffer\n", .{});
+                    return;
+                };
+
+                // // Save old buffer data
+                // const old_width = window.buffer.width;
+                // const old_height = window.buffer.height;
+                // const old_data = window.buffer.data;
+
+                // // Allocate new buffer
+
+                // // Copy overlapping region from old buffer to new buffer
+                // const min_width = @min(old_width, window.width);
+                // const min_height = @min(old_height, window.height);
+
+                // // Copy row by row to handle stride
+                // var y: usize = 0;
+                // while (y < min_height) : (y += 1) {
+                //     const old_row = old_data[(y * old_width * 4)..][0 .. min_width * 4];
+                //     const new_row = new_buffer.data[(y * window.width * 4)..][0 .. min_width * 4];
+                //     @memcpy(new_row, old_row);
+                // }
+
+                window.buffer.deinit(window.a);
+                window.buffer = buffer;
+            },
             .end => {
-                const buffer = create_buffer(window);
+                defaultRender(&window.buffer);
+
+                const buffer = createBuffer(window, window.buffer) catch |err| {
+                    std.debug.print("Failed to create buffer: {any}\n", .{err});
+                    return;
+                };
                 wl.wl_surface_attach(window.surface, buffer, 0, 0);
                 wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
                 wl.wl_surface_commit(window.surface);
@@ -315,33 +371,37 @@ pub fn backend(window: *BackendWayland) Backend {
     };
 }
 
-fn create_buffer(state: *Window) ?*wl.wl_buffer {
-    const stride = state.width * 4;
-    const size = stride * state.height;
+fn createBuffer(window: *Window, frame: FrameBuffer) !*wl.wl_buffer {
+    const stride = frame.width * 4;
+    const size = stride * frame.height;
     const ssize = @as(usize, @intCast(size));
 
-    const fd = shm.allocateShmFile(ssize) catch {
-        // fprintf(stderr, "Failed to create shm pool file: %s", strerror(errno));
-        return null;
-    };
+    const fd = try shm.allocateShmFile(ssize);
+    defer std.posix.close(fd);
 
-    const data: []align(4096) u8 = std.posix.mmap(null, ssize, std.posix.PROT.READ | std.posix.PROT.WRITE, .{ .TYPE = .SHARED }, fd, 0) catch {
-        // fprintf(stderr, "shm buffer mmap failed\n");
-        std.posix.close(fd);
-        return null;
-    };
-    const ddata: []u32 = blk: {
-        const ptr: [*]u32 = @ptrCast(data.ptr);
-        break :blk ptr[0 .. data.len / 4];
-    };
+    const data: []align(4096) u8 = try std.posix.mmap(null, ssize, std.posix.PROT.READ | std.posix.PROT.WRITE, .{ .TYPE = .SHARED }, fd, 0);
+    defer std.posix.munmap(data);
 
-    const pool: ?*wl.wl_shm_pool = wl.wl_shm_create_pool(state.wshm, fd, size);
-    const buffer: ?*wl.wl_buffer = wl.wl_shm_pool_create_buffer(pool, 0, state.width, state.height, stride, wl.WL_SHM_FORMAT_XRGB8888);
-    wl.wl_shm_pool_destroy(pool);
-    std.posix.close(fd);
+    const pool: *wl.wl_shm_pool = wl.wl_shm_create_pool(window.wshm, fd, size) orelse return error.CreatePoolFailed;
+    defer wl.wl_shm_pool_destroy(pool);
+    const buffer: *wl.wl_buffer = wl.wl_shm_pool_create_buffer(pool, 0, frame.width, frame.height, stride, wl.WL_SHM_FORMAT_XRGB8888) orelse return error.CreateBufferFailed;
 
-    const width = @as(usize, @intCast(state.width));
-    const height = @as(usize, @intCast(state.height));
+    // RENDER: wow so cool
+    @memcpy(data, frame.data);
+
+    if (wl.wl_buffer_add_listener(buffer, &wl_buffer_listener, null) != 0) {
+        return error.AddBufferListenerFailed;
+    }
+
+    return buffer;
+}
+
+fn defaultRender(frame: *FrameBuffer) void {
+    const width = @as(usize, @intCast(frame.width));
+    const height = @as(usize, @intCast(frame.height));
+
+    const ddata: []u32 = @as([*]u32, @ptrCast(frame.data.ptr))[0 .. width * height];
+    // const ddata: []u32 = f rame.data[0 .. width * height :4];
 
     // graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
     // const color = 0xFFc6a3ff;
@@ -351,13 +411,13 @@ fn create_buffer(state: *Window) ?*wl.wl_buffer {
     // graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
 
     var y: usize = 0;
-    while (y < state.height) : (y += 1) {
+    while (y < frame.height) : (y += 1) {
         var x: usize = 0;
-        while (x < state.width) : (x += 1) {
+        while (x < frame.width) : (x += 1) {
             if ((x + y / 8 * 8) % 16 < 8) {
-                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFF666666;
+                ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFF666666;
             } else {
-                ddata[y * @as(usize, @intCast(state.width)) + x] = 0xFFEEEEEE;
+                ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFFEEEEEE;
             }
         }
     }
@@ -369,17 +429,11 @@ fn create_buffer(state: *Window) ?*wl.wl_buffer {
 
     const color2 = graphi.LILAC;
     const rectheigh = 90;
-    graphi.fill_triangle(ddata.ptr, width, height, 0, 0, state.width, 0, 0, rectheigh, color2);
-    graphi.fill_triangle(ddata.ptr, width, height, 0, rectheigh, state.width, 0, state.width, rectheigh, color2);
+    graphi.fill_triangle(ddata.ptr, width, height, 0, 0, frame.width, 0, 0, rectheigh, color2);
+    graphi.fill_triangle(ddata.ptr, width, height, 0, rectheigh, frame.width, 0, frame.width, rectheigh, color2);
 
     const color1 = graphi.RED;
     graphi.draw_text(ddata.ptr, width, height, &buf, 6, 6, 10, 5, 7, 1, color1);
-
-    std.posix.munmap(data);
-
-    _ = wl.wl_buffer_add_listener(buffer, &wl_buffer_listener, null);
-
-    return buffer;
 }
 
 const SPACER: []const u8 = "                      ";
@@ -951,14 +1005,16 @@ const xdg_toplevel_listener = wl.xdg_toplevel_listener{
 
 fn xdg_surface_configure(data: ?*anyopaque, xdg_surface: ?*wl.xdg_surface, serial: u32) callconv(.C) void {
     const state: *Window = @alignCast(@ptrCast(data));
+    _ = state;
 
     std.log.info("[xdg_surface]: configure serial: {}", .{serial});
 
     wl.xdg_surface_ack_configure(xdg_surface, serial);
-    const buffer: ?*wl.wl_buffer = create_buffer(state);
-    wl.wl_surface_attach(state.surface, buffer, 0, 0);
-    wl.wl_surface_damage_buffer(state.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-    wl.wl_surface_commit(state.surface);
+
+    // const buffer: ?*wl.wl_buffer = create_buffer(state);
+    // wl.wl_surface_attach(state.surface, buffer, 0, 0);
+    // wl.wl_surface_damage_buffer(state.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+    // wl.wl_surface_commit(state.surface);
 }
 
 const xdg_surface_listener = wl.xdg_surface_listener{

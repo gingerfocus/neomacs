@@ -1,0 +1,3 @@
+[submodule "sub/graphi"]
+	path = sub/graphi
+	url = https://github.com/gingerfocus/graphi.git
