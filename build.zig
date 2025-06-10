@@ -85,6 +85,7 @@ pub fn build(b: *std.Build) void {
     });
     neomacs.linkLibrary(graphi.artifact("graphi"));
     neomacs.addIncludePath(graphi.namedLazyPath("include"));
+    // neomacs.linkSystemLibrary("graphi", .{});
 
     // ---------
 

@@ -12,9 +12,8 @@
     },
     .dependencies = .{
         .graphi = .{
-            // .url = "https://github.com/CodingFella/GraphicsEngine/archive/4ac09102423e997ea11b9d9f57994cdcd13f3d48.tar.gz",
-            // .hash = "GraphicsEngine-0.0.0-CXjv63pVAABHbaToC8Zbf55WF4rwG64V8gaCFk831ak_",
-            .path = "sub/graphi",
+            .url = "https://github.com/gingerfocus/graphi/archive/e2e08244a1c55db5df95db088158901280c68f6b.tar.gz",
+            .hash = "graphi-0.1.0-gpZJC2RdAAA3kOAu3V5KLmB6yY2eeoOksS9uDl7Hldqh",
         },
         .terminal = .{
             .url = "https://github.com/gingerfocus/thermit/archive/5a78059eea5ff1b2dd80059128d40d04ad5cf060.tar.gz",

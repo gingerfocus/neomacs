@@ -1,35 +1,45 @@
-{ lib, stdenv, callPackage, zig, luajit, tree-sitter, tree-sitter-grammars,
+{
+  lib,
+  stdenv,
+  callPackage,
+  zig,
+  luajit,
+  tree-sitter,
+  tree-sitter-grammars,
   pkg-config,
   wayland,
   wayland-scanner,
   wayland-protocols,
   libxkbcommon,
-  }:
+  # graphi,
+}:
 stdenv.mkDerivation {
-    pname = "neomacs";
-    version = "0.1.0";
+  pname = "neomacs";
+  version = "0.1.0";
 
-    src = ./..;
+  src = ./..;
 
-    buildInputs = [
-      luajit
-      (luajit.withPackages (ps: (with ps; [ fennel ])))
+  buildInputs = [
+    luajit
+    (luajit.withPackages (ps: (with ps; [fennel])))
 
-      tree-sitter
-      tree-sitter-grammars.tree-sitter-zig
+    tree-sitter
+    tree-sitter-grammars.tree-sitter-zig
 
-      pkg-config
-      wayland
-      wayland-scanner
-      wayland-protocols
-      libxkbcommon
+    pkg-config
+    wayland
+    wayland-scanner
+    wayland-protocols
+    libxkbcommon
 
-      # libuv
-    ];
+    # graphi
 
-    nativeBuildInputs = [ zig.hook ];
-    zigBuildFlags = [ "--system" "${ callPackage ./neomacs-zig-zon.nix { } }" ];
+    # libuv
+  ];
 
-    # nativeBuildInputs = [ zig ];
-    # buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
+  # nativeBuildInputs = [zig.hook];
+  # zigBuildFlags = ["--system" "${callPackage ./neomacs-zig-zon.nix {}}"];
+
+  nativeBuildInputs = [ zig ];
+  buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
 }
