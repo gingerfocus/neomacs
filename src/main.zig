@@ -4,14 +4,14 @@ pub const scu = @import("scured");
 pub const trm = @import("thermit"); // scu.thermit;
 pub const lib = @import("lib.zig");
 
-const render = @import("render.zig");
-const alloc = @import("alloc.zig");
+pub const render = @import("render/root.zig");
+
+// const alloc = @import("alloc.zig");
 const lua = @import("lua.zig");
 
 pub const Buffer = @import("Buffer.zig");
 pub const State = @import("State.zig");
 
-pub const shm = @import("shm.zig");
 pub const zss = @import("zss.zig");
 
 // pub const ts = @cImport({
@@ -69,8 +69,8 @@ pub fn main() u8 {
 //-----------------------------------------------------------------------------
 
 fn neomacs() !void {
-    alloc.init();
-    defer alloc.deinit();
+    var alloc = std.heap.GeneralPurposeAllocator(.{}){}; // alloc.init();
+    defer _ = alloc.deinit();
     const a = alloc.allocator();
 
     log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});

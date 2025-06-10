@@ -3,7 +3,7 @@ const Backend = @import("Backend.zig");
 const root = @import("root");
 const lib = root.lib;
 const mem = std.mem;
-const shm = root.shm;
+// const shm = lib.shm;
 const trm = @import("thermit");
 
 const Window = @This();
@@ -409,7 +409,7 @@ fn createBuffer(window: *Window, frame: FrameBuffer) !*wl.wl_buffer {
     const size = stride * frame.height;
     const ssize = @as(usize, @intCast(size));
 
-    const fd = try shm.allocateShmFile(ssize);
+    const fd = try lib.shm.file(ssize);
     defer std.posix.close(fd);
 
     const data: []align(4096) u8 = try std.posix.mmap(null, ssize, std.posix.PROT.READ | std.posix.PROT.WRITE, .{ .TYPE = .SHARED }, fd, 0);

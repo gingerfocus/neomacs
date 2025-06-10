@@ -4,6 +4,7 @@ const root = @import("root");
 const keys = @import("keys.zig");
 const lua = @import("lua.zig");
 const km = @import("keymaps.zig");
+const render = @import("render/root.zig");
 
 const scu = root.scu;
 const trm = root.trm;
@@ -12,15 +13,21 @@ const Buffer = root.Buffer;
 const Config = @import("Config.zig");
 const Command = @import("Command.zig");
 
+const Component = @import("render/Component.zig");
+
 pub const Backend = @import("backend/Backend.zig");
 
 const State = @This();
+
+const Mountable = struct {
+    view: Component.View,
+    comp: Component,
+};
 
 /// Must be an allocator that can handle races
 a: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 
-// term: scu.Term,
 backend: Backend,
 
 // undos: Undo_Stack,
@@ -53,9 +60,11 @@ buffer: *Buffer, // todo: might be better to make it an index
 
 resized: bool,
 
-line_num_win: scu.Term.Screen,
-main_win: scu.Term.Screen,
-status_bar: scu.Term.Screen,
+components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
+
+// line_num_win: scu.Term.Screen,
+// main_win: scu.Term.Screen,
+// status_bar: scu.Term.Screen,
 
 // TreeSitter Parsers
 tsmap: std.ArrayListUnmanaged(void) = .{},
@@ -103,11 +112,12 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, terminal: bool) anyerror!St
         // Do all the screen math before the first render starts
         .resized = true,
 
-        .line_num_win = undefined,
-        .main_win = undefined,
-        .status_bar = undefined,
+        // .line_num_win = undefined,
+        // .main_win = undefined,
+        // .status_bar = undefined,
     };
     try keys.initKeyMaps(&state);
+    try render.init(&state);
 
     return state;
 }

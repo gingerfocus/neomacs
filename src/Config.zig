@@ -1,15 +1,10 @@
-const std = @import("std");
-const root = @import("root");
-
-const lua = @import("lua.zig");
-const State = @import("State.zig");
-
-const mem = std.mem;
+// const std = @import("std");
+// const root = @import("root");
+// const lua = @import("lua.zig");
+// const State = @import("State.zig");
 
 const Config = @This();
 
-/// If true then exit the program, usually dont need to lock for this as if we
-/// are exiting then a race condition is unimportant.
 QUIT: bool = false,
 
 relativenumber: bool = false,
@@ -23,8 +18,7 @@ scrolloff: u16 = 8,
 
 // background_color: c_int = -1,
 
-// Used by lua call backs to lock the config state before changing it
-// luaLock: std.Thread.Mutex = .{},
+// lock: std.Thread.Mutex = .{},
 
 // pub fn set(L: ?*lua.State) callconv(.C) c_int {
 //     const field = lua.check(L, 1, []const u8) orelse return 0;

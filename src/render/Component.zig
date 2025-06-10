@@ -1,13 +1,15 @@
 const std = @import("std");
 const root = @import("root");
+const lib = root.lib;
 
-const Screen = @import("Screen.zig");
+const State = root.State;
+const Backend = State.Backend;
 
-const Backend = root.State.Backend;
+pub const View = lib.Vec4;
 
 dataptr: *anyopaque,
 vtable: *const VTable,
 
 pub const VTable = struct {
-    renderFn: *const fn (*anyopaque, veiw: Screen.View, writer: Backend) void,
+    renderFn: *const fn (*anyopaque, state: *const State, writer: Backend, veiw: View) void,
 };
