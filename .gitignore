@@ -4,8 +4,4 @@ zig-out
 /.direnv
 /result
 
-/sub/emacs
-/sub/foot
-/sub/cybrvim
-
 /neomacs.log

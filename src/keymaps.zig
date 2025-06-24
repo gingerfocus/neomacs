@@ -1,15 +1,14 @@
 const std = @import("std");
 const root = @import("root");
+
+const scu = root.scu;
 const trm = root.trm;
 
 const lua = @import("lua.zig");
-const scu = root.scu;
 
 const State = @import("State.zig");
 
-fn fallbackNone(_: *State) !void {
-    // state.currentKeyMap = null;
-}
+const MapId = usize;
 
 pub const action = struct {
     fn move(state: *State) !void {
@@ -34,7 +33,7 @@ pub const action = struct {
 pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
 pub const KeyMaps = struct {
     keys: KeyMapings = .{},
-    fallback: KeyMap = .{ .Native = fallbackNone },
+    fallback: ?KeyMap = null,
     targeter: *const fn (*State) anyerror!void = action.move,
 
     pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
@@ -48,14 +47,13 @@ pub const KeyMaps = struct {
         if (self.keys.get(scu.thermit.keys.bits(ke))) |function| {
             // if there is a custom handler then run it
             try function.run(state);
-        } else {
+
+            try self.targeter(state);
+        } else if (self.fallback) |fallback| {
             // if there is no handler and its just a regular key then send it to
             // the buffer
-            try self.fallback.run(state);
+            try fallback.run(state);
         }
-
-        // TODO: I dont think this should run after a fallback
-        try self.targeter(state);
     }
 
     pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: KeyMap) !void {
@@ -77,8 +75,6 @@ pub const KeyMaps = struct {
         return map;
     }
 };
-
-const Id = usize;
 
 pub const KeyMap = union(enum) {
     const Callback = *const fn (*State) anyerror!void; // Id

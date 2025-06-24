@@ -2,14 +2,14 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const static = b.option(bool, "static", "try to complile everything statically") orelse false;
-    const windows = b.option(bool, "windows", "add window backend") orelse true;
+    const windowing = b.option(bool, "windowing", "add window backend") orelse true;
 
-    if (windows and static) {
+    if (windowing and static) {
         std.debug.print("error: Executable can't link in a windowing system and be built statically!\n", .{});
         std.process.exit(1);
     }
     const options = b.addOptions();
-    options.addOption(bool, "windows", windows);
+    options.addOption(bool, "windowing", windowing);
 
     // ---------
 
@@ -47,7 +47,7 @@ pub fn build(b: *std.Build) void {
         const luajit_c = b.addModule("syslua", .{
             .target = target,
             .optimize = optimize,
-            .root_source_file = b.path("etc/luajitc.zig"),
+            .root_source_file = b.path("src/ffi/luajitc.zig"),
         });
         neomacs.addImport("syslua", luajit_c);
         neomacs.linkSystemLibrary("luajit-5.1", .{});
@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) void {
 
     // ---------
 
-    if (windows) {
+    if (windowing) {
         const clientHeaderCommand = b.addSystemCommand(&.{ "wayland-scanner", "client-header" });
         clientHeaderCommand.addFileArg(b.path("etc/xdg-shell.xml"));
         const clientHeader = clientHeaderCommand.addOutputFileArg("xdg-shell-protocol.h");

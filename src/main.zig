@@ -100,7 +100,10 @@ fn neomacs() !void {
         try render.draw(s);
 
         const ev = s.backend.pollEvent(10000);
+
         // std.debug.print("event: {any}\n", .{ev});
+
+        // std.debug.print("command: {s}\n", .{s.command.buffer.items});
 
         switch (ev) {
             .Key => |ke| {

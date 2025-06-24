@@ -88,8 +88,8 @@ pub fn backend(terminal: *TerminalBackend) Backend {
     return Backend{
         .dataptr = terminal,
         .vtable = &Backend.VTable{
-            .drawFn = thunk.draw,
-            .pollEvent = thunk.pollEvent,
+            .draw = thunk.draw,
+            .poll = thunk.pollEvent,
             .deinit = thunk.deinit,
             .render = thunk.render,
         },

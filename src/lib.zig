@@ -22,7 +22,8 @@ pub const shm = struct {
 
     /// Allocates a shared memory file of the given size.
     pub fn file(size: usize) !std.posix.fd_t {
-        var retries: usize = 100;
+        var retries: usize = 10;
+
         while (retries > 0) : (retries -= 1) {
             const template = "/dev/shm/wev-";
             var buf: [63:0]u8 = undefined;
@@ -36,7 +37,7 @@ pub const shm = struct {
             buf[template.len + RANDOMNESS] = 0; // null-terminate
             const name = buf[0 .. template.len + RANDOMNESS :0];
 
-            std.debug.print("Using file: {s}\n", .{name});
+            // std.debug.print("Using file: {s}\n", .{name});
 
             // pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &cs);
             const flags = std.posix.O{
@@ -62,6 +63,6 @@ pub const shm = struct {
             return fd;
         }
 
-        return error.EXIST;
+        return error.PathAlreadyExists;
     }
 };

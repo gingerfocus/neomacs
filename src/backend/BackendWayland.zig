@@ -20,19 +20,6 @@ const wl = @cImport({
     @cInclude("xkbcommon/xkbcommon.h");
 
     @cInclude("xdg-shell-protocol.h");
-
-    // #include <errno.h>
-    // #include <getopt.h>
-    // #include <limits.h>
-    // #include <linux/input-event-codes.h>
-    // #include <stdarg.h>
-    // #include <stdbool.h>
-    // #include <stdlib.h>
-    // #include <stdio.h>
-    // #include <string.h>
-    // #include <sys/mman.h>
-    // #include <unistd.h>
-    // #include <xkbcommon/xkbcommon.h>
 });
 
 const WaylandEvent = struct {
@@ -396,8 +383,8 @@ pub fn backend(window: *BackendWayland) Backend {
     return Backend{
         .dataptr = window,
         .vtable = &Backend.VTable{
-            .drawFn = thunk.draw,
-            .pollEvent = thunk.pollEvent,
+            .draw = thunk.draw,
+            .poll = thunk.pollEvent,
             .deinit = thunk.deinit,
             .render = thunk.render,
         },

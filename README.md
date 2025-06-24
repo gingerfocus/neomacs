@@ -1,11 +1,10 @@
 # Neomacs
 ![Neomacs Banner Logo](./etc/neon.svg)
 
-A combination of many small projects I have worked on
+A combination of many small projects I have worked on.
 
-Overall, this project aims to be everything but a web browser. And you should
-(eventually) be able to run a system with only busybox, this, ssh and firefox
-installed.
+Overall, this project aims to be everything but a web browser and at least a
+replacement for vim (and maybe the terminal you run it in).
 
 ## Why
 Neovim is great but does too many things for vim compatability. I want to see
@@ -22,24 +21,40 @@ straight lua meaning that there is no second syntax to learn and you can type
 
 # Devolopment
 ## All features
-Build toolchain is capabell of linking in many different things with default
-build.
+By default, build a capable editor linking to as much as the build system can
+given your os configuration.
 ```bash
 zig build -Doptimize=ReleaseFast
 ```
 
 ## Binary Size
-Can be compiled to a static 740k binary with:
+Compile to a static, 740k binary with:
 ```bash
-zig build -Dwindows=false -Dstatic=true -Doptimize=ReleaseSmall
+zig build -Dwindowing=false -Dstatic=true -Doptimize=ReleaseSmall
 ```
 
 # Dev Log
 ## Keybinds
-I think I should modify the current system to use a chording thing were each
-new press is just a pointer dereference to a new key map. Also, I think it
-would be cool if key maps optionally returned a target so the yank delete and
-replace motions could be generalized to user defined motions. If a target is
-returned to the root then it moves there. I think this would be a very small
-breaking change for some obscure keys but a net good for things. Although first
-I should just implement the basics.
+Key binds are chorded meaning that each key either does something or places you
+in a submap/mode. Some of these modes are very small but its fine. It may be a
+breaking change for some obscure keys but is a net good for things.
+
+**Modeless**
+I dont think there needs to be a list mode modes anywhere, each key func can
+just be responsible for changing the mode and have them all arena allocated (or
+use arcs).
+
+**Tree Mode**
+I have not implemented buffer local key binding but i think it could be cool to have a tree 
+with all the key bindings and when you locally change it for one buffer you clone that node of the tree 
+to add to it.
+
+This raises more problems than it may solve as now I have to make a version managment sytem
+for keybinds just to save some memory sometimes
+
+## Libraries
+It may be worth it to just use gtk for rendering. Also I think long term using
+[libghostty](https://github.com/ghostty-org/ghostty) for the terminal would be a good idea but I should at least finish
+the product first before working on that.
+
+

@@ -16,7 +16,7 @@ dataptr: *anyopaque,
 const Self = @This();
 
 pub fn init(a: std.mem.Allocator, terminal: bool) !Self {
-    if (options.windows and !terminal) {
+    if (options.windowing and !terminal) {
         if (BackendWayland.init(a)) |window| {
             return window.backend();
         } else |err| {
@@ -28,19 +28,19 @@ pub fn init(a: std.mem.Allocator, terminal: bool) !Self {
     return data.backend();
 }
 
-pub fn deinit(self: Self) void {
+pub inline fn deinit(self: Self) void {
     self.vtable.deinit(self.dataptr);
 }
 
-pub fn draw(self: *Self, pos: lib.Vec2, node: Node) void {
-    return self.vtable.drawFn(self.dataptr, pos, node);
+pub inline fn draw(self: *Self, pos: lib.Vec2, node: Node) void {
+    return self.vtable.draw(self.dataptr, pos, node);
 }
 
-pub fn pollEvent(self: *Self, timeout: i32) Event {
-    return self.vtable.pollEvent(self.dataptr, timeout);
+pub inline fn pollEvent(self: *Self, timeout: i32) Event {
+    return self.vtable.poll(self.dataptr, timeout);
 }
 
-pub fn render(self: *Self, mode: VTable.RenderMode) void {
+pub inline fn render(self: *Self, mode: VTable.RenderMode) void {
     self.vtable.render(self.dataptr, mode);
 }
 
@@ -48,8 +48,8 @@ pub const VTable = struct {
     pub const RenderMode = enum { begin, end };
 
     render: *const fn (self: *anyopaque, meathod: RenderMode) void,
-    drawFn: *const fn (self: *anyopaque, position: lib.Vec2, node: Node) void,
-    pollEvent: *const fn (self: *anyopaque, timeout: i32) Event,
+    draw: *const fn (self: *anyopaque, position: lib.Vec2, node: Node) void,
+    poll: *const fn (self: *anyopaque, timeout: i32) Event,
     deinit: *const fn (self: *anyopaque) void,
 };
 
@@ -71,22 +71,10 @@ pub const Node = struct {
 
 pub const Event = union(enum) {
     Key: trm.KeyEvent,
-    // struct {
-    //     ch: u8,
-    //     mod: KeyModifiers,
-    // },
     Resize,
     Timeout,
     End,
     Unknown,
+    /// isFatal: bool,
     Error: bool,
 };
-
-// pub const Node = struct {
-//     const VTable = struct {
-//         setForeground: fn (self: *anyopaque, fg: scu.Cell) ?*Node,
-//     };
-//
-//     vtable: *const VTable,
-//     dataptr: *anyopaque,
-// };

@@ -1,21 +1,17 @@
 const std = @import("std");
 const root = @import("root");
-
-const keys = @import("keys.zig");
-const lua = @import("lua.zig");
-const km = @import("keymaps.zig");
-const render = @import("render/root.zig");
-
 const scu = root.scu;
 const trm = root.trm;
-
 const Buffer = root.Buffer;
-const Config = @import("Config.zig");
-const Command = @import("Command.zig");
-
-const Component = @import("render/Component.zig");
 
 pub const Backend = @import("backend/Backend.zig");
+const Command = @import("Command.zig");
+const Config = @import("Config.zig");
+const keys = @import("keys.zig");
+const km = @import("keymaps.zig");
+const lua = @import("lua.zig");
+const Component = @import("render/Component.zig");
+const render = @import("render/root.zig");
 
 const State = @This();
 
@@ -158,11 +154,7 @@ pub fn getCurrentBuffer(state: *State) ?*Buffer {
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
     // -- Command Thing --------------------
     if (state.command.is) {
-        if (state.command.maps.keys.get(trm.keys.bits(ke))) |function| {
-            try function.run(state);
-        } else {
-            try state.command.maps.fallback.run(state);
-        }
+        try state.command.maps.run(state, ke);
         return;
     }
     // -------------------------
