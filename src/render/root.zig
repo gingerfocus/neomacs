@@ -1,6 +1,5 @@
-const root = @import("root");
 const std = @import("std");
-const scu = root.scu;
+const root = @import("../main.zig");
 const trm = root.trm;
 const lib = root.lib;
 
@@ -8,92 +7,111 @@ const State = root.State;
 const Backend = State.Backend;
 const Node = Backend.Node;
 const Color = Backend.Color;
+const Component = @import("Component.zig");
+const View = Component.View;
+
+const StatusBar = @import("components/StatusBar.zig");
+const LineNumbers = @import("components/LineNumbers.zig");
+const MainEditor = @import("components/MainEditor.zig");
+const CommandLine = @import("components/CommandLine.zig");
 
 pub const sidebarWidth = 3;
 pub const statusbarHeight = 2;
 
+const id = struct {
+    var static: usize = 0;
+    pub fn next() usize {
+        static += 1;
+        return static;
+    }
+};
+
 pub fn init(state: *State) !void {
-    _ = state;
+    const rootView = View{
+        .x = 0,
+        .y = 0,
+        // .w = state.backend.getWidth(),
+        // .h = state.backend.getHeight(),
+        .w = 80, // TODO
+        .h = 30,
+    };
 
-    // // Create a root view for the entire screen
-    // const rootView = View{
-    //     .x = 0,
-    //     .y = 0,
-    //     .w = state.backend.getWidth(),
-    //     .h = state.backend.getHeight(),
-    // };
+    {
+        const statusBarView = View{
+            .x = 0,
+            .y = rootView.h - statusbarHeight,
+            .w = rootView.w,
+            .h = statusbarHeight,
+        };
+        const statusBar = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = StatusBar.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = statusBar, .view = statusBarView });
+    }
 
-    // // Render each component with its own view
-    // if (state.components.statusBar) |statusBar| {
-    //     const statusBarView = View{
-    //         .x = 0,
-    //         .y = rootView.h - statusbarHeight,
-    //         .w = rootView.w,
-    //         .h = statusbarHeight,
-    //     };
-    //     statusBar.vtable.renderFn(statusBar.dataptr, statusBarView, state.backend);
-    // }
+    {
+        const lineNumbersView = View{
+            .x = 0,
+            .y = 0,
+            .w = sidebarWidth,
+            .h = rootView.h - statusbarHeight,
+        };
+        const lineNumbers = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = LineNumbers.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = lineNumbers, .view = lineNumbersView });
+    }
 
-    // if (state.components.lineNumbers) |lineNumbers| {
-    //     const lineNumbersView = View{
-    //         .x = 0,
-    //         .y = 0,
-    //         .w = sidebarWidth,
-    //         .h = rootView.h - statusbarHeight,
-    //     };
-    //     lineNumbers.vtable.renderFn(lineNumbers.dataptr, lineNumbersView, state.backend);
-    // }
+    {
+        const mainView = View{
+            .x = sidebarWidth,
+            .y = 0,
+            .w = rootView.w - sidebarWidth,
+            .h = rootView.h - statusbarHeight,
+        };
+        const mainEditor = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = MainEditor.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = mainEditor, .view = mainView });
+    }
 
-    // if (state.components.mainEditor) |mainEditor| {
-    //     const mainView = View{
-    //         .x = sidebarWidth,
-    //         .y = 0,
-    //         .w = rootView.w - sidebarWidth,
-    //         .h = rootView.h - statusbarHeight,
-    //     };
-    //     mainEditor.vtable.renderFn(mainEditor.dataptr, mainView, state.backend);
-    // }
+    {
+        const commandView = View{
+            .x = 0,
+            .y = rootView.h - 1, // Bottom line of status bar
+            .w = rootView.w,
+            .h = 1,
+        };
+        const commandLine = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = CommandLine.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = commandLine, .view = commandView });
+    }
 
-    // if (state.components.commandLine) |commandLine| {
-    //     const commandView = View{
-    //         .x = 0,
-    //         .y = rootView.h - 1, // Bottom line of status bar
-    //         .w = rootView.w,
-    //         .h = 1,
-    //     };
-    //     commandLine.vtable.renderFn(commandLine.dataptr, commandView, state.backend);
-    // }
-
-    // // If visual selection is active, render it with a dedicated component
-    // if (state.components.visualSelection) |visualSelection| {
-    //     const buffer = state.getCurrentBuffer() orelse return;
-    //     if (buffer.target != null) {
-    //         // The visual selection component will get its view from the
-    //         // current buffer's target information
-    //         visualSelection.vtable.renderFn(visualSelection.dataptr, rootView, state.backend);
-    //     }
-    // }
-
-    // // If in command mode, position cursor at the command line
     // if (state.command.is) {
     //     const cmdPos = 1 + state.command.buffer.items.len; // After the colon and command text
     //     try trm.setCursorPos(cmdPos, state.backend.getHeight() - 1);
     //     return;
     // }
 
-    // // Otherwise position cursor in the editor at current buffer position
     // const buffer = state.getCurrentBuffer() orelse return;
 
-    // const row_render_start = std.math.sub(usize, buffer.row, state.main_win.h) catch 0;
+    // const row_render_start = std.math.sub(usize, buffer.row, rootView.h - statusbarHeight) catch 0;
     // const viewportRow = buffer.row - row_render_start;
-
-    // // Account for sidebar width and 1-based columns in editor
     // const cursorCol = sidebarWidth + buffer.col + 1;
     // try trm.setCursorPos(cursorCol, viewportRow);
-
-    // // Set cursor style based on mode
-    // // try handleCursorShape(state);
-
 }
 
 // pub fn draw(state: *State) !void {
@@ -288,14 +306,11 @@ pub fn init(state: *State) !void {
 //                     .content = .{ .Text = buffer.lines.items[cur.row].data.items[cur.col] },
 //                 },
 //             );
-
 //             cur = buffer.moveRight(cur, 1);
 //         }
 //     }
-
 //     // --- Cursor movement (handled by backend, not here) ---
 //     // try trm.setCursorStyle(...);
-
 //     state.resized = false;
 // }
 
@@ -310,7 +325,7 @@ pub fn draw(state: *State) !void {
 
         if (view.w == 0 or view.h == 0) continue; // Skip empty components
 
-        comp.vtable.renderFn(comp.dataptr, state, state.backend, view);
+        comp.vtable.renderFn(comp.dataptr, state, &state.backend, view);
     }
 
     state.resized = false;

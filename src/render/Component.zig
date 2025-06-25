@@ -11,5 +11,5 @@ dataptr: *anyopaque,
 vtable: *const VTable,
 
 pub const VTable = struct {
-    renderFn: *const fn (*anyopaque, state: *const State, writer: Backend, veiw: View) void,
+    renderFn: *const fn (*anyopaque, state: *State, writer: *Backend, veiw: View) void,
 };
