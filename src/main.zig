@@ -11,6 +11,7 @@ const lua = @import("lua.zig");
 
 pub const Buffer = @import("Buffer.zig");
 pub const State = @import("State.zig");
+pub const Args = @import("Args.zig");
 
 pub const zss = @import("zss.zig");
 
@@ -20,7 +21,6 @@ pub const zss = @import("zss.zig");
 
 //-----------------------------------------------------------------------------
 
-const Args = @import("Args.zig");
 
 pub const std_options: std.Options = .{
     .logFn = scu.log.toFile,
@@ -79,20 +79,19 @@ fn neomacs() !void {
     defer args.deinit(a);
 
     const filename: ?[]const u8 = if (args.positionals.len > 0) std.mem.span(args.positionals[0]) else null;
+    const file: ?[]const u8 = args.help orelse filename;
 
     // run just the terminal pager when comfigured to do so
     if (args.pager) {
-        if (filename) |file| {
-            const f = std.fs.File{ .handle = try std.posix.open(file, .{}, 0) };
+        if (file) |pagerfile| {
+            const f = std.fs.File{ .handle = try std.posix.open(pagerfile, .{}, 0) };
             defer f.close();
             try zss.page(f);
         }
         return;
     }
 
-    const file: ?[]const u8 = args.help orelse filename;
-
-    static.state = try State.init(a, file, args.terminal);
+    static.state = try State.init(a, file, args);
     const s = state();
     defer s.deinit();
 
@@ -114,6 +113,7 @@ fn neomacs() !void {
             },
             .End => s.config.QUIT = true,
             .Resize => s.resized = true,
+            // .Error => |fatal| { if (fatal) break; },
             else => {},
         }
     }

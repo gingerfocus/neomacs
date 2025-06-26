@@ -33,7 +33,7 @@ pub fn init(state: *State) !void {
         // .w = state.backend.getWidth(),
         // .h = state.backend.getHeight(),
         .w = 80, // TODO
-        .h = 30,
+        .h = 24,
     };
 
     {

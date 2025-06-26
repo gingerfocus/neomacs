@@ -8,15 +8,23 @@ const options = @import("options");
 
 const BackendTerminal = @import("BackendTerminal.zig");
 const BackendWayland = @import("BackendWayland.zig");
+const BackendFile = @import("BackendFile.zig");
 
 // arena: std.heap.ArenaAllocator,
 vtable: *const VTable,
 dataptr: *anyopaque,
 
 const Self = @This();
+const Args = root.Args;
 
-pub fn init(a: std.mem.Allocator, terminal: bool) !Self {
-    if (options.windowing and !terminal) {
+pub fn init(a: std.mem.Allocator, args: Args) !Self {
+    if (args.dosnapshot) |render_path| {
+        // this path must always converge
+        const file = try BackendFile.init(a, render_path);
+        return file.backend();
+    }
+
+    if (options.windowing and !args.terminal) {
         if (BackendWayland.init(a)) |window| {
             return window.backend();
         } else |err| {
@@ -46,9 +54,11 @@ pub inline fn render(self: *Self, mode: VTable.RenderMode) void {
 
 pub const VTable = struct {
     pub const RenderMode = enum { begin, end };
+    // pub const DataFetch = enum { width, height };
 
     render: *const fn (self: *anyopaque, meathod: RenderMode) void,
     draw: *const fn (self: *anyopaque, position: lib.Vec2, node: Node) void,
+    // get: *const fn (self: *anyopaque, data: DataFetch) usize,
     poll: *const fn (self: *anyopaque, timeout: i32) Event,
     deinit: *const fn (self: *anyopaque) void,
 };
@@ -60,8 +70,6 @@ pub const Node = struct {
     background: ?Color = null,
     content: Node.Content = .None,
 
-    /// TODO: convert this to generic api to allow setting images or other things
-    /// in a node and just letting the backend of choice figure it out.
     pub const Content = union(enum) {
         Text: u8,
         Image: []const u8, // Placeholder for image data, could be a handle or struct
@@ -75,6 +83,6 @@ pub const Event = union(enum) {
     Timeout,
     End,
     Unknown,
-    /// isFatal: bool,
+    // isFatal: bool,
     Error: bool,
 };

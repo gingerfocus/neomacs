@@ -26,13 +26,27 @@ pub fn init(a: std.mem.Allocator) !*Self {
 }
 
 const thunk = struct {
+    fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
+        const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
+
+        switch (mode) {
+            .begin => {
+                self.terminal.start(false) catch {};
+            },
+            .end => {
+                self.terminal.finish() catch {};
+            },
+        }
+    }
+
     fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
         const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
 
         const row = @as(u16, @intCast(pos.row));
         const col = @as(u16, @intCast(pos.col));
 
-        const cell = self.terminal.getCell(row, col) orelse return;
+        // const cell = self.terminal.getCell(row, col) orelse return;
+        const cell = self.terminal.getCell(col, row) orelse return;
 
         if (node.background) |bg| cell.bg = bg;
         if (node.foreground) |fg| cell.fg = fg;
@@ -50,7 +64,7 @@ const thunk = struct {
 
     fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
         const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
-        const event: trm.Event = self.terminal.tty.read(timeout) catch return .{ .Error = true };
+        const event: trm.Event = self.terminal.tty.read(timeout) catch return .Timeout;
         switch (event) {
             .Key => |ke| return Backend.Event{ .Key = ke },
             else => {
@@ -68,19 +82,6 @@ const thunk = struct {
 
         self.terminal.deinit();
         self.a.destroy(self);
-    }
-
-    fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
-        const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
-
-        switch (mode) {
-            .begin => {
-                self.terminal.start(false) catch {};
-            },
-            .end => {
-                self.terminal.finish() catch {};
-            },
-        }
     }
 };
 

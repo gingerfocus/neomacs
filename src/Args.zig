@@ -5,6 +5,7 @@ const mem = std.mem;
 progname: [*:0]const u8,
 positionals: []const [*:0]const u8 = &.{},
 help: ?[]const u8 = null,
+dosnapshot: ?[]const u8 = null,
 
 /// Run only the pager, no other functionality
 pager: bool = false,
@@ -61,12 +62,18 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
             continue;
         }
 
+        if (mem.eql(u8, arg, "-R") or mem.eql(u8, arg, "--render-to-file")) {
+            i += 1;
+            if (i >= args.len) continue;
+            opts.dosnapshot = try a.dupe(u8, std.mem.span(args[i]));
+            i += 1;
+            continue;
+        }
+
         // if it doesnt match an argument try to use it as a file
         break;
     }
     opts.positionals = args[i..];
-
-    if (opts.pager) opts.terminal = true;
 
     return opts;
 }

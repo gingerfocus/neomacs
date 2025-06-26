@@ -34,6 +34,11 @@ zig build -Dwindowing=false -Dstatic=true -Doptimize=ReleaseSmall
 ```
 
 # Dev Log
+## Previewing Ui
+```bash
+zig build run -- --dosnapshot tmp.txt <file>
+```
+
 ## Keybinds
 Key binds are chorded meaning that each key either does something or places you
 in a submap/mode. Some of these modes are very small but its fine. It may be a

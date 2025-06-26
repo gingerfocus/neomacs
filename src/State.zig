@@ -3,6 +3,7 @@ const root = @import("root");
 const scu = root.scu;
 const trm = root.trm;
 const Buffer = root.Buffer;
+const Args = root.Args;
 
 pub const Backend = @import("backend/Backend.zig");
 const Command = @import("Command.zig");
@@ -65,7 +66,7 @@ components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 // TreeSitter Parsers
 tsmap: std.ArrayListUnmanaged(void) = .{},
 
-pub fn init(a: std.mem.Allocator, file: ?[]const u8, terminal: bool) anyerror!State {
+pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
     try checkfirstrun(a);
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
@@ -82,7 +83,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, terminal: bool) anyerror!St
     }
     try buffers.append(a, buffer);
 
-    const backend = try Backend.init(a, terminal);
+    const backend = try Backend.init(a, args);
     // const t = try scu.Term.init(a);
 
     const L = lua.init();
