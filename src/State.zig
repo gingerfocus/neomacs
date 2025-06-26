@@ -120,6 +120,8 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
 }
 
 pub fn deinit(state: *State) void {
+    std.log.debug("deiniting state", .{});
+
     // keymaps before lua as they reference the lua state
     for (&state.keyMaps) |*keyMap| keyMap.deinit(state.a);
 
@@ -139,6 +141,7 @@ pub fn deinit(state: *State) void {
     }
     state.buffers.deinit(state.a);
 
+    std.log.debug("closing backend", .{});
     state.backend.deinit();
 
     state.arena.deinit();

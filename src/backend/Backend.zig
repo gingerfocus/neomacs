@@ -52,13 +52,17 @@ pub inline fn render(self: *Self, mode: VTable.RenderMode) void {
     self.vtable.render(self.dataptr, mode);
 }
 
+pub inline fn getSize(self: *Self) lib.Vec2 {
+    return self.vtable.getSize(self.dataptr);
+}
+
 pub const VTable = struct {
     pub const RenderMode = enum { begin, end };
     // pub const DataFetch = enum { width, height };
 
     render: *const fn (self: *anyopaque, meathod: RenderMode) void,
     draw: *const fn (self: *anyopaque, position: lib.Vec2, node: Node) void,
-    // get: *const fn (self: *anyopaque, data: DataFetch) usize,
+    getSize: *const fn (self: *anyopaque) lib.Vec2,
     poll: *const fn (self: *anyopaque, timeout: i32) Event,
     deinit: *const fn (self: *anyopaque) void,
 };

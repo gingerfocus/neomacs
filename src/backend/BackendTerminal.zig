@@ -77,6 +77,11 @@ const thunk = struct {
         }
     }
 
+    fn getSize(ptr: *anyopaque) lib.Vec2 {
+        const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
+        return .{ .row = self.terminal.size.x, .col = self.terminal.size.y };
+    }
+
     fn deinit(ptr: *anyopaque) void {
         const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
 
@@ -93,6 +98,7 @@ pub fn backend(terminal: *TerminalBackend) Backend {
             .poll = thunk.pollEvent,
             .deinit = thunk.deinit,
             .render = thunk.render,
+            .getSize = thunk.getSize,
         },
     };
 }

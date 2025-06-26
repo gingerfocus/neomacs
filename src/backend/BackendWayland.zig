@@ -316,6 +316,18 @@ const thunk = struct {
         return Backend.Event.Unknown;
     }
 
+    fn getSize(ptr: *anyopaque) lib.Vec2 {
+        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        const FONTWIDTH = 5;
+        const FONTHEIGHT = 7;
+        const FONTSIZE = 7;
+
+        return .{
+            .row = @as(usize, @intCast(window.height)) / FONTHEIGHT / FONTSIZE,
+            .col = @as(usize, @intCast(window.width)) / FONTWIDTH / FONTSIZE,
+        };
+    }
+
     fn deinit(ptr: *anyopaque) void {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
 
@@ -387,6 +399,7 @@ pub fn backend(window: *BackendWayland) Backend {
             .poll = thunk.pollEvent,
             .deinit = thunk.deinit,
             .render = thunk.render,
+            .getSize = thunk.getSize,
         },
     };
 }

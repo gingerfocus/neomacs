@@ -72,6 +72,11 @@ const thunk = struct {
         return Backend.Event.End;
     }
 
+    fn getSize(ptr: *anyopaque) lib.Vec2 {
+        _ = ptr;
+        return .{ .row = HEIGHT, .col = WIDTH };
+    }
+
     fn deinit(ptr: *anyopaque) void {
         const self = @as(*Self, @ptrCast(@alignCast(ptr)));
         self.file.close();
@@ -88,6 +93,7 @@ pub fn backend(self: *Self) Backend {
             .poll = thunk.pollEvent,
             .deinit = thunk.deinit,
             .render = thunk.render,
+            .getSize = thunk.getSize,
         },
     };
 }

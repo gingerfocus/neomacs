@@ -93,16 +93,12 @@ fn neomacs() !void {
 
     static.state = try State.init(a, file, args);
     const s = state();
-    defer s.deinit();
+    defer static.state.deinit();
 
     while (!s.config.QUIT) {
         try render.draw(s);
 
         const ev = s.backend.pollEvent(10000);
-
-        // std.debug.print("event: {any}\n", .{ev});
-
-        // std.debug.print("command: {s}\n", .{s.command.buffer.items});
 
         switch (ev) {
             .Key => |ke| {

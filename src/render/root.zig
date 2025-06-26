@@ -27,14 +27,8 @@ const id = struct {
 };
 
 pub fn init(state: *State) !void {
-    const rootView = View{
-        .x = 0,
-        .y = 0,
-        // .w = state.backend.getWidth(),
-        // .h = state.backend.getHeight(),
-        .w = 80, // TODO
-        .h = 24,
-    };
+    const size = state.backend.getSize();
+    const rootView = View{ .x = 0, .y = 0, .w = size.row, .h = size.col };
 
     {
         const statusBarView = View{

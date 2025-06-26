@@ -217,7 +217,7 @@ pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
         }
     }
 
-    // std.debug.print("[loop] ending loop\n", .{});
+    std.log.warn("[loop] ending loop", .{});
 
     return;
 }
@@ -225,6 +225,7 @@ pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
 // --- Lua Functions ---------------------------------------------------------
 
 fn nluaQuit(_: ?*State) callconv(.C) c_int {
+    std.log.debug("quitting", .{});
     root.state().config.QUIT = true;
     return 0;
 }
