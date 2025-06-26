@@ -23,11 +23,20 @@
             .url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz",
             .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
         },
+        .libxev = .{
+            .url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz",
+            .hash = "libxev-0.0.0-86vtc4b1EgCl0Kvo2Ixmjfl5PgAaJmvCXRIn_n89nCaR",
+        },
         // .mach = .{
         //     .url = "https://pkg.machengine.org/mach/af1cf9865bbd7e79e05c1a86560945afd2342891.tar.gz",
         //     .hash = "1220e3e557f8659f4b30c66280bcd226d295c59aa4a3e9d2947d575aa202c05acdda",
         //     // .hash = "mach-0.4.0-AAAAAPKJLgDj5Vf4ZZ9LMMZigLzSJtKVxZqko-nSlH1X",
         //     .lazy = true,
         // },
+        .zigrc = .{
+            .url = "https://github.com/Aandreba/zigrc/archive/refs/tags/1.0.0.tar.gz",
+            // .hash = "N-V-__8AAO-QAACBuoUQTqEND9gO9_eP9yoPK7BzUf3n-w-X",
+            .hash = "zigrc-1.0.0-lENlW5HIAADbYDdbz3y2nJEodEelv8MIG2W2f63An9fl",
+        },
     },
 }

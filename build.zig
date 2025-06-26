@@ -89,6 +89,22 @@ pub fn build(b: *std.Build) void {
 
     // ---------
 
+    const xev = b.dependency("libxev", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    neomacs.addImport("xev", xev.module("xev"));
+
+    // ---------
+
+    const zigrc = b.dependency("zigrc", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    neomacs.addImport("zigrc", zigrc.artifact("zig-rc").root_module);
+
+    // ---------
+
     const neomacsExe = b.addExecutable(.{
         .root_module = neomacs,
         .name = "neomacs",

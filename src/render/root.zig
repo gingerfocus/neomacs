@@ -322,5 +322,5 @@ pub fn draw(state: *State) !void {
         comp.vtable.renderFn(comp.dataptr, state, &state.backend, view);
     }
 
-    state.resized = false;
+    // state.resized = false;
 }

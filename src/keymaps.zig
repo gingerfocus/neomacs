@@ -8,6 +8,8 @@ const lua = @import("lua.zig");
 
 const State = @import("State.zig");
 
+const rc = @import("zigrc");
+
 const MapId = usize;
 
 pub const action = struct {
@@ -30,11 +32,14 @@ pub const action = struct {
     }
 };
 
+// pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, rc.Rc(KeyMap));
 pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
 pub const KeyMaps = struct {
     keys: KeyMapings = .{},
     fallback: ?KeyMap = null,
     targeter: *const fn (*State) anyerror!void = action.move,
+
+    // namedsubmaps: std.StringArrayHashMapUnmanaged(*KeyMaps) = .{},
 
     pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
         var iter = self.keys.iterator();

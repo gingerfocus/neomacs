@@ -2,6 +2,8 @@ const std = @import("std");
 const root = @import("root");
 const scu = root.scu;
 const trm = root.trm;
+const xev = root.xev;
+const rc = root.rc;
 const Buffer = root.Buffer;
 const Args = root.Args;
 
@@ -21,10 +23,8 @@ const Mountable = struct {
     comp: Component,
 };
 
-/// Must be an allocator that can handle races
 a: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
-
 backend: Backend,
 
 // undos: Undo_Stack,
@@ -32,7 +32,6 @@ backend: Backend,
 // undo: Undo,
 
 ch: trm.KeyEvent = @bitCast(@as(u16, 0)),
-
 repeating: Repeating = .{},
 
 command: Command,
@@ -41,6 +40,7 @@ command: Command,
 /// must be arena allocated
 status_bar_msg: ?[]const u8 = null,
 
+// rootKeyMaps: rc.RcUnmanaged(km.KeyMaps),
 keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
 /// If null then do the normal key map look up, else use this as the key maps,
 /// dont touch this as if you try to be clever it will just be set to null
@@ -55,16 +55,14 @@ buffers: std.ArrayListUnmanaged(*Buffer),
 buffer: *Buffer, // todo: might be better to make it an index
 // bufferindex: usize = 0,
 
-resized: bool,
+// resized: bool = true,
 
 components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 
-// line_num_win: scu.Term.Screen,
-// main_win: scu.Term.Screen,
-// status_bar: scu.Term.Screen,
-
 // TreeSitter Parsers
 tsmap: std.ArrayListUnmanaged(void) = .{},
+
+// loop : xev.Loop,
 
 pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
     try checkfirstrun(a);
@@ -106,12 +104,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         .buffer = buffer,
         .command = try Command.init(a),
 
-        // Do all the screen math before the first render starts
-        .resized = true,
-
-        // .line_num_win = undefined,
-        // .main_win = undefined,
-        // .status_bar = undefined,
+        // .loop = try xev.Loop.init(a),
     };
     try keys.initKeyMaps(&state);
     try render.init(&state);
@@ -144,6 +137,7 @@ pub fn deinit(state: *State) void {
     std.log.debug("closing backend", .{});
     state.backend.deinit();
 
+    // state.loop.deinit();
     state.arena.deinit();
 }
 

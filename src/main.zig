@@ -3,21 +3,19 @@ const std = @import("std");
 pub const scu = @import("scured");
 pub const trm = @import("thermit"); // scu.thermit;
 pub const lib = @import("lib.zig");
+pub const xev = @import("xev");
+pub const rc = @import("zigrc");
 
 pub const render = @import("render/root.zig");
-
-// const alloc = @import("alloc.zig");
-const lua = @import("lua.zig");
 
 pub const Buffer = @import("Buffer.zig");
 pub const State = @import("State.zig");
 pub const Args = @import("Args.zig");
 
 pub const zss = @import("zss.zig");
-
-// pub const ts = @cImport({
-//     @cInclude("tree_sitter/api.h");
-// });
+pub const lua = @import("lua.zig");
+// const alloc = @import("alloc.zig");
+// pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
 
 //-----------------------------------------------------------------------------
 
@@ -95,6 +93,7 @@ fn neomacs() !void {
     const s = state();
     defer static.state.deinit();
 
+
     while (!s.config.QUIT) {
         try render.draw(s);
 
@@ -108,7 +107,7 @@ fn neomacs() !void {
                 try s.press(ke);
             },
             .End => s.config.QUIT = true,
-            .Resize => s.resized = true,
+            // .Resize => s.resized = true,
             // .Error => |fatal| { if (fatal) break; },
             else => {},
         }
