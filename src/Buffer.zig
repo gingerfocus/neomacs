@@ -3,6 +3,7 @@ const root = @import("root");
 const std = @import("std");
 const lib = root.lib;
 const km = @import("keymaps.zig");
+const rc = @import("zigrc");
 
 const State = root.State;
 
@@ -32,13 +33,18 @@ col: usize = 0,
 
 filename: []const u8,
 
-// arena: std.heap.ArenaAllocator,
+// keymap: *km.KeyMaps,
+// namedmaps: std.AutoArrayHashMapUnmanaged(Token, *km.KeyMaps) = .{},
 
-// keymaps: std.AutoArrayHashMapUnmanaged(u8, *km.KeyMaps) = .{},
+pub const Token = struct {
+    value: u16,
 
-const Line = struct {
-    data: std.ArrayListUnmanaged(u8) = .{},
+    pub const NORMAL = Token{ .value = 0 };
+    pub const INSERT = Token{ .value = 1 };
+    pub const VISUAL = Token{ .value = 2 };
 };
+
+const Line = std.ArrayListUnmanaged(u8);
 
 pub const Mode = enum {
     normal,
@@ -77,11 +83,24 @@ pub const VisualMode = enum {
 //     };
 // }
 
-pub fn initEmpty() Buffer {
-    return Buffer{ .id = idgen.next(), .filename = "", .lines = .{} };
+pub fn initEmpty(
+    // state: *State,
+) Buffer {
+    return Buffer{
+        .id = idgen.next(),
+        .filename = "",
+        .lines = .{},
+        // .keymap = state,
+    };
 }
 
-pub fn initFile(a: std.mem.Allocator, filename: []const u8) !Buffer {
+pub fn initFile(
+    state: *State,
+    filename: []const u8,
+) !Buffer {
+    const a = state.a;
+    // const maps = try state.maps.clone(state.a);
+
     const file = try std.fs.cwd().openFile(filename, .{}); // a+
     defer file.close();
 
@@ -90,10 +109,10 @@ pub fn initFile(a: std.mem.Allocator, filename: []const u8) !Buffer {
         const line = try file.reader().readUntilDelimiterOrEofAlloc(a, '\n', 128 * 1024) orelse break;
         // if (line.len == 0) break;
 
-        const l = Line{ .data = std.ArrayListUnmanaged(u8){
+        const l = Line{
             .items = line,
             .capacity = line.len,
-        } };
+        };
 
         try lines.append(l);
     }
@@ -105,12 +124,14 @@ pub fn initFile(a: std.mem.Allocator, filename: []const u8) !Buffer {
         .id = idgen.next(),
         .filename = try a.dupe(u8, filename),
         .lines = lines.moveToUnmanaged(),
+        // .keymap = maps.get(Token.NORMAL).?,
+        // .namedmaps = maps,
     };
 }
 
 pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
     for (buffer.lines.items) |*line| {
-        line.data.deinit(a);
+        line.deinit(a);
     }
     buffer.lines.deinit(a);
 
@@ -131,7 +152,7 @@ pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
     }
 
     var line = &buffer.lines.items[buffer.row];
-    try line.data.insert(a, buffer.col, ch);
+    try line.insert(a, buffer.col, ch);
     // root.log(@src(), .debug, "inserted character {c} at row {d}, col {d}", .{ ch, buffer.row, buffer.col });
     buffer.col += 1;
 
@@ -146,12 +167,12 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 
     if (buffer.col == 0) {
         // get the coluimn now before its length changes
-        buffer.col = buffer.lines.items[buffer.row - 1].data.items.len;
+        buffer.col = buffer.lines.items[buffer.row - 1].items.len;
 
         // delete the last character of the previous line
         const line = &buffer.lines.items[buffer.row];
         const prev = &buffer.lines.items[buffer.row - 1];
-        try prev.data.appendSlice(a, line.data.items);
+        try prev.appendSlice(a, line.items);
         _ = buffer.lines.orderedRemove(buffer.row);
 
         buffer.row -= 1;
@@ -160,7 +181,7 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
         buffer.col -= 1;
 
         var line = &buffer.lines.items[buffer.row];
-        _ = line.data.orderedRemove(buffer.col);
+        _ = line.orderedRemove(buffer.col);
     }
 }
 
@@ -503,14 +524,14 @@ pub fn moveRight(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
     var c = count;
     while (c > 0) {
         if (end.row >= buffer.lines.items.len) break;
-        if (end.col + c >= buffer.lines.items[end.row].data.items.len) {
-            c -= buffer.lines.items[end.row].data.items.len - end.col;
+        if (end.col + c >= buffer.lines.items[end.row].items.len) {
+            c -= buffer.lines.items[end.row].items.len - end.col;
             if (end.row < buffer.lines.items.len - 1) {
                 end.col = 0;
                 end.row += 1;
             } else {
                 // no where left to go
-                end.col = buffer.lines.items[end.row].data.items.len - 1;
+                end.col = buffer.lines.items[end.row].items.len - 1;
                 break;
             }
         } else {
@@ -534,7 +555,7 @@ pub fn moveLeft(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
             c -= end.col + 1;
             if (end.row > 0) {
                 end.row -= 1;
-                end.col = buffer.lines.items[end.row].data.items.len;
+                end.col = buffer.lines.items[end.row].items.len;
             } else {
                 end.col = 0; // can't go left anymore
                 c = 0;
@@ -640,11 +661,11 @@ pub fn moveLeft(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
 pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
     var line = &buffer.lines.items[buffer.row];
 
-    const after = try a.dupe(u8, line.data.items[buffer.col..]);
+    const after = try a.dupe(u8, line.items[buffer.col..]);
 
-    line.data.items.len = buffer.col;
+    line.items.len = buffer.col;
 
-    const nl = Line{ .data = .{ .items = after, .capacity = after.len } };
+    const nl = Line{ .items = after, .capacity = after.len };
 
     buffer.row += 1;
     buffer.col = 0;
@@ -659,10 +680,19 @@ pub fn save(buffer: *Buffer) !void {
     defer f.close();
 
     for (buffer.lines.items) |line| {
-        const line_str = line.data.items;
-        try f.writeAll(line_str);
+        try f.writeAll(line.items);
         try f.writer().writeByte('\n');
     }
+}
+
+pub fn setMode(buffer: *Buffer, mode: Buffer.Token) void {
+    _ = buffer;
+    _ = mode;
+
+    unreachable;
+    // if (buffer.keymap.namedmaps.get(mode)) |m| {
+    //     buffer.keymap = m;
+    // }
 }
 
 /// using static for id assignment

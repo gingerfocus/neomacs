@@ -29,6 +29,8 @@
           strace
           zon2nix
 
+          scdoc
+
           zig
           luajit
           pkg-config

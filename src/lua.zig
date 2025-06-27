@@ -257,7 +257,7 @@ fn nluaEdit(L: ?*lua.State) callconv(.C) c_int {
     };
 
     const buf = state.a.create(root.Buffer) catch return 0;
-    buf.* = root.Buffer.initFile(state.a, file) catch return 0;
+    buf.* = root.Buffer.initFile(state, file) catch return 0;
 
     state.buffers.append(state.a, buf) catch return 0;
     state.buffer = state.buffers.items[state.buffers.items.len - 1];

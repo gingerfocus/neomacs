@@ -4,6 +4,7 @@ const std = @import("std");
 const scu = @import("scured");
 const trm = scu.thermit;
 const lib = root.lib;
+const rc = root.rc;
 
 const lua = @import("lua.zig");
 const km = @import("keymaps.zig");
@@ -14,7 +15,7 @@ const Buffer = root.Buffer;
 const norm = scu.thermit.keys.norm;
 const ctrl = scu.thermit.keys.ctrl;
 
-const Ks = scu.thermit.KeySymbol;
+const Ks = trm.KeySymbol;
 
 // const MAPIDS = struct {
 //     const INSERT = 0;
@@ -22,7 +23,10 @@ const Ks = scu.thermit.KeySymbol;
 //     const VISUAL = 2;
 // };
 
-pub fn initKeyMaps(state: *State) !void {
+pub fn create(
+    alloc: std.mem.Allocator,
+    arena: *std.heap.ArenaAllocator,
+) !std.AutoArrayHashMapUnmanaged(Buffer.Token, *km.KeyMaps) {
     const fallback = struct {
         fn bufInsert(s: *State) !void {
             if (s.ch.modifiers.bits() == 0) {
@@ -32,41 +36,53 @@ pub fn initKeyMaps(state: *State) !void {
         }
     };
 
-    const insert = &state.keyMaps[@intFromEnum(Buffer.Mode.insert)];
-    const normal = &state.keyMaps[@intFromEnum(Buffer.Mode.normal)];
-    const visual = &state.keyMaps[@intFromEnum(Buffer.Mode.visual)];
+    const a = arena.allocator();
+
+    var list = std.AutoArrayHashMapUnmanaged(Buffer.Token, *km.KeyMaps){};
+
+    const normal = try a.create(km.KeyMaps);
+    normal.* = km.KeyMaps{};
+    try list.put(alloc, Buffer.Token.NORMAL, normal);
+
+    const insert = try a.create(km.KeyMaps);
+    insert.* = km.KeyMaps{};
+    try list.put(alloc, Buffer.Token.INSERT, insert);
+
+    const visual = try a.create(km.KeyMaps);
+    visual.* = km.KeyMaps{};
+    try list.put(alloc, Buffer.Token.VISUAL, visual);
 
     // insert
-    try initInsertKeys(state.a, &insert.keys);
-    try insert.put(state.a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
+    try initInsertKeys(a, insert);
+    try insert.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
     insert.fallback = .{ .Native = fallback.bufInsert };
 
     // normal
-    try initToInsertKeys(state.a, &normal.keys);
-    try initToVisualKeys(state.a, &normal.keys);
-    try initMotionKeys(state.a, normal);
-    try initNormalKeys(state.a, &normal.keys);
-    try initModifyingKeys(state.a, normal);
+    try initToInsertKeys(a, normal);
+    try initToVisualKeys(a, normal);
+    try initMotionKeys(a, normal);
+    try initNormalKeys(a, normal);
+    try initModifyingKeys(a, normal);
 
     // visual
-    try initMotionKeys(state.a, visual);
-    try visual.put(state.a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
-    try visual.put(state.a, norm('d'), .{ .Native = actions.delete });
+    try initMotionKeys(a, visual);
+    try visual.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
+    try visual.put(a, norm('d'), .{ .Native = actions.delete });
     visual.targeter = km.action.moveKeep;
+
+    return list;
 }
 
 pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
-    const mode = &maps.keys;
-
     // arrow keys?
-    try mode.put(a, norm('j'), .{ .Native = targeter.motionDown });
-    try mode.put(a, norm('k'), .{ .Native = targeter.motionUp });
-    try mode.put(a, norm('l'), .{ .Native = targeter.right });
-    try mode.put(a, norm('h'), .{ .Native = targeter.left });
+    try maps.put(a, norm('j'), .{ .Native = targeter.motionDown });
+    try maps.put(a, norm('k'), .{ .Native = targeter.motionUp });
+    try maps.put(a, norm('l'), .{ .Native = targeter.right });
+    try maps.put(a, norm('h'), .{ .Native = targeter.left });
 
-    try mode.put(a, norm('G'), .{ .Native = targeter.bot });
-    try mode.put(a, '$', .{ .Native = targeter.motionEnd });
-    try mode.put(a, '0', .{ .Native = targeter.motionBegin });
+    try maps.put(a, norm('G'), .{ .Native = targeter.bot });
+    try maps.put(a, '$', .{ .Native = targeter.motionEnd });
+    try maps.put(a, '0', .{ .Native = targeter.motionBegin });
 
     // motion_e(state);
     // motion_b(state);
@@ -75,7 +91,7 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
     //  @as(c_int, 37) buffer_next_brace(buffer);
 
     const g = try maps.then(a, norm('g'));
-    try g.keys.put(a, norm('g'), .{ .Native = targeter.top });
+    try g.put(a, norm('g'), .{ .Native = targeter.top });
 
     // const gq = try g.then(a, 'q');
     // _ = gq; // autofix
@@ -87,18 +103,18 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
     // c - buffer_replace_ch(buffer, state);
 
     const d = try maps.then(a, norm('d'));
-    try d.keys.put(a, norm('d'), .{ .Native = targeter.line });
+    try d.put(a, norm('d'), .{ .Native = targeter.line });
     try initMotionKeys(a, d);
     d.targeter = actions.delete;
 }
 
-fn initToVisualKeys(a: std.mem.Allocator, normal: *km.KeyMapings) !void {
+fn initToVisualKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
     try normal.put(a, norm('v'), .{ .Native = visuals.range });
     try normal.put(a, norm('V'), .{ .Native = visuals.line });
     try normal.put(a, ctrl('v'), .{ .Native = visuals.block });
 }
 
-fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMapings) !void {
+fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
     try normal.put(a, norm('i'), .{ .Native = inserts.before });
     try normal.put(a, norm('I'), .{ .Native = inserts.start });
     try normal.put(a, norm('a'), .{ .Native = inserts.after });
@@ -393,7 +409,7 @@ fn insertTab(state: *State) !void {
         try buffer.insertCharacter(state.a, ' ');
     }
 }
-fn initInsertKeys(a: std.mem.Allocator, insert: *km.KeyMapings) !void {
+fn initInsertKeys(a: std.mem.Allocator, insert: *km.KeyMaps) !void {
     try insert.put(a, norm(Ks.Backspace.toBits()), .{ .Native = deleteBufferCharacter });
 
     try insert.put(a, norm(Ks.Tab.toBits()), .{ .Native = insertTab });
@@ -1084,7 +1100,7 @@ const targeter = struct {
             .start = start,
             .end = .{
                 .row = row,
-                .col = buffer.lines.items[row].data.items.len,
+                .col = buffer.lines.items[row].items.len,
             },
         };
     }
@@ -1098,7 +1114,7 @@ const targeter = struct {
         if (buffer.row >= buffer.lines.items.len) {
             buffer.row = buffer.lines.items.len - 1;
         }
-        buffer.col = @min(buffer.col, buffer.lines.items[buffer.row].data.items.len);
+        buffer.col = @min(buffer.col, buffer.lines.items[buffer.row].items.len);
         // buffer.updatePostionKeepRow();
     }
 
@@ -1109,7 +1125,7 @@ const targeter = struct {
 
         buffer.row = if (buffer.row < count) 0 else buffer.row - count;
 
-        buffer.col = @min(buffer.col, buffer.lines.items[buffer.row].data.items.len);
+        buffer.col = @min(buffer.col, buffer.lines.items[buffer.row].items.len);
         // buffer.updatePostionKeepRow();
     }
 
@@ -1181,7 +1197,7 @@ const targeter = struct {
             },
             .end = .{
                 .row = buffer.row,
-                .col = buffer.lines.items[buffer.row].data.items.len,
+                .col = buffer.lines.items[buffer.row].items.len,
             },
         };
 
@@ -1354,7 +1370,8 @@ const inserts = struct {
         _ = state.getCurrentBuffer() orelse return;
 
         state.repeating.reset();
-        state.buffer.mode = .insert;
+        // state.buffer.mode = .insert;
+        state.buffer.setMode(Buffer.Token.INSERT);
     }
 
     fn after(state: *State) !void {
@@ -1409,7 +1426,7 @@ const inserts = struct {
         const buffer = state.getCurrentBuffer() orelse return;
         const line = &buffer.lines.items[buffer.row];
 
-        buffer.col = line.data.items.len;
+        buffer.col = line.items.len;
         try buffer.newlineInsert(state.a);
 
         state.repeating.reset();

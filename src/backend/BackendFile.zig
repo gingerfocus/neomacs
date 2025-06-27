@@ -42,7 +42,7 @@ const thunk = struct {
                     self.file.writeAll("\n") catch {};
                 }
                 // Add a separator for the next frame
-                self.file.writeAll("--- FRAME ---") catch {};
+                self.file.writeAll("--- FRAME ---\n") catch {};
             },
         }
     }

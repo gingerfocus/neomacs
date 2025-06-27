@@ -30,7 +30,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     var renderRow: usize = row_render_start;
     while (renderRow < buffer.lines.items.len and renderRow < row_render_start + view.h) : (renderRow += 1) {
         const line = buffer.lines.items[renderRow];
-        const bufdata = line.data.items;
+        const bufdata = line.items;
 
         for (bufdata, 0..) |ch, c| {
             writer.draw(
@@ -55,7 +55,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
                 .{ .col = @as(usize, @intCast(view.x)) + 1 + cur.col, .row = @as(usize, @intCast(view.y)) + cur.row - row_render_start },
                 .{
                     .background = Color.Reset,
-                    .content = .{ .Text = buffer.lines.items[cur.row].data.items[cur.col] },
+                    .content = .{ .Text = buffer.lines.items[cur.row].items[cur.col] },
                 },
             );
 

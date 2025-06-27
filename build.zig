@@ -3,6 +3,7 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const static = b.option(bool, "static", "try to complile everything statically") orelse false;
     const windowing = b.option(bool, "windowing", "add window backend") orelse true;
+    // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
 
     if (windowing and static) {
         std.debug.print("error: Executable can't link in a windowing system and be built statically!\n", .{});
@@ -92,6 +93,7 @@ pub fn build(b: *std.Build) void {
     const xev = b.dependency("libxev", .{
         .target = target,
         .optimize = optimize,
+        .@"emit-man-pages" = true,
     });
     neomacs.addImport("xev", xev.module("xev"));
 
@@ -136,22 +138,22 @@ pub fn build(b: *std.Build) void {
 
     // -------------------------------------------------------------------------
 
-    const wevExe = b.addExecutable(.{
-        .root_source_file = b.path("src/bin/wev.zig"),
-        .name = "wev",
-        .target = target,
-        .optimize = optimize,
-    });
-
-    wevExe.root_module.addImport("neomacs", neomacs);
-
-    addBuildAndRunSteps(b, "wev", wevExe);
+    // const wevExe = b.addExecutable(.{
+    //     .root_source_file = b.path("src/bin/wev.zig"),
+    //     .name = "wev",
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    //
+    // wevExe.root_module.addImport("neomacs", neomacs);
+    //
+    // addBuildAndRunSteps(b, "wev", wevExe);
 
     // -------------------------------------------------------------------------
 
     const check = b.step("check", "Lsp Check Step");
     check.dependOn(&zssExe.step);
-    check.dependOn(&wevExe.step);
+    // check.dependOn(&wevExe.step);
     check.dependOn(&neomacsExe.step);
 
     // -------------------------------------------------------------------------

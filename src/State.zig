@@ -3,7 +3,7 @@ const root = @import("root");
 const scu = root.scu;
 const trm = root.trm;
 const xev = root.xev;
-const rc = root.rc;
+const rc = @import("zigrc");
 const Buffer = root.Buffer;
 const Args = root.Args;
 
@@ -40,15 +40,20 @@ command: Command,
 /// must be arena allocated
 status_bar_msg: ?[]const u8 = null,
 
-// rootKeyMaps: rc.RcUnmanaged(km.KeyMaps),
-keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
-/// If null then do the normal key map look up, else use this as the key maps,
-/// dont touch this as if you try to be clever it will just be set to null
+// defaultKeyMap: [3]rc.RcUnmanaged(km.KeyMaps),
+
+namedmaps: std.AutoArrayHashMapUnmanaged(Buffer.Token, *km.KeyMaps),
 currentKeyMap: ?*km.KeyMaps = null,
+
+// If null then do the normal key map look up, else use this as the key maps,
+// dont touch this as if you try to be clever it will just be set to null
+// currentKeyMap: ?*km.KeyMaps = null,
 
 L: *lua.State,
 
 config: Config = .{},
+
+// zygotbuffer: *Buffer,
 
 buffers: std.ArrayListUnmanaged(*Buffer),
 /// Always a memeber of the buffers array
@@ -67,11 +72,37 @@ tsmap: std.ArrayListUnmanaged(void) = .{},
 pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
     try checkfirstrun(a);
 
+    const L = lua.init();
+
+    var arena = std.heap.ArenaAllocator.init(a);
+    const maps = try keys.create(a, &arena);
+
+    var state = State{
+        .a = a,
+        .arena = arena,
+        .L = L,
+
+        // .term = t,
+        .backend = try Backend.init(a, args),
+
+        .namedmaps = maps,
+
+        // .undo_stack = Undo_Stack.init,
+        // .redo_stack = Undo_Stack.init(a),
+        // .cur_undo = Undo{},
+
+        .buffers = .{},
+        .buffer = undefined,
+
+        // .loop = try xev.Loop.init(a),
+    };
+
+
     var buffers = std.ArrayListUnmanaged(*Buffer){};
     const buffer = try a.create(Buffer);
     if (file) |f| {
         root.log(@src(), .debug, "opening file ({s})", .{f});
-        buffer.* = Buffer.initFile(a, f) catch |err| {
+        buffer.* = Buffer.initFile(&state, f) catch |err| {
             root.log(@src(), .err, "File Not Found: {s}", .{f});
             a.destroy(buffer);
             return err;
@@ -79,34 +110,16 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
     } else {
         buffer.* = Buffer.initEmpty();
     }
+
+    // for (0..Buffer.Mode.COUNT) |i| {
+    //     buffer.keymap = state.defaultKeyMaps[i].clone();
+    // }
+
     try buffers.append(a, buffer);
 
-    const backend = try Backend.init(a, args);
-    // const t = try scu.Term.init(a);
+    state.buffers = buffers;
+    state.buffer = buffer;
 
-    const L = lua.init();
-
-    var state = State{
-        .a = a,
-        .arena = std.heap.ArenaAllocator.init(a),
-        .L = L,
-
-        // .term = t,
-        .backend = backend,
-
-        .keyMaps = .{km.KeyMaps{}} ** Buffer.Mode.COUNT,
-
-        // .undo_stack = Undo_Stack.init,
-        // .redo_stack = Undo_Stack.init(a),
-        // .cur_undo = Undo{},
-
-        .buffers = buffers,
-        .buffer = buffer,
-        .command = try Command.init(a),
-
-        // .loop = try xev.Loop.init(a),
-    };
-    try keys.initKeyMaps(&state);
     try render.init(&state);
 
     return state;
@@ -114,11 +127,6 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
 
 pub fn deinit(state: *State) void {
     std.log.debug("deiniting state", .{});
-
-    // keymaps before lua as they reference the lua state
-    for (&state.keyMaps) |*keyMap| keyMap.deinit(state.a);
-
-    lua.deinit(state.L);
 
     // state.cur_undo.data.deinit(state.a);
     // state.undo_stack.deinit();
@@ -133,6 +141,12 @@ pub fn deinit(state: *State) void {
         state.a.destroy(buffer);
     }
     state.buffers.deinit(state.a);
+
+    // keymaps before lua as they reference the lua state
+    //                                 v comfirm it got released
+    state.namedmaps.deinit(state.a);
+
+    lua.deinit(state.L);
 
     std.log.debug("closing backend", .{});
     state.backend.deinit();
@@ -161,8 +175,15 @@ pub fn press(state: *State, ke: trm.KeyEvent) !void {
 }
 
 fn getKeyMaps(state: *const State) *const km.KeyMaps {
+    // const buffer =state.getCurrentBuffer() orelse {
+    //     return state.namedmaps.get(Buffer.Token.NORMAL).?;
+    // };
+
     if (state.currentKeyMap) |map| return map;
-    return &state.keyMaps[@intFromEnum(state.buffer.mode)];
+
+    return state.namedmaps.get(Buffer.Token.NORMAL).?;
+
+    // return state.buffer.keymap.value;
 }
 
 pub const Repeating = struct {

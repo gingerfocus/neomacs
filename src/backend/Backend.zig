@@ -9,6 +9,7 @@ const options = @import("options");
 const BackendTerminal = @import("BackendTerminal.zig");
 const BackendWayland = @import("BackendWayland.zig");
 const BackendFile = @import("BackendFile.zig");
+const BackendHeadless = @import("BackendHeadless.zig");
 
 // arena: std.heap.ArenaAllocator,
 vtable: *const VTable,
@@ -32,8 +33,16 @@ pub fn init(a: std.mem.Allocator, args: Args) !Self {
         }
     }
 
-    const data = try BackendTerminal.init(a);
-    return data.backend();
+    if (BackendTerminal.init(a)) |term| {
+        return term.backend();
+    } else |err| {
+        std.log.err("could not open terminal backend: {any}", .{err});
+        std.log.err("falling back to headless backend", .{});
+        std.log.err("close with TODO", .{});
+
+        const headless = try BackendHeadless.init(a);
+        return headless.backend();
+    }
 }
 
 pub inline fn deinit(self: Self) void {

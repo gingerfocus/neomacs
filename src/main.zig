@@ -6,6 +6,9 @@ pub const lib = @import("lib.zig");
 pub const xev = @import("xev");
 pub const rc = @import("zigrc");
 
+// TODO: make this fully modular
+pub const km = @import("keymaps.zig");
+
 pub const render = @import("render/root.zig");
 
 pub const Buffer = @import("Buffer.zig");
@@ -112,6 +115,8 @@ fn neomacs() !void {
             else => {},
         }
     }
+
+    std.log.info("Quitting", .{});
 
     // const parser = treesitter.ts_parser_new();
     // treesitter.ts_parser_set_language(parser, tree_sitter_json());

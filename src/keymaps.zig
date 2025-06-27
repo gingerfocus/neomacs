@@ -30,16 +30,17 @@ pub const action = struct {
             buffer.col = target.end.col;
         }
     }
+
+    pub fn none(_: *State) !void {}
 };
 
-// pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, rc.Rc(KeyMap));
+
 pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
+
 pub const KeyMaps = struct {
     keys: KeyMapings = .{},
     fallback: ?KeyMap = null,
     targeter: *const fn (*State) anyerror!void = action.move,
-
-    // namedsubmaps: std.StringArrayHashMapUnmanaged(*KeyMaps) = .{},
 
     pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
         var iter = self.keys.iterator();
@@ -71,12 +72,16 @@ pub const KeyMaps = struct {
         if (res.found_existing) {
             switch (res.value_ptr.*) {
                 .SubMap => |map| return map,
+                .LuaFnc => |id| {
+                    // TODO: unref global
+                    _ = id;
+                },
                 else => {},
             }
         }
         const map = try a.create(KeyMaps);
-        map.* = .{};
-        res.value_ptr.* = .{ .SubMap = map };
+        map.* = KeyMaps{};
+        res.value_ptr.* = KeyMap{ .SubMap = map };
         return map;
     }
 };
