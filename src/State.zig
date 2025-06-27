@@ -91,6 +91,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         // .redo_stack = Undo_Stack.init(a),
         // .cur_undo = Undo{},
 
+        .command = try Command.init(a),
         .buffers = .{},
         .buffer = undefined,
 

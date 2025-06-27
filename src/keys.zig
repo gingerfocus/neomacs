@@ -123,7 +123,7 @@ fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
     try normal.put(a, norm('O'), .{ .Native = inserts.above });
 }
 
-fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMapings) !void {
+fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
     try normal.put(a, norm(':'), .{ .Native = actions.command });
 
     // if (tools.check_keymaps(buffer, state)) return;
