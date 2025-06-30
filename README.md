@@ -39,6 +39,11 @@ zig build -Dwindowing=false -Dstatic=true -Doptimize=ReleaseSmall
 zig build run -- --dosnapshot tmp.txt <file>
 ```
 
+## Input / Command Line
+I think I should really start to think about architechture for this as it seems
+really flimsy at this point. Maybe just use a single threaded event loop (xev)
+and rewrite it at some point.
+
 ## Keybinds
 Key binds are chorded meaning that each key either does something or places you
 in a submap/mode. Some of these modes are very small but its fine. It may be a

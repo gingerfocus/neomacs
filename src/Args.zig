@@ -13,6 +13,9 @@ pager: bool = false,
 /// Run in the terminal, dont open a new window
 terminal: bool = false,
 
+/// Run with the GTK backend
+gtk: bool = false,
+
 /// TODO: std.process.args()
 pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
     var i: usize = 0;
@@ -59,6 +62,12 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
         if (mem.eql(u8, arg, "-T") or mem.eql(u8, arg, "--terminal")) {
             i += 1;
             opts.terminal = true;
+            continue;
+        }
+
+        if (mem.eql(u8, arg, "--gtk")) {
+            i += 1;
+            opts.gtk = true;
             continue;
         }
 

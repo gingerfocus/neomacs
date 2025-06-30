@@ -30,6 +30,13 @@
           zon2nix
 
           scdoc
+          freetype
+          atk
+
+          gtk3
+          cairo
+          gobject-introspection
+          #skia
 
           zig
           luajit

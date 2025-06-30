@@ -65,9 +65,10 @@ buffer: *Buffer, // todo: might be better to make it an index
 components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 
 // TreeSitter Parsers
-tsmap: std.ArrayListUnmanaged(void) = .{},
+// tsmap: std.ArrayListUnmanaged(void) = .{},
 
-// loop : xev.Loop,
+loop: xev.Loop,
+inputcallback: ?struct { *xev.Completion, xev.Async } = null,
 
 pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
     try checkfirstrun(a);
@@ -95,9 +96,8 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         .buffers = .{},
         .buffer = undefined,
 
-        // .loop = try xev.Loop.init(a),
+        .loop = try xev.Loop.init(.{}),
     };
-
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
     const buffer = try a.create(Buffer);
@@ -146,13 +146,14 @@ pub fn deinit(state: *State) void {
     // keymaps before lua as they reference the lua state
     //                                 v comfirm it got released
     state.namedmaps.deinit(state.a);
+    state.components.deinit(state.a);
 
     lua.deinit(state.L);
 
     std.log.debug("closing backend", .{});
     state.backend.deinit();
 
-    // state.loop.deinit();
+    state.loop.deinit();
     state.arena.deinit();
 }
 
@@ -165,6 +166,8 @@ pub fn getCurrentBuffer(state: *State) ?*Buffer {
 }
 
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
+    try state.loop.run(.no_wait);
+
     // -- Command Thing --------------------
     if (state.command.is) {
         try state.command.maps.run(state, ke);

@@ -1,8 +1,8 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const static = b.option(bool, "static", "try to complile everything statically") orelse false;
     const windowing = b.option(bool, "windowing", "add window backend") orelse true;
+    const static = b.option(bool, "static", "try to complile everything statically") orelse false;
     // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
 
     if (windowing and static) {
@@ -33,6 +33,7 @@ pub fn build(b: *std.Build) void {
 
     // neomacsExe.linkSystemLibrary("tree-sitter");
     neomacs.link_libc = true;
+
 
     // ---------
 
@@ -76,6 +77,14 @@ pub fn build(b: *std.Build) void {
 
         neomacs.linkSystemLibrary("wayland-client", .{});
         neomacs.linkSystemLibrary("xkbcommon", .{});
+
+        neomacs.linkSystemLibrary("freetype2", .{});
+
+        neomacs.linkSystemLibrary("gtk-3", .{});
+        neomacs.linkSystemLibrary("gdk-3", .{});
+        neomacs.linkSystemLibrary("atk-1.0", .{});
+        neomacs.linkSystemLibrary("cairo", .{});
+        neomacs.linkSystemLibrary("gobject-2.0", .{});
     }
 
     // ---------

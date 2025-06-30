@@ -31,6 +31,9 @@ pub fn init() *State {
 
     // Neomacs Object
     push(L, .{
+        .ui = .{
+            .input = nluaUiInput,
+        },
         .api = .{},
         .win = .{
             // local win_id = vim.api.nvim_open_win(
@@ -109,35 +112,6 @@ pub fn deinit(L: *State) void {
     sys.lua_close(L);
 }
 
-// pub fn pushStruct(L: *State, comptime value: anytype) void {
-//     const Value = @TypeOf(value);
-//     const typeInfo: std.builtin.Type = @typeInfo(Value);
-//
-//     sys.lua_newtable(L);
-//
-//     inline for (typeInfo.Struct.fields) |field| {
-//         const f = @field(value, field.name);
-//
-//         switch (@typeInfo(field.type)) {
-//             .ComptimeInt, .Int => sys.lua_pushinteger(L, f),
-//             .Bool => sys.lua_pushboolean(L, @intFromBool(f)),
-//             .Struct => pushStruct(L, f),
-//             .Fn => sys.lua_pushcfunction(L, f),
-//             .Enum => {
-//                 const name = @tagName(f);
-//                 sys.lua_pushlstring(L, name.ptr, name.len);
-//             },
-//             else => @compileError("unable to push type: " ++ @typeName(Value)),
-//         }
-//
-//         if (comptime std.mem.eql(u8, field.name, "__metatable")) {
-//             _ = sys.lua_setmetatable(L, -2);
-//         } else {
-//             sys.lua_setfield(L, -2, field.name);
-//         }
-//     }
-// }
-
 pub fn push(L: *State, value: anytype) void {
     const Value = @TypeOf(value);
     const typeInfo = @typeInfo(Value);
@@ -169,13 +143,17 @@ pub fn push(L: *State, value: anytype) void {
     }
 }
 
-fn all(comptime T: type, items: []const T, func: fn (T) bool) bool {
-    for (items) |item| if (!func(item)) return false;
-    return true;
-}
-
 pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
-    const isCommand = all(u8, cmd, std.ascii.isAlphabetic);
+    var isCommand = true;
+    for (cmd) |c| {
+        if (!std.ascii.isAlphabetic(c)) {
+            isCommand = false;
+            break;
+        }
+    }
+
+    // return true;
+    // const isCommand = all(u8, cmd, std.ascii.isAlphabetic);
     // if (std.mem.indexOfScalarPos(u8, cmd, 0, ' ')) |_| isCommand = false;
 
     if (isCommand) {
@@ -735,5 +713,39 @@ fn nluaOptIndex(L: ?*State) callconv(.C) c_int {
     }
 
     // nothing found
+    return 0;
+}
+
+const xev = root.xev;
+
+fn callback(
+    ud: ?*void,
+    l: *xev.Loop,
+    c: *xev.Completion,
+    r: xev.Async.WaitError!void,
+) xev.CallbackAction {
+    _ = ud;
+    _ = l;
+    _ = c;
+    r catch {};
+
+    root.log(@src(), .warn, "callback", .{});
+    return xev.CallbackAction.disarm;
+}
+
+fn nluaUiInput(L: ?*State) callconv(.C) c_int {
+    root.log(@src(), .debug, "ui.input", .{});
+
+    const s = root.state();
+    const as = xev.Async.init() catch unreachable;
+
+    // xev.Stream.initFd()
+
+    const c = s.a.create(xev.Completion) catch unreachable;
+    as.wait(&s.loop, c, void, null, callback);
+
+    s.inputcallback = .{ c, as };
+    _ = L;
+
     return 0;
 }

@@ -42,11 +42,11 @@ pub fn log(
 }
 
 const static = struct {
-    var state: State = undefined;
+    var state: *State = undefined;
 };
 
 pub inline fn state() *State {
-    return &static.state;
+    return static.state;
 }
 
 pub fn main() u8 {
@@ -70,6 +70,12 @@ pub fn main() u8 {
 //-----------------------------------------------------------------------------
 
 fn neomacs() !void {
+    var endtime: i64 = undefined;
+    defer {
+        const end = std.time.microTimestamp();
+        std.debug.print("Close taken: {} us\n", .{end - endtime});
+    }
+
     var alloc = std.heap.GeneralPurposeAllocator(.{}){}; // alloc.init();
     defer _ = alloc.deinit();
     const a = alloc.allocator();
@@ -92,7 +98,10 @@ fn neomacs() !void {
         return;
     }
 
-    static.state = try State.init(a, file, args);
+    static.state = try a.create(State);
+    static.state.* = try State.init(a, file, args);
+    defer a.destroy(static.state);
+
     const s = state();
     defer static.state.deinit();
 
@@ -107,6 +116,7 @@ fn neomacs() !void {
                 if (trm.keys.bits(ke) == trm.keys.ctrl('q')) break;
                 s.ch = ke; // used by bad events that reference state directly
 
+                // std.debug.print("key: {any}\n", .{ke});
                 try s.press(ke);
             },
             .End => s.config.QUIT = true,
@@ -117,6 +127,7 @@ fn neomacs() !void {
     }
 
     std.log.info("Quitting", .{});
+    endtime = std.time.microTimestamp();
 
     // const parser = treesitter.ts_parser_new();
     // treesitter.ts_parser_set_language(parser, tree_sitter_json());

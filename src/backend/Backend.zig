@@ -8,6 +8,7 @@ const options = @import("options");
 
 const BackendTerminal = @import("BackendTerminal.zig");
 const BackendWayland = @import("BackendWayland.zig");
+const BackendGtk = @import("BackendGtk.zig");
 const BackendFile = @import("BackendFile.zig");
 const BackendHeadless = @import("BackendHeadless.zig");
 
@@ -26,6 +27,14 @@ pub fn init(a: std.mem.Allocator, args: Args) !Self {
     }
 
     if (options.windowing and !args.terminal) {
+        if (args.gtk) {
+            if (BackendGtk.init(a)) |window| {
+                return window.backend();
+            } else |err| {
+                root.log(@src(), .warn, "could not open gtk backend: {any}", .{err});
+            }
+        }
+
         if (BackendWayland.init(a)) |window| {
             return window.backend();
         } else |err| {

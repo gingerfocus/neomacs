@@ -3,7 +3,7 @@ const Backend = @import("Backend.zig");
 const root = @import("root");
 const lib = root.lib;
 const mem = std.mem;
-// const shm = lib.shm;
+const xev = root.xev;
 const trm = @import("thermit");
 
 const Window = @This();
@@ -11,6 +11,13 @@ const BackendWayland = @This();
 
 const graphi = @cImport({
     @cInclude("graphi.h");
+});
+
+const font = @cImport({
+    @cInclude("ft2build.h");
+    @cInclude("freetype/freetype.h");
+    @cInclude("freetype/ftmodapi.h");
+    @cInclude("freetype/ftglyph.h");
 });
 
 const wl = @cImport({
@@ -82,7 +89,22 @@ dnd: ?*wl.wl_data_offer = null,
 
 a: std.mem.Allocator,
 
-pub fn init(a: std.mem.Allocator) !*Window {
+// TODO: just do it
+bitmap: Bitmap,
+
+const Bitmap = struct {
+    width: u32,
+    height: u32,
+    buffer: []u8,
+};
+
+const DEFAULT_WIDTH = 1020;
+const DEFAULT_HEIGHT = 840;
+
+pub fn init(
+    a: std.mem.Allocator,
+    // loop: *xev.Loop,
+) !*Window {
     const state = try a.create(Window);
 
     const display = wl.wl_display_connect(null) orelse {
@@ -97,7 +119,53 @@ pub fn init(a: std.mem.Allocator) !*Window {
 
     _ = wl.wl_registry_add_listener(registry, &wl_registry_listener, state);
 
+    // const fd = wl.wl_display_get_fd(display);
+    // const stream = xev.Stream.initFd(fd);
+    // var c = try a.create(xev.Completion)l
+    // stream.poll(loop,c, .read, void, null)
+
+    // font.FT_Alloc_Func
+
+    var library: font.FT_Library = undefined;
+    var err = font.FT_Init_FreeType(&library);
+    if (err != 0) {
+        // ... an error occurred during library initialization ...
+    }
+
+    var face: font.FT_Face = undefined;
+    err = font.FT_New_Face(
+        library,
+        "/nix/store/fmnrhnlw687farbwmfr5yq9is4z8wxa6-nerdfonts-3.2.1/share/fonts/truetype/NerdFonts/HackNerdFontMono-Regular.ttf",
+        0,
+        &face,
+    );
+    // defer font.FT_Done_Face() // mayber?
+
+    err = font.FT_Set_Char_Size(face, // handle to face object
+        0, // char_width in 1/64 of points
+        16 * 64, // char_height in 1/64 of points
+        300, // horizontal device resolution
+        300); // vertical device resolution
+
+    const glyph_index = font.FT_Get_Char_Index(face, 'A');
+
+    err = font.FT_Load_Glyph(face, // handle to face object */
+        glyph_index, // glyph index           */
+        0); // load flags, see below */
+
+    err = font.FT_Render_Glyph(face.*.glyph, // glyph slot  */
+        font.FT_RENDER_MODE_NORMAL); // render mode */
+
+    const bm = face.*.glyph.*.bitmap;
+    const bitmap = Bitmap{
+        .width = bm.width,
+        .height = bm.rows,
+        .buffer = try a.dupe(u8, bm.buffer[0 .. bm.width * bm.rows]),
+    };
+
     state.* = .{
+        .bitmap = bitmap,
+
         // .closed = false,
         //
         .registry = registry,
@@ -167,6 +235,10 @@ pub fn init(a: std.mem.Allocator) !*Window {
 }
 
 const thunk = struct {
+    const FONTWIDTH = 5;
+    const FONTHEIGHT = 7;
+    const FONTSIZE = 4;
+
     fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
 
@@ -179,9 +251,6 @@ const thunk = struct {
         // const text = "Hello, wind!";
         // @memcpy(text_buf[0..text.len], text);
         // text_buf[text.len] = 0;
-
-        const FONTWIDTH: i32 = 5;
-        const FONTHEIGHT: i32 = 7;
 
         // if (node.background) |bg| {
         //     const rs = pos.row * FONTHEIGHT;
@@ -202,8 +271,6 @@ const thunk = struct {
         //     }
         // }
 
-        const FONTSIZE = 7;
-
         switch (node.content) {
             .Text => |ch| {
                 const rendercolor = node.foreground orelse .Black;
@@ -213,6 +280,7 @@ const thunk = struct {
 
                 var text_buf: [2]u8 = .{ ch, 0 };
                 // std.debug.print("ch: {c}\n", .{ch});
+
                 graphi.graphi_draw_text(
                     @ptrCast(@alignCast(window.buffer.data.ptr)),
                     width,
@@ -224,6 +292,24 @@ const thunk = struct {
                     0,
                     color, // graphi.BLACK,
                 );
+
+                for (0..window.bitmap.height) |row| {
+                    @memcpy(
+                        window.buffer.data[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
+                        window.bitmap.buffer[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
+                    );
+                }
+
+                // graphi.draw_rect(
+                //     @ptrCast(@alignCast(window.buffer.data.ptr)),
+                //     width,
+                //     height,
+                //     @as(c_int, @intCast(pos.col * FONTWIDTH )),
+                //     @as(c_int, @intCast(pos.row * FONTHEIGHT)),
+                //     FONTWIDTH,
+                //     FONTHEIGHT,
+                //     graphi.GREEN,
+                // );
             },
             .Image => |_| {},
             .None => {},
@@ -261,70 +347,79 @@ const thunk = struct {
         // if (events < 0) return Backend.Event{ .Error = true };
         // if (events == 0) return Backend.Event.Timeout;
 
-        if (window.events.items.len == 0) return Backend.Event.Timeout;
+        while (window.events.items.len > 0) {
+            const event = window.events.orderedRemove(0);
 
-        const event = window.events.orderedRemove(0);
+            // convert event
+            switch (event.ty) {
+                .key => |sym| switch (sym) {
+                    65507, 65508 => {
+                        window.modifiers.ctrl = event.pressed;
+                        root.log(@src(), .info, "ctrl: ", .{});
+                    },
+                    // 65515 => window.modifiers.supr = event.pressed,
+                    65513, 65514 => window.modifiers.altr = event.pressed,
+                    65505, 65506 => {
+                        window.modifiers.shft = event.pressed;
+                    },
+                    65293 => {
+                        // ENTER
+                    },
+                    65289 => {
+                        // TAB
+                    },
+                    65509 => {
+                        // CAPS
+                    },
+                    // 65361 - arrow left
+                    // 65362 - arrow up
+                    // 65364 - arrow down
+                    // 65363 - arrow right
 
-        // convert event
-        switch (event.ty) {
-            .key => |sym| switch (sym) {
-                65507, 65508 => window.modifiers.ctrl = event.pressed,
-                // 65515 => window.modifiers.supr = event.pressed,
-                65513, 65514 => window.modifiers.altr = event.pressed,
-                65505, 65506 => window.modifiers.shft = event.pressed,
-                65293 => {
-                    // ENTER
-                },
-                65289 => {
-                    // TAB
-                },
-                65509 => {
-                    // CAPS
-                },
-                // 65361 - arrow left
-                // 65362 - arrow up
-                // 65364 - arrow down
-                // 65363 - arrow right
+                    // 65288 - delete
 
-                // 65288 - delete
+                    // 65470 - F1
+                    // 65471 - F2
+                    // ...
 
-                // 65470 - F1
-                // 65471 - F2
-                // ...
+                    // 269025074
 
-                // 269025074
+                    49...122 => {
+                        if (!event.pressed) continue;
 
-                49...122 => {
-                    const ch: u8 = @intCast(sym);
-                    return Backend.Event{ .Key = .{
-                        .character = ch,
-                        .modifiers = window.modifiers,
-                    } };
+                        const ch: u8 = @intCast(sym);
+                        std.debug.print("ch: {c}\n", .{ch});
+                        var modifiers = window.modifiers;
+                        modifiers.shft = false; // characters dont use shift
+
+                        return Backend.Event{ .Key = .{
+                            .character = ch,
+                            .modifiers = modifiers,
+                        } };
+                    },
+                    32 => {
+                        if (!event.pressed) continue;
+
+                        return Backend.Event{ .Key = .{
+                            .character = trm.KeySymbol.Space.toBits(),
+                            .modifiers = window.modifiers,
+                        } };
+                    },
+                    else => {
+                        std.debug.print("unknown key: {} ({})\n", .{ sym, event.pressed });
+                    },
                 },
-                32 => {
-                    return Backend.Event{ .Key = .{
-                        .character = trm.KeySymbol.Space.toBits(),
-                        .modifiers = window.modifiers,
-                    } };
-                },
-                else => {
-                    std.debug.print("unknown key: {} ({})\n", .{ sym, event.pressed });
-                },
-            },
+            }
         }
-
-        return Backend.Event.Unknown;
+        return Backend.Event.Timeout;
     }
 
     fn getSize(ptr: *anyopaque) lib.Vec2 {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
-        const FONTWIDTH = 5;
-        const FONTHEIGHT = 7;
-        const FONTSIZE = 7;
 
         return .{
-            .row = @as(usize, @intCast(window.height)) / FONTHEIGHT / FONTSIZE,
-            .col = @as(usize, @intCast(window.width)) / FONTWIDTH / FONTSIZE,
+            .row = @as(usize, @intCast(window.height)) / FONTHEIGHT / FONTSIZE / 2,
+            .col = @as(usize, @intCast(window.width)) / FONTWIDTH / FONTSIZE / 2,
         };
     }
 
@@ -342,42 +437,84 @@ const thunk = struct {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
 
         switch (mode) {
-            .begin => if (window.width != window.buffer.width or window.height != window.buffer.height) {
-                root.log(@src(), .debug, "resizing buffer from {d}x{d} to {d}x{d}", .{
-                    window.buffer.width,
-                    window.buffer.height,
-                    window.width,
-                    window.height,
-                });
+            .begin => {
+                if (window.width != window.buffer.width or window.height != window.buffer.height) {
+                    root.log(@src(), .debug, "resizing buffer from {d}x{d} to {d}x{d}", .{
+                        window.buffer.width,
+                        window.buffer.height,
+                        window.width,
+                        window.height,
+                    });
 
-                const buffer = FrameBuffer.init(
-                    window.a,
-                    window.width,
-                    window.height,
-                ) catch {
-                    std.debug.print("Failed to create swap buffer\n", .{});
-                    return;
-                };
+                    const buffer = FrameBuffer.init(
+                        window.a,
+                        window.width,
+                        window.height,
+                    ) catch {
+                        std.debug.print("Failed to create swap buffer\n", .{});
+                        return;
+                    };
 
-                // const old = window.buffer;
+                    // const old = window.buffer;
 
-                // // Copy overlapping region from old buffer to new buffer
-                // const min_width: usize = @intCast(@min(old.width, window.width));
-                // const min_height: usize = @intCast(@min(old.height, window.height));
+                    // // Copy overlapping region from old buffer to new buffer
+                    // const min_width: usize = @intCast(@min(old.width, window.width));
+                    // const min_height: usize = @intCast(@min(old.height, window.height));
 
-                // // // Copy row by row to handle stride
-                // var y: i32 = 0;
-                // while (y < min_height) : (y += 1) {
-                //     const old_row = window.buffer.data[@as(usize, @intCast(y * old.width * 4))..][0 .. min_width * 4];
-                //     const new_row = buffer.data[@as(usize, @intCast(y * window.width * 4))..][0 .. min_width * 4];
-                //     @memcpy(new_row, old_row);
-                // }
+                    // // // Copy row by row to handle stride
+                    // var y: i32 = 0;
+                    // while (y < min_height) : (y += 1) {
+                    //     const old_row = window.buffer.data[@as(usize, @intCast(y * old.width * 4))..][0 .. min_width * 4];
+                    //     const new_row = buffer.data[@as(usize, @intCast(y * window.width * 4))..][0 .. min_width * 4];
+                    //     @memcpy(new_row, old_row);
+                    // }
 
-                window.buffer.deinit(window.a);
-                window.buffer = buffer;
+                    window.buffer.deinit(window.a);
+                    window.buffer = buffer;
+                } else {
+                    @memset(window.buffer.data, 44);
+                }
             },
             .end => {
                 // defaultRender(&window.buffer);
+
+                // const width = @as(usize, @intCast(frame.width));
+                // const height = @as(usize, @intCast(frame.height));
+                //
+                // const ddata: []u32 = @as([*]u32, @ptrCast(frame.data.ptr))[0 .. width * height];
+                // // const ddata: []u32 = f rame.data[0 .. width * height :4];
+                //
+                // // graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
+                // // const color = 0xFFc6a3ff;
+                // // const color = 0xFFFFFFFF;
+                //
+                // // graphi.fill_triangle(ddata.ptr, width, height, 100, 200, 200, 300, 0, 400, color);
+                // // graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
+                //
+                // var y: usize = 0;
+                // while (y < frame.height) : (y += 1) {
+                //     var x: usize = 0;
+                //     while (x < frame.width) : (x += 1) {
+                //         if ((x + y / 8 * 8) % 16 < 8) {
+                //             ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFF666666;
+                //         } else {
+                //             ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFFEEEEEE;
+                //         }
+                //     }
+                // }
+                //
+                // const time = std.time.milliTimestamp();
+                // var buf: [64]u8 = undefined;
+                // const out = std.fmt.bufPrint(&buf, "{d}", .{time}) catch unreachable;
+                // buf[out.len] = 0; // null terminat
+                //
+                // const color2 = graphi.LILAC;
+                // const rectheigh = 90;
+                // graphi.fill_triangle(ddata.ptr, width, height, 0, 0, frame.width, 0, 0, rectheigh, color2);
+                // graphi.fill_triangle(ddata.ptr, width, height, 0, rectheigh, frame.width, 0, frame.width, rectheigh, color2);
+                //
+                // const color1 = graphi.RED;
+                // graphi.draw_text(ddata.ptr, width, height, &buf, 6, 6, 10, 5, 7, 1, color1);
 
                 const buffer = createBuffer(window, window.buffer) catch |err| {
                     std.debug.print("Failed to create buffer: {any}\n", .{err});
@@ -429,109 +566,7 @@ fn createBuffer(window: *Window, frame: FrameBuffer) !*wl.wl_buffer {
     return buffer;
 }
 
-fn defaultRender(frame: *FrameBuffer) void {
-    const width = @as(usize, @intCast(frame.width));
-    const height = @as(usize, @intCast(frame.height));
-
-    const ddata: []u32 = @as([*]u32, @ptrCast(frame.data.ptr))[0 .. width * height];
-    // const ddata: []u32 = f rame.data[0 .. width * height :4];
-
-    // graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
-    // const color = 0xFFc6a3ff;
-    // const color = 0xFFFFFFFF;
-
-    // graphi.fill_triangle(ddata.ptr, width, height, 100, 200, 200, 300, 0, 400, color);
-    // graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
-
-    var y: usize = 0;
-    while (y < frame.height) : (y += 1) {
-        var x: usize = 0;
-        while (x < frame.width) : (x += 1) {
-            if ((x + y / 8 * 8) % 16 < 8) {
-                ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFF666666;
-            } else {
-                ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFFEEEEEE;
-            }
-        }
-    }
-
-    const time = std.time.milliTimestamp();
-    var buf: [64]u8 = undefined;
-    const out = std.fmt.bufPrint(&buf, "{d}", .{time}) catch unreachable;
-    buf[out.len] = 0; // null terminat
-
-    const color2 = graphi.LILAC;
-    const rectheigh = 90;
-    graphi.fill_triangle(ddata.ptr, width, height, 0, 0, frame.width, 0, 0, rectheigh, color2);
-    graphi.fill_triangle(ddata.ptr, width, height, 0, rectheigh, frame.width, 0, frame.width, rectheigh, color2);
-
-    const color1 = graphi.RED;
-    graphi.draw_text(ddata.ptr, width, height, &buf, 6, 6, 10, 5, 7, 1, color1);
-}
-
 const SPACER: []const u8 = "                      ";
-
-// static int proxy_log(struct Window *state,
-// struct wl_proxy *proxy, const char *event, const char *fmt, ...) {
-//     const char *class = wl_proxy_get_class(proxy);
-//
-//     if (!wl_list_empty(&state->opts.filters)) {
-//         bool found = false;
-//         struct wev_filter *filter;
-//         wl_list_for_each(filter, &state->opts.filters, link) {
-//             if (strcmp(filter->interface, class) == 0 &&
-//                     (!filter->event || strcmp(filter->event, event) == 0)) {
-//                 found = true;
-//             }
-//         }
-//         if (!found) {
-//             return 0;
-//         }
-//     }
-//     if (!wl_list_empty(&state->opts.inverse_filters)) {
-//         bool found = false;
-//         struct wev_filter *filter;
-//         wl_list_for_each(filter, &state->opts.inverse_filters, link) {
-//             if (strcmp(filter->interface, class) == 0 &&
-//                     (!filter->event || strcmp(filter->event, event) == 0)) {
-//                 found = true;
-//             }
-//         }
-//         if (found) {
-//             return 0;
-//         }
-//     }
-//
-//     int n = 0;
-//     n += printf("[%02u:%16s] %s%s",
-//             wl_proxy_get_id(proxy),
-//             class, event, strcmp(fmt, "\n") != 0 ? ": " : "");
-//     va_list ap;
-//     va_start(ap, fmt);
-//     n += vprintf(fmt, ap);
-//     va_end(ap);
-//     return n;
-// }
-
-// static void escape_utf8(char *buf) {
-//     if (strcmp(buf, "\a") == 0) {
-//         strcpy(buf, "\\a");
-//     } else if (strcmp(buf, "\b") == 0) {
-//         strcpy(buf, "\\b");
-//     } else if (strcmp(buf, "\e") == 0) {
-//         strcpy(buf, "\\e");
-//     } else if (strcmp(buf, "\f") == 0) {
-//         strcpy(buf, "\\f");
-//     } else if (strcmp(buf, "\n") == 0) {
-//         strcpy(buf, "\\n");
-//     } else if (strcmp(buf, "\r") == 0) {
-//         strcpy(buf, "\\r");
-//     } else if (strcmp(buf, "\t") == 0) {
-//         strcpy(buf, "\\t");
-//     } else if (strcmp(buf, "\v") == 0) {
-//         strcpy(buf, "\\v");
-//     }
-// }
 
 // static void wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
 //         uint32_t serial, struct wl_surface *surface,
@@ -689,8 +724,8 @@ const SPACER: []const u8 = "                      ";
 //     }
 // }
 
-fn wl_keyboard_keymap(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, format: u32, fd: i32, size: u32) callconv(.C) void {
-    _ = wl_keyboard; // autofix
+fn wlkeyboardmap(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, format: u32, fd: i32, size: u32) callconv(.C) void {
+    _ = wl_keyboard;
     const state: *Window = @alignCast(@ptrCast(data));
 
     //     proxy_log(state, (struct wl_proxy *)wl_keyboard, "keymap",
@@ -846,7 +881,7 @@ fn wl_keyboard_repeat_info(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, rat
 }
 
 const wl_keyboard_listener = wl.wl_keyboard_listener{
-    .keymap = wl_keyboard_keymap,
+    .keymap = wlkeyboardmap,
     .enter = wl_keyboard_enter,
     .leave = wl_keyboard_leave,
     .key = wl_keyboard_key,
@@ -960,12 +995,15 @@ const wl_seat_listener = wl.wl_seat_listener{
     .name = wl_seat_name,
 };
 
-fn wl_buffer_release(data: ?*anyopaque, wl_buffer: ?*wl.wl_buffer) callconv(.C) void {
-    _ = data;
-    wl.wl_buffer_destroy(wl_buffer);
-}
 const wl_buffer_listener = wl.wl_buffer_listener{
-    .release = wl_buffer_release,
+    // .release = wlBufferRelease,
+    .release = (struct {
+        fn release(data: ?*anyopaque, wl_buffer: ?*wl.wl_buffer) callconv(.C) void {
+            _ = data;
+            // data is already unmapped
+            wl.wl_buffer_destroy(wl_buffer);
+        }
+    }.release),
 };
 
 fn xdg_toplevel_configure(data: ?*anyopaque, xdg_toplevel: ?*wl.xdg_toplevel, width: i32, height: i32, states: ?*wl.wl_array) callconv(.C) void {
@@ -974,8 +1012,8 @@ fn xdg_toplevel_configure(data: ?*anyopaque, xdg_toplevel: ?*wl.xdg_toplevel, wi
     state.width = width;
     state.height = height;
     if (state.width == 0 or state.height == 0) {
-        state.width = 640;
-        state.height = 480;
+        state.width = DEFAULT_WIDTH;
+        state.height = DEFAULT_HEIGHT;
     }
 
     std.log.info("[xdg_toplevel]: configure: width: {}; height: {}", .{ width, height });
@@ -1056,7 +1094,7 @@ const xdg_surface_listener = wl.xdg_surface_listener{
 
 fn wm_base_ping(data: ?*anyopaque, wm_base: ?*wl.xdg_wm_base, serial: u32) callconv(.C) void {
     _ = data;
-    std.debug.print("[xdg_wm_base]: ping serial: {}\n", .{serial});
+    // std.debug.print("[xdg_wm_base]: ping serial: {}\n", .{serial});
     wl.xdg_wm_base_pong(wm_base, serial);
 }
 
