@@ -42,7 +42,7 @@ status_bar_msg: ?[]const u8 = null,
 
 // defaultKeyMap: [3]rc.RcUnmanaged(km.KeyMaps),
 
-namedmaps: std.AutoArrayHashMapUnmanaged(Buffer.Token, *km.KeyMaps),
+namedmaps: std.AutoArrayHashMapUnmanaged(Buffer.Mode, *km.KeyMaps),
 currentKeyMap: ?*km.KeyMaps = null,
 
 // If null then do the normal key map look up, else use this as the key maps,
@@ -52,6 +52,8 @@ currentKeyMap: ?*km.KeyMaps = null,
 L: *lua.State,
 
 config: Config = .{},
+
+resized: bool = false,
 
 // zygotbuffer: *Buffer,
 
@@ -179,15 +181,13 @@ pub fn press(state: *State, ke: trm.KeyEvent) !void {
 }
 
 fn getKeyMaps(state: *const State) *const km.KeyMaps {
-    // const buffer =state.getCurrentBuffer() orelse {
-    //     return state.namedmaps.get(Buffer.Token.NORMAL).?;
-    // };
+    if (state.currentKeyMap) |map| {
+        std.log.info("using current keymap", .{});
+        return map;
+    }
 
-    if (state.currentKeyMap) |map| return map;
-
-    return state.namedmaps.get(Buffer.Token.NORMAL).?;
-
-    // return state.buffer.keymap.value;
+    const buffer = state.buffer;
+    return state.namedmaps.get(buffer.mode) orelse state.namedmaps.get(.normal).?;
 }
 
 pub const Repeating = struct {

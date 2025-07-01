@@ -26,7 +26,7 @@ const Ks = trm.KeySymbol;
 pub fn create(
     alloc: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
-) !std.AutoArrayHashMapUnmanaged(Buffer.Token, *km.KeyMaps) {
+) !std.AutoArrayHashMapUnmanaged(Buffer.Mode, *km.KeyMaps) {
     const fallback = struct {
         fn bufInsert(s: *State) !void {
             if (s.ch.modifiers.bits() == 0) {
@@ -38,19 +38,19 @@ pub fn create(
 
     const a = arena.allocator();
 
-    var list = std.AutoArrayHashMapUnmanaged(Buffer.Token, *km.KeyMaps){};
+    var list = std.AutoArrayHashMapUnmanaged(Buffer.Mode, *km.KeyMaps){};
 
     const normal = try a.create(km.KeyMaps);
     normal.* = km.KeyMaps{};
-    try list.put(alloc, Buffer.Token.NORMAL, normal);
+    try list.put(alloc, .normal, normal);
 
     const insert = try a.create(km.KeyMaps);
     insert.* = km.KeyMaps{};
-    try list.put(alloc, Buffer.Token.INSERT, insert);
+    try list.put(alloc, .insert, insert);
 
     const visual = try a.create(km.KeyMaps);
     visual.* = km.KeyMaps{};
-    try list.put(alloc, Buffer.Token.VISUAL, visual);
+    try list.put(alloc, .visual, visual);
 
     // insert
     try initInsertKeys(a, insert);
@@ -1366,12 +1366,11 @@ const actions = struct {
 
 const inserts = struct {
     fn before(state: *State) !void {
-        // HACK: to check modifiablity
-        _ = state.getCurrentBuffer() orelse return;
+        root.log(@src(), .debug, "inserts before", .{});
+        const buffer = state.getCurrentBuffer() orelse return;
 
         state.repeating.reset();
-        // state.buffer.mode = .insert;
-        state.buffer.setMode(Buffer.Token.INSERT);
+        buffer.mode = .insert;
     }
 
     fn after(state: *State) !void {

@@ -51,6 +51,7 @@ pub fn init(a: std.mem.Allocator) !*Self {
 
     const mainwin = gtk.gtk_window_new(gtk.GTK_WINDOW_TOPLEVEL);
     const drawarea = gtk.gtk_drawing_area_new();
+    gtk.gtk_window_set_default_size(@ptrCast(mainwin), 800, 600);
 
     gtk.gtk_container_add(@ptrCast(mainwin), drawarea);
 
@@ -65,10 +66,18 @@ pub fn init(a: std.mem.Allocator) !*Self {
     gtk.gSignalConnect(mainwin, "key-press-event", @ptrCast(&eventKey), self);
     gtk.gSignalConnect(mainwin, "key-release-event", @ptrCast(&eventKey), self);
     gtk.gSignalConnect(mainwin, "destroy", @ptrCast(&eventDestroy), self);
+    gtk.gSignalConnect(mainwin, "size-allocate", @ptrCast(&eventSizeAllocate), self);
 
     gtk.gtk_widget_show_all(mainwin);
 
     return self;
+}
+
+fn eventSizeAllocate(widget: *gtk.GtkWidget, allocation: *gtk.GtkAllocation, self: *Self) callconv(.C) void {
+    _ = widget;
+    self.width = allocation.width;
+    self.height = allocation.height;
+    self.events.append(self.a, .Resize) catch {};
 }
 
 fn eventConfigure(widget: *gtk.GtkWidget, event: *gtk.GdkEventConfigure, self: *Self) callconv(.C) gtk.gboolean {
@@ -204,8 +213,8 @@ const thunk = struct {
     fn getSize(ptr: *anyopaque) lib.Vec2 {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
         return .{
-            .row = @as(usize, @intCast(window.height)) / @as(usize, @intFromFloat(CHAR_HEIGHT)),
-            .col = @as(usize, @intCast(window.width)) / @as(usize, @intFromFloat(CHAR_WIDTH)),
+            .row = @as(usize, @intCast(window.height)) / @as(usize, @intFromFloat(CHAR_HEIGHT)) / 3,
+            .col = @as(usize, @intCast(window.width)) / @as(usize, @intFromFloat(CHAR_WIDTH)) / 3,
         };
     }
 

@@ -58,6 +58,7 @@ pub fn parseKey(
         // 269025074
 
         // pass through with no shift modifier
+        35,
         49...122 => {
             const ch: u8 = @intCast(key);
             // std.debug.print("ch: {c}\n", .{ch});

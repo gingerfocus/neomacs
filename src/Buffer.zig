@@ -34,15 +34,7 @@ col: usize = 0,
 filename: []const u8,
 
 // keymap: *km.KeyMaps,
-// namedmaps: std.AutoArrayHashMapUnmanaged(Token, *km.KeyMaps) = .{},
 
-pub const Token = struct {
-    value: u16,
-
-    pub const NORMAL = Token{ .value = 0 };
-    pub const INSERT = Token{ .value = 1 };
-    pub const VISUAL = Token{ .value = 2 };
-};
 
 const Line = std.ArrayListUnmanaged(u8);
 
@@ -685,17 +677,8 @@ pub fn save(buffer: *Buffer) !void {
     }
 }
 
-pub fn setMode(buffer: *Buffer, mode: Buffer.Token) void {
-    _ = buffer;
-    _ = mode;
-
-    unreachable;
-    // if (buffer.keymap.namedmaps.get(mode)) |m| {
-    //     buffer.keymap = m;
-    // }
-}
-
 /// using static for id assignment
+
 const idgen = struct {
     var count: usize = 0;
     fn next() usize {

@@ -65,6 +65,6 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
 
     // render the cursor
     if (!state.command.is) {
-        writer.setCursor(.{ .col = view.x + buffer.col, .row = view.y + buffer.row });
+        writer.setCursor(.{ .col = view.x + buffer.col, .row = view.y + buffer.row + 1 - row_render_start });
     }
 }

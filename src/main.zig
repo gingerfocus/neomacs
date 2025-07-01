@@ -113,7 +113,7 @@ fn neomacs() !void {
                 try s.press(ke);
             },
             .End => s.config.QUIT = true,
-            // .Resize => s.resized = true,
+            .Resize => s.resized = true,
             // .Error => |fatal| { if (fatal) break; },
             else => {},
         }
