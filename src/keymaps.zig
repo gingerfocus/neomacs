@@ -1,15 +1,13 @@
 //! TODO: Fully modular system for keymaps
 //! Dont have the nuance of reference counting escape this file
 
-const std = @import("std");
-const root = @import("root");
-
+const root = @import("root.zig");
+const std = root.std;
 const scu = root.scu;
 const trm = root.trm;
+const lua = root.lua;
 
-const lua = @import("lua.zig");
-
-const State = @import("State.zig");
+const State = root.State;
 
 const rc = @import("zigrc");
 

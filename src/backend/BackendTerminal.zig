@@ -1,4 +1,4 @@
-const root = @import("root");
+const root = @import("../root.zig");
 const lib = root.lib;
 const std = @import("std");
 

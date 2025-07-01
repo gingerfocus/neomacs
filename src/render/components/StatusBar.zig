@@ -1,5 +1,5 @@
-const std = @import("std");
-const root = @import("../../main.zig");
+const root = @import("../../root.zig");
+const std = root.std;
 const lib = root.lib;
 
 const State = root.State;

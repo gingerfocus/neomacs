@@ -1,27 +1,25 @@
-const std = @import("std");
-const Backend = @import("Backend.zig");
-const root = @import("root");
+const root = @import("../root.zig");
+const std = root.std;
 const lib = root.lib;
 const mem = std.mem;
 const xev = root.xev;
-const trm = @import("thermit");
+const trm = root.trm;
 
+const Backend = @import("Backend.zig");
+
+const Self = @This();
 const Window = @This();
-const BackendWayland = @This();
 
 const desktop = @import("desktop.zig");
-
 const graphi = @cImport({
     @cInclude("graphi.h");
 });
-
 const font = @cImport({
     @cInclude("ft2build.h");
     @cInclude("freetype/freetype.h");
     @cInclude("freetype/ftmodapi.h");
     @cInclude("freetype/ftglyph.h");
 });
-
 const wl = @cImport({
     @cInclude("wayland-client-core.h");
     @cInclude("wayland-client-protocol.h");
@@ -242,7 +240,7 @@ const thunk = struct {
     const FONTSIZE = 4;
 
     fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
-        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
         const width = @as(usize, @intCast(window.width));
         const height = @as(usize, @intCast(window.height));
@@ -309,7 +307,7 @@ const thunk = struct {
     }
 
     fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
-        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
         if (window.closed) {
             _ = wl.wl_display_dispatch(window.display);
@@ -351,7 +349,7 @@ const thunk = struct {
     }
 
     fn getSize(ptr: *anyopaque) lib.Vec2 {
-        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
         return .{
             .row = @as(usize, @intCast(window.height)) / FONTHEIGHT / FONTSIZE / 2,
@@ -360,7 +358,7 @@ const thunk = struct {
     }
 
     fn deinit(ptr: *anyopaque) void {
-        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
         window.a.free(window.bitmap.buffer);
         window.buffer.deinit(window.a);
@@ -371,7 +369,7 @@ const thunk = struct {
     }
 
     fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
-        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
         switch (mode) {
             .begin => {
@@ -427,7 +425,7 @@ const thunk = struct {
     }
 
     fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
-        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
         graphi.draw_rect(
             @ptrCast(window.buffer.data),
@@ -442,7 +440,7 @@ const thunk = struct {
     }
 };
 
-pub fn backend(window: *BackendWayland) Backend {
+pub fn backend(window: *Self) Backend {
     return Backend{
         .dataptr = window,
         .vtable = &Backend.VTable{

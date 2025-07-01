@@ -1,4 +1,4 @@
-const root = @import("root");
+const root = @import("../root.zig");
 const std = root.std;
 const lib = root.lib;
 const trm = root.trm;
@@ -119,7 +119,7 @@ fn eventKey(widget: *gtk.GtkWidget, arg_event: *gtk.GdkEventKey, self: *Self) ca
     _ = widget;
 
     const event = @as(*GdkEventKey, @ptrCast(@alignCast(arg_event)));
-    std.debug.print("data: {any}\n", .{event});
+    // std.debug.print("data: {any}\n", .{event});
 
     const char = event[7];
     const pressed = event[0] == gtk.GDK_KEY_PRESS; // 9 for release

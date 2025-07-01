@@ -1,9 +1,7 @@
-const root = @import("root");
-
-const std = @import("std");
+const root = @import("root.zig");
+const std = root.std;
 const lib = root.lib;
-const km = @import("keymaps.zig");
-const rc = @import("zigrc");
+const km = root.km;
 
 const State = root.State;
 
@@ -34,7 +32,6 @@ col: usize = 0,
 filename: []const u8,
 
 // keymap: *km.KeyMaps,
-
 
 const Line = std.ArrayListUnmanaged(u8);
 
@@ -321,43 +318,6 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 //     return 0;
 // }
 
-// pub fn index_get_row(arg_buffer: *Buffer, arg_index_1: usize) usize {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var index_1 = arg_index_1;
-//     _ = &index_1;
-//     while (true) {
-//         if (!(index_1 <= buffer.*.data.count)) {
-//             frontend_end();
-//             _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 102));
-//             _ = fprintf(stderr, "index: %zu", index_1);
-//             _ = fprintf(stderr, "\n");
-//             exit(@as(c_int, 1));
-//         }
-//         if (!false) break;
-//     }
-//     while (true) {
-//         if (!(buffer.*.rows.count >= @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))))) {
-//             frontend_end();
-//             _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 103));
-//             _ = fprintf(stderr, "there must be at least one line");
-//             _ = fprintf(stderr, "\n");
-//             exit(@as(c_int, 1));
-//         }
-//         if (!false) break;
-//     }
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < buffer.*.rows.count) : (i +%= 1) {
-//             if ((buffer.*.rows.data[i].start <= index_1) and (index_1 <= buffer.*.rows.data[i].end)) {
-//                 return i;
-//             }
-//         }
-//     }
-//     return 0;
-// }
-//
 // pub fn buffer_yank_line(arg_buffer: *Buffer, arg_state: *State, arg_offset: usize) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -396,7 +356,7 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 //     _ = strncpy(state.*.clipboard.str + initial_s, (buffer.*.data.data + cur.start) + @as(usize, @bitCast(@as(isize, @intCast(line_offset)))), state.*.clipboard.len);
 //     state.*.clipboard.len +%= initial_s;
 // }
-//
+
 // pub fn buffer_yank_char(arg_buffer: *Buffer, arg_state: *State) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -417,6 +377,7 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 //     }
 //     _ = strncpy(state.*.clipboard.str, buffer.*.data.data + buffer.*.cursor, state.*.clipboard.len);
 // }
+
 // pub fn buffer_yank_selection(arg_buffer: *Buffer, arg_state: *State, arg_start: usize, arg_end: usize) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -442,10 +403,6 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 // }
 
 // pub fn bufferDeleteSelection(buffer: *EditBuffer, selection: Tar) !void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
 //     var start = arg_start;
 //     _ = &start;
 //     var end = arg_end;
@@ -678,7 +635,6 @@ pub fn save(buffer: *Buffer) !void {
 }
 
 /// using static for id assignment
-
 const idgen = struct {
     var count: usize = 0;
     fn next() usize {
@@ -687,29 +643,8 @@ const idgen = struct {
     }
 };
 
-// pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
-//     switch (buffer.data) {
-//         .Edit => |*ed| ed.deinit(a),
-//         .Empty => {},
-//         .Custom => |*custom| custom.deinit(a),
-//     }
-// }
-
 // const Target = struct {
 //     down: ?isize = null,
 //     left: ?isize = null,
 // };
 
-// pub const BufferVtable = struct {
-//     /// Function called for all buffers, when this returns true that means the
-//     /// key was handled, it doesnt need to have done anything just agknowledged.
-//     /// When returning false the caller will then resolve global key mappings
-//     /// if possible. This could be used for implementing local buffer key maps
-//     press: *const fn (*anyopaque, u8) bool,
-//
-//     move: *const fn (*anyopaque, Target) void,
-//     edit: *const fn (*anyopaque, u8) void,
-//
-//     pub fn nullMove(_: *anyopaque, _: Target) void {}
-//     pub fn nullEdit(_: *anyopaque, _: u8) void {}
-// };

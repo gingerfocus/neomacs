@@ -1,5 +1,4 @@
-// const root = @import("root");
-const root = @import("main.zig");
+const root = @import("root.zig");
 const std = @import("std");
 const scu = @import("scured");
 const trm = scu.thermit;

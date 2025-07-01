@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("../main.zig");
+const root = @import("../root.zig");
 const trm = root.trm;
 const lib = root.lib;
 

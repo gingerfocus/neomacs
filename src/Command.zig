@@ -1,11 +1,9 @@
-const std = @import("std");
-const root = @import("root");
-
+const root = @import("root.zig");
+const std = root.std;
 const trm = root.trm;
-const km = @import("keymaps.zig");
-const lua = @import("lua.zig");
-
-const State = @import("State.zig");
+const lua = root.lua;
+const km = root.km;
+const State = root.State;
 
 const Command = @This();
 
@@ -28,6 +26,8 @@ const thunk = struct {
         state.command.is = false;
     }
 
+    // TODO: have a colon commandline and a semicolon command line
+    // the colon is the same as vim and the semi is a direct lua function
     fn run(state: *State) !void {
         const cmd = try state.command.buffer.toOwnedSliceSentinel(state.a, 0);
         defer state.a.free(cmd);
@@ -43,6 +43,7 @@ const thunk = struct {
         lua.runCommand(state.L, cmd) catch |err| {
             root.log(@src(), .err, "lua command line error: {}", .{err});
         };
+
 
         state.command.is = false;
         // state.buffer.mode = .normal;

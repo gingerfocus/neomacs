@@ -1,5 +1,5 @@
 const std = @import("std");
-const root = @import("root");
+const root = @import("../root.zig");
 const scu = root.scu;
 const lib = root.lib;
 const Backend = @import("Backend.zig");

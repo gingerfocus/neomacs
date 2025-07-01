@@ -1,20 +1,21 @@
-const std = @import("std");
-const root = @import("root");
+const root = @import("root.zig");
+const std = root.std;
 const scu = root.scu;
 const trm = root.trm;
 const xev = root.xev;
-const rc = @import("zigrc");
+const lua = root.lua;
+const km = root.km;
+
 const Buffer = root.Buffer;
 const Args = root.Args;
 
-pub const Backend = @import("backend/Backend.zig");
 const Command = @import("Command.zig");
 const Config = @import("Config.zig");
 const keys = @import("keys.zig");
-const km = @import("keymaps.zig");
-const lua = @import("lua.zig");
 const Component = @import("render/Component.zig");
 const render = @import("render/root.zig");
+
+pub const Backend = @import("backend/Backend.zig");
 
 const State = @This();
 

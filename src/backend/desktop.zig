@@ -1,4 +1,4 @@
-const root = @import("root");
+const root = @import("../root.zig");
 const std = @import("std");
 const trm = @import("thermit");
 
@@ -10,22 +10,20 @@ pub fn parseKey(
     pressed: bool,
     mods: *trm.KeyModifiers,
 ) ?Backend.Event {
+    var exit = true;
     switch (key) {
-        65507, 65508 => {
-            mods.ctrl = pressed;
-            root.log(@src(), .info, "ctrl: ", .{});
-        },
-        // 65515 => window.modifiers.supr = event.pressed,
+        65515 => mods.supr = pressed,
+        65507, 65508 => mods.ctrl = pressed,
         65513, 65514 => mods.altr = pressed,
-        65505, 65506 => {
-            mods.shft = pressed;
-        },
-        else => {},
+        65505, 65506 => mods.shft = pressed,
+        else => exit = !pressed,
     }
+    if (exit) return null;
 
-    if (!pressed) return null;
     switch (key) {
-        trm.KeySymbol.Return.toBits(), 65293 => return Backend.Event{ .Key = .{
+        trm.KeySymbol.Return.toBits(),
+        65293,
+        => return Backend.Event{ .Key = .{
             .character = trm.KeySymbol.Return.toBits(),
             .modifiers = mods.*,
         } },
@@ -50,7 +48,6 @@ pub fn parseKey(
 
         // 65288 - delete
 
-
         // 65470 - F1
         // 65471 - F2
         // ...
@@ -58,8 +55,8 @@ pub fn parseKey(
         // 269025074
 
         // pass through with no shift modifier
-        35,
-        49...122 => {
+        33...126,
+        => {
             const ch: u8 = @intCast(key);
             // std.debug.print("ch: {c}\n", .{ch});
             var modifiers = mods.*;

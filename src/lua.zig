@@ -3,7 +3,7 @@
 // TODO: this file should have an event pipe to the main state and then it
 // sends its requests back. Managing a global state is hard. :<
 
-const root = @import("root");
+const root = @import("root.zig");
 
 const std = @import("std");
 const mem = std.mem;
@@ -33,6 +33,9 @@ pub fn init() *State {
     push(L, .{
         .ui = .{
             .input = nluaUiInput,
+        },
+        .loop = .{
+            .stat = nluaLoopStat,
         },
         .api = .{},
         .win = .{
@@ -112,12 +115,16 @@ pub fn deinit(L: *State) void {
     sys.lua_close(L);
 }
 
-pub fn push(L: *State, value: anytype) void {
+pub fn push(L: ?*State, value: anytype) void {
     const Value = @TypeOf(value);
     const typeInfo = @typeInfo(Value);
 
     switch (typeInfo) {
-        .comptime_int, .int => sys.lua_pushinteger(L, value),
+        .comptime_int => sys.lua_pushinteger(L, value),
+        .int => |int| {
+            if (int.bits <= 32) sys.lua_pushinteger(L, value) //
+            else sys.lua_pushnumber(L, @floatFromInt(value));
+        },
         .bool => sys.lua_pushboolean(L, @intFromBool(value)),
         .@"struct" => {
             sys.lua_newtable(L);
@@ -139,61 +146,92 @@ pub fn push(L: *State, value: anytype) void {
             const name = @tagName(value);
             sys.lua_pushlstring(L, name.ptr, name.len);
         },
+        .pointer => {
+            if (Value == *anyopaque) {
+                sys.lua_pushlightuserdata(L, value);
+                return;
+            }
+            if (Value == []const u8) {
+                sys.lua_pushlstring(L, value.ptr, value.len);
+                return;
+            }
+            @compileError("unable to push type: " ++ @typeName(Value));
+        },
         else => @compileError("unable to push type: " ++ @typeName(Value)),
     }
 }
 
+var static: [256]u8 = undefined;
+fn tmpCString(str: []const u8) [:0]const u8 {
+    @memcpy(static[0..str.len], str);
+    static[str.len] = 0;
+    return static[0..str.len :0];
+}
+
 pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
-    var isCommand = true;
-    for (cmd) |c| {
-        if (!std.ascii.isAlphabetic(c)) {
-            isCommand = false;
-            break;
-        }
-    }
+    var iter = std.mem.splitScalar(u8, cmd, ' ');
+
+    // var isCommand = true;
+    // for (cmd) |c| {
+    //     if (!std.ascii.isAlphabetic(c)) {
+    //         isCommand = false;
+    //         break;
+    //     }
+    // }
 
     // return true;
     // const isCommand = all(u8, cmd, std.ascii.isAlphabetic);
     // if (std.mem.indexOfScalarPos(u8, cmd, 0, ' ')) |_| isCommand = false;
 
-    if (isCommand) {
-        sys.lua_getglobal(L, "neomacs");
-        sys.lua_getfield(L, -1, "cmd");
-        sys.lua_getfield(L, -1, cmd.ptr);
+    // if (isCommand) {
+    const zfunc = iter.next() orelse return;
+    const func: [:0]const u8 = tmpCString(zfunc);
 
-        const t = sys.lua_type(L, -1);
+    sys.lua_getglobal(L, "neomacs");
+    sys.lua_getfield(L, -1, "cmd");
+    sys.lua_getfield(L, -1, func.ptr);
 
-        switch (t) {
-            sys.LUA_TFUNCTION => {
-                const ret = sys.lua_pcall(L, 0, 0, 0);
-                if (ret != 0) {
-                    var len: usize = undefined;
-                    const str = sys.lua_tolstring(L, -1, &len);
-                    root.log(@src(), .err, "{s}", .{str[0..len]});
-                    return error.FunctionError;
-                }
-                return;
-            },
-            sys.LUA_TNIL => {
-                sys.lua_pop(L, -1);
-                // fall through to the execute case
-            },
-            else => {
-                const name = sys.lua_typename(L, sys.lua_type(L, -1));
-                root.log(@src(), .err, "[loop] not a function, object type: {s}", .{mem.span(name)});
-                return;
-            },
-        }
-    } else {
-        if (sys.luaL_loadstring(L, cmd) != 0) {
-            std.log.warn("[loop] unknown key or syntax \"{s}\"", .{cmd});
-            return error.SyntaxError;
-        }
+    const t = sys.lua_type(L, -1);
 
-        if (sys.lua_pcall(L, 0, 0, 0) != 0) {
-            return error.CodeError;
-        }
+    switch (t) {
+        sys.LUA_TFUNCTION => {
+            var nargs: c_int = 0;
+            while (iter.next()) |zarg| {
+                const arg = tmpCString(zarg);
+                sys.lua_pushlstring(L, arg.ptr, arg.len);
+                nargs += 1;
+            }
+            std.log.info("nargs: {d}", .{nargs});
+            const ret = sys.lua_pcall(L, nargs, 0, 0);
+            if (ret != 0) {
+                var len: usize = undefined;
+                const str = sys.lua_tolstring(L, -1, &len);
+                root.log(@src(), .err, "{s}", .{str[0..len]});
+                return error.FunctionError;
+            }
+            return;
+        },
+        sys.LUA_TNIL => {
+            sys.lua_pop(L, -1);
+            // fall through to the execute case
+        },
+        else => {
+            const name = sys.lua_typename(L, sys.lua_type(L, -1));
+            root.log(@src(), .err, "[loop] not a function, object type: {s}", .{mem.span(name)});
+            return;
+        },
     }
+
+    // } else {
+    //     if (sys.luaL_loadstring(L, cmd) != 0) {
+    //         std.log.warn("[loop] unknown key or syntax \"{s}\"", .{cmd});
+    //         return error.SyntaxError;
+    //     }
+    //
+    //     if (sys.lua_pcall(L, 0, 0, 0) != 0) {
+    //         return error.CodeError;
+    //     }
+    // }
 
     std.log.warn("[loop] ending loop", .{});
 
@@ -577,12 +615,12 @@ pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
         .bool => return sys.lua_toboolean(L, idx) != 0,
         .int => return @intCast(sys.lua_tointeger(L, idx)),
         .float => return @floatCast(sys.lua_tonumber(L, idx)),
-        .array => |AT| {
+        .array => |arr| {
             // assume it is a table
             var A: T = undefined;
             for (&A, 0..) |*p, i| {
                 _ = sys.lua_geti(L, idx, @intCast(i + 1));
-                p.* = check(L, -1, AT.child);
+                p.* = check(L, -1, arr.child);
                 sys.lua_pop(L, 1);
             }
             return A;
@@ -748,4 +786,16 @@ fn nluaUiInput(L: ?*State) callconv(.C) c_int {
     _ = L;
 
     return 0;
+}
+
+const FsStat = struct { size: u64, kind: []const u8 };
+
+fn nluaLoopStat(L: ?*State) callconv(.C) c_int {
+    const file = check(L, 1, []const u8) orelse return 0;
+    const stat = std.fs.cwd().statFile(file) catch return 0;
+    push(L, FsStat{
+        .size = stat.size,
+        .kind = @tagName(stat.kind),
+    });
+    return 1;
 }

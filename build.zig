@@ -22,7 +22,7 @@ pub fn build(b: *std.Build) void {
 
     // build neomacs
     const neomacs = b.addModule("neomacs", .{
-        .root_source_file = b.path("src/main.zig"),
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -117,10 +117,13 @@ pub fn build(b: *std.Build) void {
     // ---------
 
     const neomacsExe = b.addExecutable(.{
-        .root_module = neomacs,
+        .root_source_file = b.path("src/bin/neomacs.zig"),
         .name = "neomacs",
+        .target = target,
+        .optimize = optimize,
         .linkage = if (static) .static else .dynamic,
     });
+    neomacsExe.root_module.addImport("neomacs", neomacs);
 
     // install neomacs as default
     b.installArtifact(neomacsExe);
