@@ -254,24 +254,23 @@ const thunk = struct {
         // @memcpy(text_buf[0..text.len], text);
         // text_buf[text.len] = 0;
 
-        // if (node.background) |bg| {
-        //     const rs = pos.row * FONTHEIGHT;
-        //     const re = rs + FONTHEIGHT;
+        if (node.background) |bg| {
+            const rs: c_int = @intCast(pos.row * FONTHEIGHT * FONTSIZE);
+            const cs: c_int = @intCast(pos.col * FONTWIDTH * FONTSIZE);
 
-        //     const cs = pos.col * FONTWIDTH;
-        //     const ce = cs + FONTWIDTH;
-
-        //     for (rs..re) |row| {
-        //         for (cs..ce) |col| {
-        //             const index = (row * width + col) * 4;
-        //             const rgb = bg.toRgb();
-        //             window.buffer.data[index] = rgb[0];
-        //             window.buffer.data[index + 1] = rgb[1];
-        //             window.buffer.data[index + 2] = rgb[2];
-        //             window.buffer.data[index + 3] = 255; // Alpha channel
-        //         }
-        //     }
-        // }
+            const rgb = bg.toRgb();
+            const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
+            graphi.draw_rect(
+                @ptrCast(window.buffer.data),
+                width,
+                height,
+                cs,
+                rs,
+                FONTWIDTH * FONTSIZE,
+                FONTHEIGHT * FONTSIZE,
+                color,
+            );
+        }
 
         switch (node.content) {
             .Text => |ch| {
@@ -301,17 +300,6 @@ const thunk = struct {
                         window.bitmap.buffer[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
                     );
                 }
-
-                // graphi.draw_rect(
-                //     @ptrCast(@alignCast(window.buffer.data.ptr)),
-                //     width,
-                //     height,
-                //     @as(c_int, @intCast(pos.col * FONTWIDTH )),
-                //     @as(c_int, @intCast(pos.row * FONTHEIGHT)),
-                //     FONTWIDTH,
-                //     FONTHEIGHT,
-                //     graphi.GREEN,
-                // );
             },
             .Image => |_| {},
             .None => {},
@@ -374,6 +362,7 @@ const thunk = struct {
     fn deinit(ptr: *anyopaque) void {
         const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
 
+        window.a.free(window.bitmap.buffer);
         window.buffer.deinit(window.a);
         window.events.deinit(window.a);
 
@@ -426,44 +415,6 @@ const thunk = struct {
             .end => {
                 // defaultRender(&window.buffer);
 
-                // const width = @as(usize, @intCast(frame.width));
-                // const height = @as(usize, @intCast(frame.height));
-                //
-                // const ddata: []u32 = @as([*]u32, @ptrCast(frame.data.ptr))[0 .. width * height];
-                // // const ddata: []u32 = f rame.data[0 .. width * height :4];
-                //
-                // // graphi.draw_circle(ddata.ptr, width, height, 100, 100, 30, graphi.BLUE);
-                // // const color = 0xFFc6a3ff;
-                // // const color = 0xFFFFFFFF;
-                //
-                // // graphi.fill_triangle(ddata.ptr, width, height, 100, 200, 200, 300, 0, 400, color);
-                // // graphi.fill_triangle(ddata.ptr, width, height + 20, 100 + 20, 200 + 20 + 20, 200 + 20, 300 + 20, 0 + 20, 400 + 20, graphi.LILAC);
-                //
-                // var y: usize = 0;
-                // while (y < frame.height) : (y += 1) {
-                //     var x: usize = 0;
-                //     while (x < frame.width) : (x += 1) {
-                //         if ((x + y / 8 * 8) % 16 < 8) {
-                //             ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFF666666;
-                //         } else {
-                //             ddata[y * @as(usize, @intCast(frame.width)) + x] = 0xFFEEEEEE;
-                //         }
-                //     }
-                // }
-                //
-                // const time = std.time.milliTimestamp();
-                // var buf: [64]u8 = undefined;
-                // const out = std.fmt.bufPrint(&buf, "{d}", .{time}) catch unreachable;
-                // buf[out.len] = 0; // null terminat
-                //
-                // const color2 = graphi.LILAC;
-                // const rectheigh = 90;
-                // graphi.fill_triangle(ddata.ptr, width, height, 0, 0, frame.width, 0, 0, rectheigh, color2);
-                // graphi.fill_triangle(ddata.ptr, width, height, 0, rectheigh, frame.width, 0, frame.width, rectheigh, color2);
-                //
-                // const color1 = graphi.RED;
-                // graphi.draw_text(ddata.ptr, width, height, &buf, 6, 6, 10, 5, 7, 1, color1);
-
                 const buffer = createBuffer(window, window.buffer) catch |err| {
                     std.debug.print("Failed to create buffer: {any}\n", .{err});
                     return;
@@ -473,6 +424,21 @@ const thunk = struct {
                 wl.wl_surface_commit(window.surface);
             },
         }
+    }
+
+    fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
+        const window = @as(*BackendWayland, @ptrCast(@alignCast(ptr)));
+
+        graphi.draw_rect(
+            @ptrCast(window.buffer.data),
+            @intCast(window.buffer.width),
+            @intCast(window.buffer.height),
+            @intCast(pos.col * FONTWIDTH * FONTSIZE),
+            @intCast(pos.row * FONTHEIGHT * FONTSIZE),
+            FONTWIDTH * FONTSIZE,
+            FONTHEIGHT * FONTSIZE,
+            graphi.LILAC,
+        );
     }
 };
 
@@ -485,6 +451,7 @@ pub fn backend(window: *BackendWayland) Backend {
             .deinit = thunk.deinit,
             .render = thunk.render,
             .getSize = thunk.getSize,
+            .setCursor = thunk.setCursor,
         },
     };
 }

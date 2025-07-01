@@ -88,6 +88,11 @@ const thunk = struct {
         self.terminal.deinit();
         self.a.destroy(self);
     }
+
+    fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
+        const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
+        self.terminal.cursor = .{ .x = @intCast(pos.col), .y = @intCast(pos.row) };
+    }
 };
 
 pub fn backend(terminal: *TerminalBackend) Backend {
@@ -99,6 +104,7 @@ pub fn backend(terminal: *TerminalBackend) Backend {
             .deinit = thunk.deinit,
             .render = thunk.render,
             .getSize = thunk.getSize,
+            .setCursor = thunk.setCursor,
         },
     };
 }

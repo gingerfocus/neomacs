@@ -20,8 +20,21 @@ pub fn parseKey(
         65505, 65506 => {
             mods.shft = pressed;
         },
-        65293 => return Backend.Event{ .Key = .{
+        else => {},
+    }
+
+    if (!pressed) return null;
+    switch (key) {
+        trm.KeySymbol.Return.toBits(), 65293 => return Backend.Event{ .Key = .{
             .character = trm.KeySymbol.Return.toBits(),
+            .modifiers = mods.*,
+        } },
+        65288 => return Backend.Event{ .Key = .{
+            .character = trm.KeySymbol.Backspace.toBits(),
+            .modifiers = mods.*,
+        } },
+        65307 => return Backend.Event{ .Key = .{
+            .character = trm.KeySymbol.Esc.toBits(),
             .modifiers = mods.*,
         } },
         65289 => {
@@ -37,17 +50,17 @@ pub fn parseKey(
 
         // 65288 - delete
 
+
         // 65470 - F1
         // 65471 - F2
         // ...
 
         // 269025074
 
+        // pass through with no shift modifier
         49...122 => {
-            if (!pressed) return null;
-
             const ch: u8 = @intCast(key);
-            std.debug.print("ch: {c}\n", .{ch});
+            // std.debug.print("ch: {c}\n", .{ch});
             var modifiers = mods.*;
             modifiers.shft = false; // characters dont use shift
 
@@ -56,15 +69,11 @@ pub fn parseKey(
                 .modifiers = modifiers,
             } };
         },
-        trm.KeySymbol.Space.toBits(), trm.KeySymbol.Return.toBits() => {
-            if (!pressed) return null;
-
-            const ch: u8 = @intCast(key);
-            return Backend.Event{ .Key = .{
-                .character = ch,
-                .modifiers = mods.*,
-            } };
-        },
+        trm.KeySymbol.Space.toBits(),
+        => return Backend.Event{ .Key = .{
+            .character = @intCast(key),
+            .modifiers = mods.*,
+        } },
         else => {
             std.debug.print("unknown key: {} ({})\n", .{ key, pressed });
         },
@@ -125,4 +134,3 @@ pub fn parseKey(
 // }
 // if (char & gtk.GDK_CONTROL_MASK != 0) self.modifiers.ctrl = true;
 // if (char & gtk.GDK_MOD1_MASK != 0) self.modifiers.altr = true; // GDK_MOD1_MASK often corresponds to Alt
-

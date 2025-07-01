@@ -74,6 +74,10 @@ pub inline fn getSize(self: *Self) lib.Vec2 {
     return self.vtable.getSize(self.dataptr);
 }
 
+pub inline fn setCursor(self: *Self, pos: lib.Vec2) void {
+    return self.vtable.setCursor(self.dataptr, pos);
+}
+
 pub const VTable = struct {
     pub const RenderMode = enum { begin, end };
     // pub const DataFetch = enum { width, height };
@@ -81,6 +85,7 @@ pub const VTable = struct {
     render: *const fn (self: *anyopaque, meathod: RenderMode) void,
     draw: *const fn (self: *anyopaque, position: lib.Vec2, node: Node) void,
     getSize: *const fn (self: *anyopaque) lib.Vec2,
+    setCursor: *const fn (self: *anyopaque, position: lib.Vec2) void,
     poll: *const fn (self: *anyopaque, timeout: i32) Event,
     deinit: *const fn (self: *anyopaque) void,
 };

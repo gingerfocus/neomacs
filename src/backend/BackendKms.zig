@@ -74,11 +74,17 @@ fn render(self: *anyopaque, mode: Backend.VTable.RenderMode) void {
     // TODO: implement atomic commit logic here
 }
 
+fn setCursor(self: *anyopaque, pos: lib.Vec2) void {
+    _ = self;
+    _ = pos;
+}
+
 const vtable = Backend.VTable{
     .render = render,
-    .drawFn = drawFn,
-    .pollEvent = pollEvent,
+    .draw = drawFn,
+    .poll = pollEvent,
     .deinit = deinit,
+    .setCursor = setCursor,
 };
 
 pub fn init(a: std.mem.Allocator) !Self {

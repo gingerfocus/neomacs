@@ -229,6 +229,18 @@ const thunk = struct {
             },
         }
     }
+
+    fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+        const cr = window.cr orelse return;
+
+        const x = @as(f64, @floatFromInt(pos.col)) * CHAR_WIDTH;
+        const y = @as(f64, @floatFromInt(pos.row)) * CHAR_HEIGHT;
+
+        gtk.cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); // White cursor
+        gtk.cairo_rectangle(cr, x, y, CHAR_WIDTH, CHAR_HEIGHT);
+        gtk.cairo_fill(cr);
+    }
 };
 
 pub fn backend(window: *Self) Backend {
@@ -240,6 +252,7 @@ pub fn backend(window: *Self) Backend {
             .deinit = thunk.deinit,
             .render = thunk.render,
             .getSize = thunk.getSize,
+            .setCursor = thunk.setCursor,
         },
     };
 }

@@ -83,6 +83,11 @@ const thunk = struct {
         self.a.destroy(self.buffer);
         self.a.destroy(self);
     }
+
+    fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
+        _ = ptr;
+        _ = pos;
+    }
 };
 
 pub fn backend(self: *Self) Backend {
@@ -94,6 +99,7 @@ pub fn backend(self: *Self) Backend {
             .deinit = thunk.deinit,
             .render = thunk.render,
             .getSize = thunk.getSize,
+            .setCursor = thunk.setCursor,
         },
     };
 }

@@ -109,8 +109,6 @@ fn neomacs() !void {
             .Key => |ke| {
                 if (trm.keys.bits(ke) == trm.keys.ctrl('q')) break;
                 s.ch = ke; // used by bad events that reference state directly
-                std.debug.print("key: {any}\n", .{ke});
-
                 // std.debug.print("key: {any}\n", .{ke});
                 try s.press(ke);
             },
