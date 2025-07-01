@@ -1,3 +1,6 @@
+//! TODO: Fully modular system for keymaps
+//! Dont have the nuance of reference counting escape this file
+
 const std = @import("std");
 const root = @import("root");
 

@@ -32,13 +32,13 @@ const thunk = struct {
         const cmd = try state.command.buffer.toOwnedSliceSentinel(state.a, 0);
         defer state.a.free(cmd);
 
+        std.log.debug("running command: {s}", .{cmd});
+
         if (state.inputcallback) |h| {
             try h[1].notify();
             try state.loop.run(.once);
             std.log.debug("finish: {any}", .{h[0]});
         }
-
-        std.log.debug("running command: {s}", .{cmd});
 
         lua.runCommand(state.L, cmd) catch |err| {
             root.log(@src(), .err, "lua command line error: {}", .{err});

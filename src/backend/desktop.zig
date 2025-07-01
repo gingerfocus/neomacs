@@ -20,9 +20,10 @@ pub fn parseKey(
         65505, 65506 => {
             mods.shft = pressed;
         },
-        65293 => {
-            // ENTER
-        },
+        65293 => return Backend.Event{ .Key = .{
+            .character = trm.KeySymbol.Return.toBits(),
+            .modifiers = mods.*,
+        } },
         65289 => {
             // TAB
         },
@@ -55,11 +56,12 @@ pub fn parseKey(
                 .modifiers = modifiers,
             } };
         },
-        32 => {
+        trm.KeySymbol.Space.toBits(), trm.KeySymbol.Return.toBits() => {
             if (!pressed) return null;
 
+            const ch: u8 = @intCast(key);
             return Backend.Event{ .Key = .{
-                .character = trm.KeySymbol.Space.toBits(),
+                .character = ch,
                 .modifiers = mods.*,
             } };
         },

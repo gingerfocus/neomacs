@@ -1,12 +1,8 @@
-const std = @import("std");
-
+pub const std = @import("std");
 pub const scu = @import("scured");
 pub const trm = @import("thermit"); // scu.thermit;
 pub const lib = @import("lib.zig");
 pub const xev = @import("xev");
-pub const rc = @import("zigrc");
-
-// TODO: make this fully modular
 pub const km = @import("keymaps.zig");
 
 pub const render = @import("render/root.zig");
@@ -21,7 +17,6 @@ pub const lua = @import("lua.zig");
 // pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
 
 //-----------------------------------------------------------------------------
-
 
 pub const std_options: std.Options = .{
     .logFn = scu.log.toFile,
@@ -105,7 +100,6 @@ fn neomacs() !void {
     const s = state();
     defer static.state.deinit();
 
-
     while (!s.config.QUIT) {
         try render.draw(s);
 
@@ -115,6 +109,7 @@ fn neomacs() !void {
             .Key => |ke| {
                 if (trm.keys.bits(ke) == trm.keys.ctrl('q')) break;
                 s.ch = ke; // used by bad events that reference state directly
+                std.debug.print("key: {any}\n", .{ke});
 
                 // std.debug.print("key: {any}\n", .{ke});
                 try s.press(ke);
