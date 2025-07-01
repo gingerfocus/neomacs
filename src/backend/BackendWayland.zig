@@ -9,6 +9,8 @@ const trm = @import("thermit");
 const Window = @This();
 const BackendWayland = @This();
 
+const desktop = @import("desktop.zig");
+
 const graphi = @cImport({
     @cInclude("graphi.h");
 });
@@ -352,62 +354,8 @@ const thunk = struct {
 
             // convert event
             switch (event.ty) {
-                .key => |sym| switch (sym) {
-                    65507, 65508 => {
-                        window.modifiers.ctrl = event.pressed;
-                        root.log(@src(), .info, "ctrl: ", .{});
-                    },
-                    // 65515 => window.modifiers.supr = event.pressed,
-                    65513, 65514 => window.modifiers.altr = event.pressed,
-                    65505, 65506 => {
-                        window.modifiers.shft = event.pressed;
-                    },
-                    65293 => {
-                        // ENTER
-                    },
-                    65289 => {
-                        // TAB
-                    },
-                    65509 => {
-                        // CAPS
-                    },
-                    // 65361 - arrow left
-                    // 65362 - arrow up
-                    // 65364 - arrow down
-                    // 65363 - arrow right
-
-                    // 65288 - delete
-
-                    // 65470 - F1
-                    // 65471 - F2
-                    // ...
-
-                    // 269025074
-
-                    49...122 => {
-                        if (!event.pressed) continue;
-
-                        const ch: u8 = @intCast(sym);
-                        std.debug.print("ch: {c}\n", .{ch});
-                        var modifiers = window.modifiers;
-                        modifiers.shft = false; // characters dont use shift
-
-                        return Backend.Event{ .Key = .{
-                            .character = ch,
-                            .modifiers = modifiers,
-                        } };
-                    },
-                    32 => {
-                        if (!event.pressed) continue;
-
-                        return Backend.Event{ .Key = .{
-                            .character = trm.KeySymbol.Space.toBits(),
-                            .modifiers = window.modifiers,
-                        } };
-                    },
-                    else => {
-                        std.debug.print("unknown key: {} ({})\n", .{ sym, event.pressed });
-                    },
+                .key => |sym| {
+                    return desktop.parseKey(sym, event.pressed, &window.modifiers) orelse continue;
                 },
             }
         }
