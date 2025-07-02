@@ -105,7 +105,7 @@ pub const KeyMap = union(enum) {
         }
     }
 
-    pub fn initLua(L: *lua.State, index: c_int) !KeyMap {
+    pub fn initLua(L: *lua.LuaState, index: c_int) !KeyMap {
         if (lua.lua_type(L, index) != lua.LUA_TFUNCTION) {
             return error.NotALuaFunction;
             // lua.lua_pushliteral(L, "vim.schedule: expected function");

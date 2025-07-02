@@ -90,7 +90,10 @@ pub fn initFile(
     const a = state.a;
     // const maps = try state.maps.clone(state.a);
 
-    const file = try std.fs.cwd().openFile(filename, .{}); // a+
+    const file = try std.fs.cwd().createFile(filename, .{
+        .truncate = false,
+        .read = true,
+    }); // a+
     defer file.close();
 
     var lines = std.ArrayList(Line).init(a);
@@ -647,4 +650,3 @@ const idgen = struct {
 //     down: ?isize = null,
 //     left: ?isize = null,
 // };
-

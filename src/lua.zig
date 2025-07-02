@@ -21,9 +21,9 @@ const Global = @import("State.zig");
 // });
 pub const sys = @import("syslua");
 
-pub const State = sys.lua_State;
+pub const LuaState = sys.lua_State;
 
-pub fn init() *State {
+pub fn init() *LuaState {
     root.log(@src(), .debug, "creating lua state", .{});
 
     const L = sys.luaL_newstate() orelse unreachable;
@@ -39,20 +39,7 @@ pub fn init() *State {
         },
         .api = .{},
         .win = .{
-            // local win_id = vim.api.nvim_open_win(
-            //      bufnr, -- buf id
-            //      true, -- focus on create
-            //      {
-            //     relative = "editor",
-            //     title = "Harpoon",
-            //     title_pos = toggle_opts.title_pos or "left",
-            //     row = math.floor(((vim.o.lines - height) / 2) - 1),
-            //     col = math.floor((vim.o.columns - width) / 2),
-            //     width = width,
-            //     height = height,
-            //     style = "minimal",
-            //     border = toggle_opts.border or "single",
-            // })
+            .open = nluaWinOpen,
         },
         // .pkg = .{},
         .buf = .{
@@ -60,7 +47,6 @@ pub fn init() *State {
             // .create = nluaCreate(focus, )
         },
         .opt = .{
-            // .__help = true,
             .__metatable = .{
                 .__index = nluaOptIndex,
                 .__newindex = nluaOptNewIndex,
@@ -111,11 +97,11 @@ pub fn init() *State {
     return L;
 }
 
-pub fn deinit(L: *State) void {
+pub fn deinit(L: *LuaState) void {
     sys.lua_close(L);
 }
 
-pub fn push(L: ?*State, value: anytype) void {
+pub fn push(L: ?*LuaState, value: anytype) void {
     const Value = @TypeOf(value);
     const typeInfo = @typeInfo(Value);
 
@@ -168,7 +154,7 @@ fn tmpCString(str: []const u8) [:0]const u8 {
     return static[0..str.len :0];
 }
 
-pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
+pub fn runCommand(L: *LuaState, cmd: [:0]const u8) !void {
     var iter = std.mem.splitScalar(u8, cmd, ' ');
 
     // var isCommand = true;
@@ -179,6 +165,17 @@ pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
     //     }
     // }
 
+    if (cmd[0] == '?') {
+        if (sys.luaL_loadstring(L, cmd[1..]) != 0) {
+            std.log.warn("[loop] unknown key or syntax \"{s}\"", .{cmd});
+            return error.SyntaxError;
+        }
+
+        if (sys.lua_pcall(L, 0, 0, 0) != 0) {
+            return error.CodeError;
+        }
+        return;
+    }
     // return true;
     // const isCommand = all(u8, cmd, std.ascii.isAlphabetic);
     // if (std.mem.indexOfScalarPos(u8, cmd, 0, ' ')) |_| isCommand = false;
@@ -222,17 +219,6 @@ pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
         },
     }
 
-    // } else {
-    //     if (sys.luaL_loadstring(L, cmd) != 0) {
-    //         std.log.warn("[loop] unknown key or syntax \"{s}\"", .{cmd});
-    //         return error.SyntaxError;
-    //     }
-    //
-    //     if (sys.lua_pcall(L, 0, 0, 0) != 0) {
-    //         return error.CodeError;
-    //     }
-    // }
-
     std.log.warn("[loop] ending loop", .{});
 
     return;
@@ -240,13 +226,13 @@ pub fn runCommand(L: *State, cmd: [:0]const u8) !void {
 
 // --- Lua Functions ---------------------------------------------------------
 
-fn nluaQuit(_: ?*State) callconv(.C) c_int {
+fn nluaQuit(_: ?*LuaState) callconv(.C) c_int {
     std.log.debug("quitting", .{});
     root.state().config.QUIT = true;
     return 0;
 }
 
-fn nluaWrite(_: ?*State) callconv(.C) c_int {
+fn nluaWrite(_: ?*LuaState) callconv(.C) c_int {
     const state = root.state();
 
     const buffer = state.getCurrentBuffer() orelse return 0;
@@ -258,13 +244,13 @@ fn nluaWrite(_: ?*State) callconv(.C) c_int {
     return 0;
 }
 
-fn nluaWriteQuit(s: ?*State) callconv(.C) c_int {
+fn nluaWriteQuit(s: ?*LuaState) callconv(.C) c_int {
     _ = nluaWrite(s);
     _ = nluaQuit(s);
     return 0;
 }
 
-fn nluaEdit(L: ?*lua.State) callconv(.C) c_int {
+fn nluaEdit(L: ?*lua.LuaState) callconv(.C) c_int {
     const state = root.state();
 
     const file = check(L, 1, []const u8) orelse {
@@ -273,7 +259,11 @@ fn nluaEdit(L: ?*lua.State) callconv(.C) c_int {
     };
 
     const buf = state.a.create(root.Buffer) catch return 0;
-    buf.* = root.Buffer.initFile(state, file) catch return 0;
+    buf.* = root.Buffer.initFile(state, file) catch {
+        state.a.destroy(buf);
+        root.log(@src(), .err, "File Not Found: {s}", .{file});
+        return 0;
+    };
 
     state.buffers.append(state.a, buf) catch return 0;
     state.buffer = state.buffers.items[state.buffers.items.len - 1];
@@ -281,12 +271,12 @@ fn nluaEdit(L: ?*lua.State) callconv(.C) c_int {
     return 0;
 }
 
-fn nluaBufferNext(_: ?*State) callconv(.C) c_int {
+fn nluaBufferNext(_: ?*LuaState) callconv(.C) c_int {
     root.state().bufferNext();
     return 0;
 }
 
-fn nluaBufferPrev(_: ?*State) callconv(.C) c_int {
+fn nluaBufferPrev(_: ?*LuaState) callconv(.C) c_int {
     root.state().bufferPrev();
     return 0;
 }
@@ -298,7 +288,7 @@ fn nluaBufferPrev(_: ?*State) callconv(.C) c_int {
 //     return lua.lua_error(L);
 // }
 
-fn nluaHelp(L: ?*State) callconv(.C) c_int {
+fn nluaHelp(L: ?*LuaState) callconv(.C) c_int {
     const file = scu.log.getFile() orelse return 1;
 
     sys.lua_getglobal(L, "neomacs");
@@ -322,7 +312,7 @@ fn nluaHelp(L: ?*State) callconv(.C) c_int {
     return 0;
 }
 
-fn nluaNotify(L: ?*State) callconv(.C) c_int {
+fn nluaNotify(L: ?*LuaState) callconv(.C) c_int {
     // const n = luajitsys.lua_gettop(L);
     if (sys.lua_isstring(L, 1) != 0) {
         // TODO: error
@@ -340,7 +330,7 @@ fn nluaNotify(L: ?*State) callconv(.C) c_int {
 // luajitsys.lua_newuserdata();
 
 /// Unpretty print, emulates default print function but just changes output
-fn luaPrint(L: ?*State) callconv(.C) c_int {
+fn luaPrint(L: ?*LuaState) callconv(.C) c_int {
     const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
@@ -379,7 +369,7 @@ fn luaPrint(L: ?*State) callconv(.C) c_int {
     return 0;
 }
 
-fn printError(L: ?*State, idx: c_int, msg: []const u8) c_int {
+fn printError(L: ?*LuaState, idx: c_int, msg: []const u8) c_int {
     const a = std.heap.c_allocator;
 
     const fmtmsg = std.fmt.allocPrint(
@@ -393,13 +383,13 @@ fn printError(L: ?*State, idx: c_int, msg: []const u8) c_int {
     return sys.lua_error(L);
 }
 
-fn nluaKeymapDel(L: ?*State) callconv(.C) c_int {
+fn nluaKeymapDel(L: ?*LuaState) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.del not implemented", .{});
     _ = L; // autofix
     return 0;
 }
 
-fn nluaKeymapSet(L: ?*State) callconv(.C) c_int {
+fn nluaKeymapSet(L: ?*LuaState) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
     _ = L; // autofix
     return 0;
@@ -407,7 +397,7 @@ fn nluaKeymapSet(L: ?*State) callconv(.C) c_int {
 
 /// Pretty print
 /// vim.print
-fn nluaPrint(L: ?*State) callconv(.C) c_int {
+fn nluaPrint(L: ?*LuaState) callconv(.C) c_int {
     const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
@@ -437,7 +427,7 @@ const PrintState = struct {
     functionCount: usize,
 };
 
-fn neomacsPrintInner(L: ?*State, idx: c_int, state: *PrintState) !void {
+fn neomacsPrintInner(L: ?*LuaState, idx: c_int, state: *PrintState) !void {
     const ty = sys.lua_type(L, idx);
 
     switch (ty) {
@@ -506,7 +496,7 @@ fn neomacsPrintInner(L: ?*State, idx: c_int, state: *PrintState) !void {
 //
 // Returns true if the language is correctly loaded in the language map
 // int tslua_add_language(lua_State *L)
-fn tsLuaAddLanguage(L: ?*State) callconv(.C) c_int {
+fn tsLuaAddLanguage(L: ?*LuaState) callconv(.C) c_int {
     const path = check(L, 1, []const u8) orelse return 0;
     const lang_name = check(L, 2, []const u8) orelse return 0;
     const symbol_name = check(L, 3, []const u8) orelse return 0;
@@ -576,7 +566,7 @@ fn tsLuaAddLanguage(L: ?*State) callconv(.C) c_int {
     //   return 1;
 }
 
-pub fn is(L: ?*State, idx: c_int, comptime T: type) bool {
+pub fn is(L: ?*LuaState, idx: c_int, comptime T: type) bool {
     switch (@typeInfo(T)) {
         .void => return sys.lua_isnil(L, idx),
         .bool => return sys.lua_isboolean(L, idx),
@@ -603,7 +593,7 @@ pub fn is(L: ?*State, idx: c_int, comptime T: type) bool {
 }
 
 /// Gets idx as a type T, if you are not sure will match then use ?T
-pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
+pub fn check(L: ?*LuaState, idx: c_int, comptime T: type) ?T {
     if (!is(L, idx, T)) {
         return null;
         // _ = sys.luaL_argerror(L, idx, "expected " ++ @typeName(T));
@@ -693,7 +683,7 @@ pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
 // if (luajitsys.lua_isnumber(L, VAL_INDEX) != 0) return 0;
 // const val = luajitsys.lua_tonumber(L, VAL_INDEX); // val
 
-fn nluaOptNewIndex(L: ?*State) callconv(.C) c_int {
+fn nluaOptNewIndex(L: ?*LuaState) callconv(.C) c_int {
     // const TBL = 1;
     const KEY = 2;
     const VAL = 3;
@@ -732,7 +722,7 @@ fn nluaOptNewIndex(L: ?*State) callconv(.C) c_int {
     return 0;
 }
 
-fn nluaOptIndex(L: ?*State) callconv(.C) c_int {
+fn nluaOptIndex(L: ?*LuaState) callconv(.C) c_int {
     // const TBL = 1;
     const KEY = 2; // key
 
@@ -771,7 +761,7 @@ fn callback(
     return xev.CallbackAction.disarm;
 }
 
-fn nluaUiInput(L: ?*State) callconv(.C) c_int {
+fn nluaUiInput(L: ?*LuaState) callconv(.C) c_int {
     root.log(@src(), .debug, "ui.input", .{});
 
     const s = root.state();
@@ -790,7 +780,7 @@ fn nluaUiInput(L: ?*State) callconv(.C) c_int {
 
 const FsStat = struct { size: u64, kind: []const u8 };
 
-fn nluaLoopStat(L: ?*State) callconv(.C) c_int {
+fn nluaLoopStat(L: ?*LuaState) callconv(.C) c_int {
     const file = check(L, 1, []const u8) orelse return 0;
     const stat = std.fs.cwd().statFile(file) catch return 0;
     push(L, FsStat{
@@ -798,4 +788,23 @@ fn nluaLoopStat(L: ?*State) callconv(.C) c_int {
         .kind = @tagName(stat.kind),
     });
     return 1;
+}
+
+fn nluaWinOpen(L: ?*LuaState) callconv(.C) c_int {
+    _ = L;
+    // local win_id = vim.api.nvim_open_win(
+    //      bufnr, -- buf id
+    //      true, -- focus on create
+    //      {
+    //     relative = "editor",
+    //     title = "Harpoon",
+    //     title_pos = toggle_opts.title_pos or "left",
+    //     row = math.floor(((vim.o.lines - height) / 2) - 1),
+    //     col = math.floor((vim.o.columns - width) / 2),
+    //     width = width,
+    //     height = height,
+    //     style = "minimal",
+    //     border = toggle_opts.border or "single",
+    // })
+    return 0;
 }

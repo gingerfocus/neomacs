@@ -50,7 +50,7 @@ currentKeyMap: ?*km.KeyMaps = null,
 // dont touch this as if you try to be clever it will just be set to null
 // currentKeyMap: ?*km.KeyMaps = null,
 
-L: *lua.State,
+L: *lua.LuaState,
 
 config: Config = .{},
 
@@ -237,8 +237,8 @@ pub fn bufferNext(state: *State) void {
             } else {
                 state.buffer = state.buffers.items[i + 1];
             }
+            return;
         }
-        return;
     }
 }
 pub fn bufferPrev(state: *State) void {

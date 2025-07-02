@@ -38,6 +38,9 @@
           gobject-introspection
           #skia
 
+          python3
+          pyright
+
           zig
           luajit
           pkg-config
