@@ -1,8 +1,11 @@
-.zig-cache
-zig-out
-
+# build
+/.zig-cache
+/zig-out
 /.direnv
 /result
-/microui
 
+# not ready
+/etc/microui
+
+# logs
 /neomacs.log

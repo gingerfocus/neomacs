@@ -4,30 +4,29 @@
 
 // Forward declarations for helper functions
 PyObject* get_main_module_dict();
-PyObject* setup_output_capture(PyObject** original_stdout, PyObject** captured_stdout_obj);
-void restore_output(PyObject* original_stdout);
+// Modified: now takes a pointer to PyObject** for captured_stdout_obj
+// and will Py_XDECREF the old one if not NULL
+PyObject* setup_output_capture(PyObject** original_stdout, PyObject** current_captured_stdout_obj_ptr);
+// Modified: now also takes a pointer to the captured_stdout_obj so it can be DECREFed
+void restore_output(PyObject* original_stdout, PyObject** current_captured_stdout_obj_ptr);
 char* get_captured_output(PyObject* captured_stdout_obj);
 
 
 int main() {
-    // 1. Initialize the Python interpreter
     Py_Initialize();
     if (!Py_IsInitialized()) {
         fprintf(stderr, "Failed to initialize Python interpreter.\n");
         return 1;
     }
 
-    // Get the dictionary for the __main__ module. This will serve as our
-    // persistent global and local namespace for all cell executions.
     PyObject* main_dict = get_main_module_dict();
     if (main_dict == NULL) {
         Py_FinalizeEx();
         return 1;
     }
 
-    // Pointers to hold the original stdout/stderr and our captured versions
-    PyObject* original_stdout = NULL;
-    PyObject* captured_stdout_obj = NULL; // This will be a Python io.StringIO object
+    PyObject* original_stdout_backup = NULL; // Stores the Python sys.stdout before redirection
+    PyObject* current_captured_stdout_obj = NULL; // Stores the CURRENT StringIO object
 
     printf("--- Running Cell 1 ---\n");
     const char* cell1_code =
@@ -36,68 +35,61 @@ int main() {
         "print(f'x is {x}')\n"
         "print(f'y is {y}')\n";
 
-    // Setup output capture
-    captured_stdout_obj = setup_output_capture(&original_stdout, &captured_stdout_obj);
-    if (captured_stdout_obj == NULL) {
+    // Pass address of current_captured_stdout_obj so setup_output_capture can modify it
+    // and potentially DECREF the old one.
+    current_captured_stdout_obj = setup_output_capture(&original_stdout_backup, &current_captured_stdout_obj);
+    if (current_captured_stdout_obj == NULL) {
         Py_XDECREF(main_dict);
         Py_FinalizeEx();
         return 1;
     }
 
-    // Execute the code
     PyObject* result = PyRun_String(cell1_code, Py_file_input, main_dict, main_dict);
 
-    // Get captured output
-    char* captured_output1 = get_captured_output(captured_stdout_obj);
+    char* captured_output1 = get_captured_output(current_captured_stdout_obj);
     if (captured_output1 != NULL) {
         printf("Captured output (Cell 1):\n%s", captured_output1);
-        free(captured_output1); // Free the memory allocated by get_captured_output
+        free(captured_output1);
     }
 
-    // Restore original stdout
-    restore_output(original_stdout);
+    // Pass address of current_captured_stdout_obj so restore_output can DECREF it
+    restore_output(original_stdout_backup, &current_captured_stdout_obj);
 
-    // Check for errors
     if (result == NULL) {
-        PyErr_Print(); // Print Python traceback to stderr
-        fprintf(stderr, "Error executing Cell 1.\n");
-        // Clear the error indicator after printing
+        PyErr_Print();
+        fprintf(stderr, "Error executing Cell 1 (unexpected).\n");
         PyErr_Clear();
     } else {
-        Py_DECREF(result); // Decrement reference count for the result of PyRun_String
+        Py_DECREF(result);
     }
     printf("--- End Cell 1 ---\n\n");
 
     printf("--- Running Cell 2 (uses state from Cell 1) ---\n");
     const char* cell2_code =
-        "z = x + y\n" // x and y are from Cell 1's execution
+        "z = x + y\n"
         "print(f'z is {z}')\n";
 
-    // Setup output capture again for the next cell
-    captured_stdout_obj = setup_output_capture(&original_stdout, &captured_stdout_obj);
-    if (captured_stdout_obj == NULL) {
+    // Call again, previous current_captured_stdout_obj will be DECREFed inside
+    current_captured_stdout_obj = setup_output_capture(&original_stdout_backup, &current_captured_stdout_obj);
+    if (current_captured_stdout_obj == NULL) {
         Py_XDECREF(main_dict);
         Py_FinalizeEx();
         return 1;
     }
 
-    // Execute the code
     result = PyRun_String(cell2_code, Py_file_input, main_dict, main_dict);
 
-    // Get captured output
-    char* captured_output2 = get_captured_output(captured_stdout_obj);
+    char* captured_output2 = get_captured_output(current_captured_stdout_obj);
     if (captured_output2 != NULL) {
         printf("Captured output (Cell 2):\n%s", captured_output2);
         free(captured_output2);
     }
 
-    // Restore original stdout
-    restore_output(original_stdout);
+    restore_output(original_stdout_backup, &current_captured_stdout_obj);
 
-    // Check for errors
     if (result == NULL) {
         PyErr_Print();
-        fprintf(stderr, "Error executing Cell 2.\n");
+        fprintf(stderr, "Error executing Cell 2 (unexpected).\n");
         PyErr_Clear();
     } else {
         Py_DECREF(result);
@@ -108,8 +100,8 @@ int main() {
     printf("--- Running Cell 3 (Error case) ---\n");
     const char* cell3_code = "print(f'undefined_var is {undefined_var}')\n";
 
-    captured_stdout_obj = setup_output_capture(&original_stdout, &captured_stdout_obj);
-    if (captured_stdout_obj == NULL) {
+    current_captured_stdout_obj = setup_output_capture(&original_stdout_backup, &current_captured_stdout_obj);
+    if (current_captured_stdout_obj == NULL) {
         Py_XDECREF(main_dict);
         Py_FinalizeEx();
         return 1;
@@ -117,16 +109,16 @@ int main() {
 
     result = PyRun_String(cell3_code, Py_file_input, main_dict, main_dict);
 
-    char* captured_output3 = get_captured_output(captured_stdout_obj);
+    char* captured_output3 = get_captured_output(current_captured_stdout_obj);
     if (captured_output3 != NULL) {
         printf("Captured output (Cell 3):\n%s", captured_output3);
         free(captured_output3);
     }
 
-    restore_output(original_stdout);
+    restore_output(original_stdout_backup, &current_captured_stdout_obj);
 
     if (result == NULL) {
-        PyErr_Print(); // This will print the NameError traceback
+        PyErr_Print();
         fprintf(stderr, "Error executing Cell 3 (expected).\n");
         PyErr_Clear();
     } else {
@@ -135,12 +127,13 @@ int main() {
     printf("--- End Cell 3 ---\n\n");
 
 
-    // 7. Clean up
-    Py_XDECREF(main_dict); // Decrement reference count for __main__ dict
-    Py_XDECREF(captured_stdout_obj); // Ensure this is decremented if still held
-                                      // (though it should be released after restore_output)
-    Py_FinalizeEx();
+    // Final cleanup: main_dict is the only persistent object we held directly
+    // current_captured_stdout_obj should be NULL here due to restore_output,
+    // but Py_XDECREF is safe.
+    Py_XDECREF(main_dict);
+    Py_XDECREF(current_captured_stdout_obj); // This should ideally be NULL by now, but good practice
 
+    Py_FinalizeEx(); // This should now run cleanly
     return 0;
 }
 
@@ -156,17 +149,22 @@ PyObject* get_main_module_dict() {
     if (main_dict == NULL) {
         PyErr_Print();
         fprintf(stderr, "Failed to get __main__ module dictionary.\n");
-        Py_DECREF(main_module); // main_module is a new ref from AddModule
+        Py_DECREF(main_module);
         return NULL;
     }
-    Py_INCREF(main_dict); // Increment ref count because PyModule_GetDict returns borrowed,
-                          // but we want to keep it around.
-    Py_DECREF(main_module); // We only need the dict, not the module object itself long-term
+    Py_INCREF(main_dict); // Now it's a "new" reference owned by the caller
+    Py_DECREF(main_module);
     return main_dict;
 }
 
 // Helper function to set up stdout redirection to an in-memory buffer
-PyObject* setup_output_capture(PyObject** original_stdout, PyObject** captured_stdout_obj) {
+// It now takes a pointer to current_captured_stdout_obj_ptr
+PyObject* setup_output_capture(PyObject** original_stdout_ptr, PyObject** current_captured_stdout_obj_ptr) {
+    // If there was a previous captured_stdout_obj, DECREF it first.
+    // This handles the case where setup_output_capture is called multiple times.
+    Py_XDECREF(*current_captured_stdout_obj_ptr);
+    *current_captured_stdout_obj_ptr = NULL; // Clear pointer for safety
+
     PyObject* sys_module = PyImport_ImportModule("sys");
     if (sys_module == NULL) {
         PyErr_Print();
@@ -179,43 +177,43 @@ PyObject* setup_output_capture(PyObject** original_stdout, PyObject** captured_s
         return NULL;
     }
 
-    *original_stdout = PyObject_GetAttrString(sys_module, "stdout");
-    if (*original_stdout == NULL) {
+    *original_stdout_ptr = PyObject_GetAttrString(sys_module, "stdout"); // New ref
+    if (*original_stdout_ptr == NULL) {
         PyErr_Print();
         Py_DECREF(sys_module);
         Py_DECREF(io_module);
         return NULL;
     }
 
-    PyObject* stringio_class = PyObject_GetAttrString(io_module, "StringIO");
+    PyObject* stringio_class = PyObject_GetAttrString(io_module, "StringIO"); // New ref
     if (stringio_class == NULL) {
         PyErr_Print();
         Py_DECREF(sys_module);
         Py_DECREF(io_module);
-        Py_DECREF(*original_stdout);
+        Py_DECREF(*original_stdout_ptr);
         return NULL;
     }
 
-    // Call StringIO() constructor
-    *captured_stdout_obj = PyObject_CallNoArgs(stringio_class);
-    if (*captured_stdout_obj == NULL) {
+    *current_captured_stdout_obj_ptr = PyObject_CallNoArgs(stringio_class); // New ref
+    if (*current_captured_stdout_obj_ptr == NULL) {
         PyErr_Print();
         Py_DECREF(sys_module);
         Py_DECREF(io_module);
-        Py_DECREF(*original_stdout);
+        Py_DECREF(*original_stdout_ptr);
         Py_DECREF(stringio_class);
         return NULL;
     }
 
     // Set sys.stdout to our StringIO object
-    int res = PyObject_SetAttrString(sys_module, "stdout", *captured_stdout_obj);
+    int res = PyObject_SetAttrString(sys_module, "stdout", *current_captured_stdout_obj_ptr);
     if (res == -1) {
         PyErr_Print();
         Py_DECREF(sys_module);
         Py_DECREF(io_module);
-        Py_DECREF(*original_stdout);
+        Py_DECREF(*original_stdout_ptr);
         Py_DECREF(stringio_class);
-        Py_DECREF(*captured_stdout_obj);
+        Py_DECREF(*current_captured_stdout_obj_ptr);
+        *current_captured_stdout_obj_ptr = NULL; // Clear pointer on error
         return NULL;
     }
 
@@ -223,12 +221,13 @@ PyObject* setup_output_capture(PyObject** original_stdout, PyObject** captured_s
     Py_DECREF(io_module);
     Py_DECREF(stringio_class);
 
-    // captured_stdout_obj is a new reference, returned to caller for management
-    return *captured_stdout_obj;
+    // *current_captured_stdout_obj_ptr is a new reference, held by the caller
+    return *current_captured_stdout_obj_ptr;
 }
 
 // Helper function to restore original stdout
-void restore_output(PyObject* original_stdout) {
+// Now takes a pointer to current_captured_stdout_obj_ptr so it can be DECREFed
+void restore_output(PyObject* original_stdout, PyObject** current_captured_stdout_obj_ptr) {
     if (original_stdout == NULL) return; // Nothing to restore
 
     PyObject* sys_module = PyImport_ImportModule("sys");
@@ -239,26 +238,36 @@ void restore_output(PyObject* original_stdout) {
     PyObject_SetAttrString(sys_module, "stdout", original_stdout);
     Py_DECREF(sys_module);
     Py_DECREF(original_stdout); // Decrement the reference to the original stdout
+
+    // Crucially, DECREF the captured StringIO object when we're done with it
+    Py_XDECREF(*current_captured_stdout_obj_ptr);
+    *current_captured_stdout_obj_ptr = NULL; // Clear the pointer after DECREFing
 }
 
 // Helper function to get the string value from the captured StringIO object
 char* get_captured_output(PyObject* captured_stdout_obj) {
     if (captured_stdout_obj == NULL) return NULL;
 
-    PyObject*getvalue_method = PyObject_GetAttrString(captured_stdout_obj, "getvalue");
+    // Check if an error is pending before making more Python API calls
+    if (PyErr_Occurred()) {
+        fprintf(stderr, "get_captured_output: Python exception already set, aborting capture.\n");
+        // Don't clear here, let the main loop handle the primary error
+        return NULL;
+    }
+
+    PyObject*getvalue_method = PyObject_GetAttrString(captured_stdout_obj, "getvalue"); // New ref
     if (getvalue_method == NULL) {
         PyErr_Print();
         return NULL;
     }
 
-    PyObject* output_py_str = PyObject_CallNoArgs(getvalue_method);
-    Py_DECREF(getvalue_method); // Decrement reference to the method object
+    PyObject* output_py_str = PyObject_CallNoArgs(getvalue_method); // New ref
+    Py_DECREF(getvalue_method);
     if (output_py_str == NULL) {
         PyErr_Print();
         return NULL;
     }
 
-    // Convert Python string to C string
     Py_ssize_t len;
     const char* output_c_str = PyUnicode_AsUTF8AndSize(output_py_str, &len);
     if (output_c_str == NULL) {
@@ -267,7 +276,6 @@ char* get_captured_output(PyObject* captured_stdout_obj) {
         return NULL;
     }
 
-    // Make a copy, as output_c_str is a borrowed reference
     char* result_copy = (char*)malloc(len + 1);
     if (result_copy == NULL) {
         fprintf(stderr, "Memory allocation failed for captured output.\n");
@@ -277,7 +285,6 @@ char* get_captured_output(PyObject* captured_stdout_obj) {
     memcpy(result_copy, output_c_str, len);
     result_copy[len] = '\0';
 
-    Py_DECREF(output_py_str); // Decrement reference to the Python string object
-
+    Py_DECREF(output_py_str);
     return result_copy;
 }
