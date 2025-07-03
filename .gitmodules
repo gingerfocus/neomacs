@@ -1,0 +1,3 @@
+[submodule "sub/gmni"]
+	path = sub/gmni
+	url = https://github.com/gingerfocus/gmni.git

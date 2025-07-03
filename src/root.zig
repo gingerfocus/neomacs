@@ -18,10 +18,8 @@ pub const lua = @import("lua.zig");
 
 //-----------------------------------------------------------------------------
 
-pub const std_options: std.Options = .{
-    .logFn = scu.log.toFile,
-};
-
+/// Log a message with the given format string and arguments using the source
+/// location of the caller as the log message prefix.
 pub fn log(
     comptime srcloc: std.builtin.SourceLocation,
     comptime level: std.log.Level,
@@ -32,16 +30,22 @@ pub fn log(
 
     if (comptime !std.log.logEnabled(level, scope)) return;
 
-    const fmt = std.fmt.comptimePrint("{s}:{}: ", .{ srcloc.file, srcloc.line });
+    const fmt = std.fmt.comptimePrint("[{s}:{d}]: ", .{ srcloc.file, srcloc.line });
     std.options.logFn(level, scope, fmt ++ format, args);
 }
 
-pub const static = struct {
-    pub var state: *State = undefined;
+const static = struct {
+    var hasstate: bool = false;
+    var state: *State = undefined;
 };
 
 pub inline fn state() *State {
+    std.debug.assert(static.hasstate);
     return static.state;
+}
+pub fn setstate(s: *State) void {
+    static.hasstate = true;
+    static.state = s;
 }
 
 test "all" {

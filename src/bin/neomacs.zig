@@ -2,6 +2,10 @@ const root = @import("neomacs");
 const std = root.std;
 const scu = root.scu;
 
+pub const std_options: std.Options = .{
+    .logFn = scu.log.toFile,
+};
+
 //-----------------------------------------------------------------------------
 
 pub fn main() u8 {
@@ -53,12 +57,11 @@ fn neomacs() !void {
         return;
     }
 
-    root.static.state = try a.create(root.State);
-    defer a.destroy(root.static.state);
-    root.static.state.* = try root.State.init(a, file, args);
-    defer root.static.state.deinit();
-
+    root.setstate(try a.create(root.State));
     const s = root.state();
+    defer a.destroy(s);
+    s.* = try root.State.init(a, file, args);
+    defer s.deinit();
 
     while (!s.config.QUIT) {
         try root.render.draw(s);

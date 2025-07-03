@@ -11,7 +11,6 @@ PyObject* setup_output_capture(PyObject** original_stdout, PyObject** current_ca
 void restore_output(PyObject* original_stdout, PyObject** current_captured_stdout_obj_ptr);
 char* get_captured_output(PyObject* captured_stdout_obj);
 
-
 int main() {
     Py_Initialize();
     if (!Py_IsInitialized()) {

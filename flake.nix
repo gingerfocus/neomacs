@@ -40,6 +40,7 @@
 
           python3
           pyright
+          bearssl
 
           zig
           luajit
@@ -48,6 +49,14 @@
           wayland-scanner
           wayland-protocols
           libxkbcommon
+
+
+
+          # Development
+          alejandra
+          zig
+          stylua
+          lua-language-server
         ];
       };
 
