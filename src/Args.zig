@@ -3,7 +3,7 @@ const Args = @This();
 const mem = std.mem;
 
 progname: [*:0]const u8,
-positionals: []const [*:0]const u8 = &.{},
+positionals: []const []const u8 = &.{},
 help: ?[]const u8 = null,
 dosnapshot: ?[]const u8 = null,
 
@@ -16,6 +16,9 @@ terminal: bool = false,
 /// Run with the GTK backend
 gtk: bool = false,
 
+/// The config file to load
+config: ?[]const u8 = null,
+
 /// TODO: std.process.args()
 pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
     var i: usize = 0;
@@ -23,19 +26,20 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
     var opts = Args{ .progname = args[i] };
     i += 1;
 
-    while (i < args.len) {
-        if (args[i][0] != '-') break;
+    var positionals = std.ArrayList([]const u8).init(a);
 
+    while (i < args.len) {
         const arg = mem.span(args[i]);
+        i += 1;
+
+        if (arg.len == 0) continue;
 
         if (mem.eql(u8, arg, "-h")) {
-            i += 1;
             opts.help = try getHelpPage(a, "tutor");
             continue;
         }
 
         if (mem.eql(u8, arg, "--help")) {
-            i += 1;
             if (i >= args.len) {
                 opts.help = try getHelpPage(a, "tutor");
                 continue;
@@ -45,34 +49,29 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
             continue;
         }
 
-        // if (mem.eql(u8, arg, "-c") or mem.eql(u8, arg, "--config")) {
-        //     i += 1;
-        //     if (i >= args.len) continue;
-        //     opts.config = args[i];
-        //     i += 1;
-        //     continue;
-        // }
+        if (mem.eql(u8, arg, "-c") or mem.eql(u8, arg, "--config")) {
+            if (i >= args.len) continue;
+            opts.config = try a.dupe(u8, std.mem.span(args[i]));
+            i += 1;
+            continue;
+        }
 
         if (mem.eql(u8, arg, "-P") or mem.eql(u8, arg, "--pager")) {
-            i += 1;
             opts.pager = true;
             continue;
         }
 
         if (mem.eql(u8, arg, "-T") or mem.eql(u8, arg, "--terminal")) {
-            i += 1;
             opts.terminal = true;
             continue;
         }
 
-        if (mem.eql(u8, arg, "--gtk")) {
-            i += 1;
+        if (mem.eql(u8, arg, "-G") or mem.eql(u8, arg, "--gtk")) {
             opts.gtk = true;
             continue;
         }
 
         if (mem.eql(u8, arg, "-R") or mem.eql(u8, arg, "--render-to-file")) {
-            i += 1;
             if (i >= args.len) continue;
             opts.dosnapshot = try a.dupe(u8, std.mem.span(args[i]));
             i += 1;
@@ -80,15 +79,19 @@ pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
         }
 
         // if it doesnt match an argument try to use it as a file
-        break;
+        try positionals.append(arg);
     }
-    opts.positionals = args[i..];
+    opts.positionals = try positionals.toOwnedSlice();
 
     return opts;
 }
 
 pub fn deinit(self: Args, a: std.mem.Allocator) void {
     if (self.help) |filename| a.free(filename);
+    if (self.dosnapshot) |filename| a.free(filename);
+    if (self.config) |filename| a.free(filename);
+
+    a.free(self.positionals);
 }
 
 fn getHelpPage(a: std.mem.Allocator, page: [*:0]const u8) ![]const u8 {

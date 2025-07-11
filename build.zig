@@ -1,9 +1,10 @@
 const std = @import("std");
 
-pub fn build(b: *std.Build) void {
+pub fn build(b: *std.Build) !void {
     const windowing = b.option(bool, "windowing", "add window backend") orelse true;
     const static = b.option(bool, "static", "try to complile everything statically") orelse false;
     // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
+    // const runtimeVar = b.option([]const u8, "runtime", "set the runtime directory");
 
     if (windowing and static) {
         std.debug.print("error: Executable can't link in a windowing system and be built statically!\n", .{});
@@ -33,7 +34,6 @@ pub fn build(b: *std.Build) void {
 
     // neomacsExe.linkSystemLibrary("tree-sitter");
     neomacs.link_libc = true;
-
 
     // ---------
 
@@ -108,11 +108,11 @@ pub fn build(b: *std.Build) void {
 
     // ---------
 
-    const zigrc = b.dependency("zigrc", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    neomacs.addImport("zigrc", zigrc.artifact("zig-rc").root_module);
+    // const zigrc = b.dependency("zigrc", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // neomacs.addImport("zigrc", zigrc.artifact("zig-rc").root_module);
 
     // ---------
 
@@ -150,6 +150,26 @@ pub fn build(b: *std.Build) void {
 
     // -------------------------------------------------------------------------
 
+    const treesitter = b.dependency("tree-sitter", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    neomacs.addImport("tree-sitter", treesitter.module("tree-sitter"));
+
+    // -------------------------------------------------------------------------
+
+    const runtime = b.addInstallDirectory(.{
+        .install_dir = .{ .custom = "state" },
+        .install_subdir = "neon",
+        .source_dir = b.path("runtime"),
+    });
+    b.getInstallStep().dependOn(&runtime.step);
+
+    // TODO: make this be the output runtime dir not input
+    try neomacsRun.getEnvMap().put("NEONRUNTIME", runtime.options.source_dir.getPath(b));
+
+    // -------------------------------------------------------------------------
+
     // const wevExe = b.addExecutable(.{
     //     .root_source_file = b.path("src/bin/wev.zig"),
     //     .name = "wev",
@@ -170,6 +190,7 @@ pub fn build(b: *std.Build) void {
 
     // -------------------------------------------------------------------------
 
+    // TODO: man pages to share/man/man1
 }
 
 fn addBuildAndRunSteps(

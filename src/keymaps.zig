@@ -9,7 +9,7 @@ const lua = root.lua;
 
 const State = root.State;
 
-const rc = @import("zigrc");
+// const rc = @import("zigrc");
 
 const MapId = usize;
 

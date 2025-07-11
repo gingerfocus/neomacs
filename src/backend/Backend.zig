@@ -26,7 +26,15 @@ pub fn init(a: std.mem.Allocator, args: Args) !Self {
         return file.backend();
     }
 
-    if (options.windowing and !args.terminal) {
+    if (args.terminal) {
+        if (BackendTerminal.init(a)) |term| {
+            return term.backend();
+        } else |err| {
+            std.log.err("could not open terminal backend: {any}", .{err});
+        }
+    }
+
+    if (options.windowing) {
         if (args.gtk) {
             if (BackendGtk.init(a)) |window| {
                 return window.backend();
@@ -42,16 +50,11 @@ pub fn init(a: std.mem.Allocator, args: Args) !Self {
         }
     }
 
-    if (BackendTerminal.init(a)) |term| {
-        return term.backend();
-    } else |err| {
-        std.log.err("could not open terminal backend: {any}", .{err});
-        std.log.err("falling back to headless backend", .{});
-        std.log.err("close with TODO", .{});
+    std.log.err("could not open any backend, falling back to headless backend", .{});
+    std.log.err("close with TODO", .{});
 
-        const headless = try BackendHeadless.init(a);
-        return headless.backend();
-    }
+    const headless = try BackendHeadless.init(a);
+    return headless.backend();
 }
 
 pub inline fn deinit(self: Self) void {

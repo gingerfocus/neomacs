@@ -1,19 +1,19 @@
 pub const std = @import("std");
+
 pub const scu = @import("scured");
-pub const trm = @import("thermit"); // scu.thermit;
-pub const lib = @import("lib.zig");
+pub const trm = @import("thermit");
 pub const xev = @import("xev");
-pub const km = @import("keymaps.zig");
 
-pub const render = @import("render/root.zig");
-
-pub const Buffer = @import("Buffer.zig");
-pub const State = @import("State.zig");
+pub const alloc = @import("alloc.zig");
 pub const Args = @import("Args.zig");
-
-pub const zss = @import("zss.zig");
+pub const Buffer = @import("Buffer.zig");
+pub const km = @import("keymaps.zig");
+pub const lib = @import("lib.zig");
 pub const lua = @import("lua.zig");
-// const alloc = @import("alloc.zig");
+pub const render = @import("render/root.zig");
+pub const State = @import("State.zig");
+pub const zss = @import("zss.zig");
+
 // pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
 
 //-----------------------------------------------------------------------------
@@ -27,6 +27,10 @@ pub fn log(
     args: anytype,
 ) void {
     const scope = .default;
+
+    // TODO: make an implementation that does that the src struct
+    // @returnAddress()
+    // var iter = std.debug.StackIterator.init(null, null);
 
     if (comptime !std.log.logEnabled(level, scope)) return;
 

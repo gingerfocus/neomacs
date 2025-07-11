@@ -1,18 +1,23 @@
 const std = @import("std");
 // const ts = @import("root").ts;
 
-var alloc: std.heap.GeneralPurposeAllocator(.{}) = .{};
-const galloc = alloc.allocator();
+const static = struct {
+    var alloc: std.heap.GeneralPurposeAllocator(.{}) = .{};
+    var galloc = static.alloc.allocator();
+};
 
 pub fn init() void {
     // ts.ts_set_allocator(malloc, calloc, realloc, free);
 }
 pub fn deinit() void {
-    _ = alloc.deinit();
+    _ = static.alloc.deinit();
 }
 
 pub fn allocator() std.mem.Allocator {
-    return galloc;
+    return static.galloc;
+}
+pub fn galloc() *std.mem.Allocator {
+    return &static.galloc;
 }
 
 // ----------------------------------------------------------------------------

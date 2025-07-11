@@ -34,17 +34,19 @@ fn neomacs() !void {
         const end = std.time.microTimestamp();
         std.debug.print("Close taken: {} us\n", .{end - endtime});
     }
-
-    var alloc = std.heap.GeneralPurposeAllocator(.{}){}; // alloc.init();
-    defer _ = alloc.deinit();
-    const a = alloc.allocator();
+    root.alloc.init();
+    defer root.alloc.deinit();
+    // var alloc = std.heap.GeneralPurposeAllocator(.{}){}; // alloc.init();
+    // defer _ = alloc.deinit();
+    // const a = alloc.allocator();
+    const a = root.alloc.allocator();
 
     root.log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
 
     const args = try root.Args.parse(a, std.os.argv);
     defer args.deinit(a);
 
-    const filename: ?[]const u8 = if (args.positionals.len > 0) std.mem.span(args.positionals[0]) else null;
+    const filename: ?[]const u8 = if (args.positionals.len > 0) args.positionals[0] else null;
     const file: ?[]const u8 = args.help orelse filename;
 
     // run just the terminal pager when comfigured to do so

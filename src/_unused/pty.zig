@@ -7,9 +7,11 @@ const PtyManager = struct {
 
     pub fn init(allocator: *std.mem.Allocator) !*PtyManager {
         var self = try allocator.create(PtyManager);
-        self.master_fd = -1;
-        self.slave_fd = -1;
-        std.mem.set(u8, &self.slave_name, 0);
+        self.* = PtyManager{
+            .master_fd = -1,
+            .slave_fd = -1,
+            .slave_name = [_]u8{0} ** 256,
+        };
 
         // Open PTY master
         self.master_fd = std.os.open("/dev/ptmx", std.os.O_RDWR, 0) catch |err| {
@@ -81,7 +83,7 @@ const PtyManager = struct {
             .ws_xpixel = 0,
             .ws_ypixel = 0,
         };
-        const res = std.os.ioctl(self.slave_fd, std.os.T.IOCSWINSZ, @ptrCast(*const anyopaque, &winsize));
+        const res = std.os.linux.ioctl(self.slave_fd, std.os.linux.T.IOCSWINSZ, @ptrCast(&winsize));
         if (res != 0) {
             return error.SetWindowSizeFailed;
         }

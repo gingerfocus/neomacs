@@ -76,6 +76,7 @@ inputcallback: ?struct { *xev.Completion, xev.Async } = null,
 pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
     try checkfirstrun(a);
 
+
     const L = lua.init();
 
     var arena = std.heap.ArenaAllocator.init(a);

@@ -1,0 +1,67 @@
+welcome to neomacs
+=================
+
+neomacs is a modal editor written in zig.
+
+It is a work in progress and is not yet ready for use.
+
+The goal is to have a minimal editor that is easy to use and extend.
+
+Features
+--------
+* vim keybinds
+* modal editing
+* tree-sitter based syntax highlighting
+* lua scripting
+* lua bindings
+* lua libraries
+* lua integration
+
+Commands
+--------
+:help
+:help <command>
+:help <command> <command>
+
+Keybinds
+--------
+<leader>h
+<leader>t
+<leader>f
+<leader>w
+<leader>q
+<leader>b
+<leader>s
+<leader>e
+<leader>d
+<leader>u
+<leader>i
+<leader>o
+<leader>p
+<leader>r
+<leader>g
+<leader>j
+<leader>k
+<leader>l
+<leader>z
+<leader>x
+<leader>v
+<leader>c
+<leader>n
+<leader>m
+
+Modes
+-----
+normal
+insert
+visual
+replace
+operator
+select
+terminal
+command
+prompt
+search
+help
+debug
+

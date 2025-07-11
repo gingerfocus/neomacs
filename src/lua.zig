@@ -8,20 +8,29 @@ const root = @import("root.zig");
 const std = @import("std");
 const mem = std.mem;
 const scu = root.scu;
-const lua = @This();
+
+const nlua = @import("nlua/root.zig");
 
 const Config = @import("Config.zig");
 const Global = @import("State.zig");
 
-// pub const sys = @cImport({
-//     @cInclude("lua.h");
-//     @cInclude("lualib.h");
-//     @cInclude("luajit.h");
-//     @cInclude("luajit-2.1/lauxlib.h");
-// });
+/// Bindins to the Lua C API, either static or dynamic. This module abstracts
+/// away the differences between the two.
 pub const sys = @import("syslua");
 
 pub const LuaState = sys.lua_State;
+
+// TODO: find the runtime path in zig code when setting up the opts
+const SYSINIT =
+    \\local runtime = os.getenv("NEONRUNTIME")
+    \\if not runtime then
+    \\    local home = os.getenv("HOME")
+    \\    runtime = home .. "/.local/stat/neon"
+    \\end
+    \\neon.opt.runtime = runtime
+    \\package.path = runtime .. "/lua/?.lua;" .. package.path
+    \\require("runtime").startup()
+;
 
 pub fn init() *LuaState {
     root.log(@src(), .debug, "creating lua state", .{});
@@ -29,22 +38,39 @@ pub fn init() *LuaState {
     const L = sys.luaL_newstate() orelse unreachable;
     sys.luaL_openlibs(L);
 
-    // Neomacs Object
+    // const a = root.alloc.galloc();
+    // sys.lua_setallocf(L, &nlua.alloc, @ptrCast(a));
+
+    // Neomacs Object This is the entire api
     push(L, .{
         .ui = .{
             .input = nluaUiInput,
+            // .prompt =
         },
         .loop = .{
             .stat = nluaLoopStat,
+            // .exec = nluaLoopExec,
+            // .mkdir
         },
-        .api = .{},
+        .fs = .{
+            // .dirname
+        },
+        .api = .{
+            .quit = nluaApiQuit,
+            // .executable = nluaApiExecutable,
+        },
         .win = .{
             .open = nluaWinOpen,
         },
-        // .pkg = .{},
+        .pkg = .{},
         .buf = .{
-            // .getName = nluaGetName
-            // .create = nluaCreate(focus, )
+            .next = nluaBufNext,
+            .prev = nluaBufPrev,
+
+            // .name = nluaBufName
+            // .create = nluaBufCreate(focus, )
+            .write = nluaBufWrite,
+            .edit = nluaBufOpen,
         },
         .opt = .{
             .__metatable = .{
@@ -57,21 +83,15 @@ pub fn init() *LuaState {
             .set = nluaKeymapSet,
         },
         .cmd = .{
-            .w = nluaWrite,
-            .q = nluaQuit,
-            .wq = nluaWriteQuit,
-            .e = nluaEdit,
-            // .help = nluaHelp,
             // .tutor = nluaTutor,
-            .bn = nluaBufferNext,
-            .bp = nluaBufferPrev,
+            // .help = nluaHelp,
         },
+        .treesitter = .{},
         .notify = nluaNotify,
         .print = nluaPrint,
-        .treesitter = .{},
         // .schedule = nluaSchedule
     });
-    sys.lua_setglobal(L, "neomacs");
+    sys.lua_setglobal(L, "neon");
 
     // overwrite print implementation
     sys.lua_pushcfunction(L, luaPrint);
@@ -81,8 +101,6 @@ pub fn init() *LuaState {
 
     // -----------------
     root.log(@src(), .debug, "running init.lua state", .{});
-
-    const SYSINIT = @embedFile("embed.lua");
 
     if (sys.luaL_loadstring(L, SYSINIT) != 0)
         unreachable; // embeded file is always the same
@@ -123,7 +141,7 @@ pub fn push(L: ?*LuaState, value: anytype) void {
                 if (comptime std.mem.eql(u8, field.name, "__metatable")) {
                     _ = sys.lua_setmetatable(L, -2);
                 } else {
-                    sys.lua_setfield(L, -2, field.name);
+                    sys.lua_setfield(L, -2, field.name.ptr);
                 }
             }
         },
@@ -184,7 +202,7 @@ pub fn runCommand(L: *LuaState, cmd: [:0]const u8) !void {
     const zfunc = iter.next() orelse return;
     const func: [:0]const u8 = tmpCString(zfunc);
 
-    sys.lua_getglobal(L, "neomacs");
+    sys.lua_getglobal(L, "neon");
     sys.lua_getfield(L, -1, "cmd");
     sys.lua_getfield(L, -1, func.ptr);
 
@@ -226,13 +244,13 @@ pub fn runCommand(L: *LuaState, cmd: [:0]const u8) !void {
 
 // --- Lua Functions ---------------------------------------------------------
 
-fn nluaQuit(_: ?*LuaState) callconv(.C) c_int {
+fn nluaApiQuit(_: ?*LuaState) callconv(.C) c_int {
     std.log.debug("quitting", .{});
     root.state().config.QUIT = true;
     return 0;
 }
 
-fn nluaWrite(_: ?*LuaState) callconv(.C) c_int {
+fn nluaBufWrite(_: ?*LuaState) callconv(.C) c_int {
     const state = root.state();
 
     const buffer = state.getCurrentBuffer() orelse return 0;
@@ -245,12 +263,12 @@ fn nluaWrite(_: ?*LuaState) callconv(.C) c_int {
 }
 
 fn nluaWriteQuit(s: ?*LuaState) callconv(.C) c_int {
-    _ = nluaWrite(s);
-    _ = nluaQuit(s);
+    _ = nluaBufWrite(s);
+    _ = nluaApiQuit(s);
     return 0;
 }
 
-fn nluaEdit(L: ?*lua.LuaState) callconv(.C) c_int {
+fn nluaBufOpen(L: ?*LuaState) callconv(.C) c_int {
     const state = root.state();
 
     const file = check(L, 1, []const u8) orelse {
@@ -271,12 +289,12 @@ fn nluaEdit(L: ?*lua.LuaState) callconv(.C) c_int {
     return 0;
 }
 
-fn nluaBufferNext(_: ?*LuaState) callconv(.C) c_int {
+fn nluaBufNext(_: ?*LuaState) callconv(.C) c_int {
     root.state().bufferNext();
     return 0;
 }
 
-fn nluaBufferPrev(_: ?*LuaState) callconv(.C) c_int {
+fn nluaBufPrev(_: ?*LuaState) callconv(.C) c_int {
     root.state().bufferPrev();
     return 0;
 }
@@ -289,9 +307,7 @@ fn nluaBufferPrev(_: ?*LuaState) callconv(.C) c_int {
 // }
 
 fn nluaHelp(L: ?*LuaState) callconv(.C) c_int {
-    const file = scu.log.getFile() orelse return 1;
-
-    sys.lua_getglobal(L, "neomacs");
+    sys.lua_getglobal(L, "neon");
     std.debug.assert(sys.lua_istable(L, -1));
 
     sys.lua_getfield(L, -1, "cmd");
@@ -305,7 +321,7 @@ fn nluaHelp(L: ?*LuaState) callconv(.C) c_int {
         const key = sys.lua_tolstring(L, -2, null); // may not be a string
         const val = sys.lua_typename(L, sys.lua_type(L, -1));
 
-        std.fmt.format(file.writer(), "\t- {s}: {s}\n", .{ mem.span(key), mem.span(val) }) catch unreachable;
+        std.log.info("\t- {s}: {s}", .{ mem.span(key), mem.span(val) });
         // removes 'value'; keeps 'key' for next iteration
         sys.lua_pop(L, 1);
     }
@@ -745,7 +761,6 @@ fn nluaOptIndex(L: ?*LuaState) callconv(.C) c_int {
 }
 
 const xev = root.xev;
-
 fn callback(
     ud: ?*void,
     l: *xev.Loop,
@@ -760,7 +775,6 @@ fn callback(
     root.log(@src(), .warn, "callback", .{});
     return xev.CallbackAction.disarm;
 }
-
 fn nluaUiInput(L: ?*LuaState) callconv(.C) c_int {
     root.log(@src(), .debug, "ui.input", .{});
 
