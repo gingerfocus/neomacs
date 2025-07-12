@@ -20,7 +20,7 @@ gtk: bool = false,
 config: ?[]const u8 = null,
 
 /// TODO: std.process.args()
-pub fn parse(a: std.mem.Allocator, args: [][*:0]u8) !Args {
+pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
     var i: usize = 0;
 
     var opts = Args{ .progname = args[i] };
@@ -105,24 +105,30 @@ fn getHelpPage(a: std.mem.Allocator, page: [*:0]const u8) ![]const u8 {
 test "parse --terminal long option" {
     const a = std.testing.allocator;
     const args = try parse(a, &.{ "neomacs", "--terminal", "file.txt" });
+    defer args.deinit(a);
+
     try std.testing.expect(args.terminal);
     try std.testing.expect(!args.pager);
-    try std.testing.expectEqualStrings("neomacs", args.progname);
+    try std.testing.expectEqualStrings("neomacs", std.mem.span(args.progname));
     try std.testing.expectEqualStrings("file.txt", args.positionals[0]);
 }
 
 test "parse -T short option" {
     const a = std.testing.allocator;
     const args = try parse(a, &.{ "neomacs", "-T", "file.txt" });
+    defer args.deinit(a);
+
     try std.testing.expect(args.terminal);
     try std.testing.expect(!args.pager);
-    try std.testing.expectEqualStrings("neomacs", args.progname);
+    try std.testing.expectEqualStrings("neomacs", std.mem.span(args.progname));
     try std.testing.expectEqualStrings("file.txt", args.positionals[0]);
 }
 
 test "parse both --pager and --terminal" {
     const a = std.testing.allocator;
     const args = try parse(a, &.{ "neomacs", "--pager", "--terminal", "foo" });
+    defer args.deinit(a);
+
     try std.testing.expect(args.terminal);
     try std.testing.expect(args.pager);
     try std.testing.expectEqualStrings("foo", args.positionals[0]);
@@ -131,6 +137,8 @@ test "parse both --pager and --terminal" {
 test "parse no options, just positionals" {
     const a = std.testing.allocator;
     const args = try parse(a, &.{ "neomacs", "foo", "bar" });
+    defer args.deinit(a);
+
     try std.testing.expect(!args.terminal);
     try std.testing.expect(!args.pager);
     try std.testing.expectEqualStrings("foo", args.positionals[0]);
@@ -140,6 +148,8 @@ test "parse no options, just positionals" {
 test "parse unknown option stops at first positional" {
     const a = std.testing.allocator;
     const args = try parse(a, &.{ "neomacs", "--unknown", "foo" });
+    defer args.deinit(a);
+
     try std.testing.expect(!args.terminal);
     try std.testing.expect(!args.pager);
     try std.testing.expectEqualStrings("--unknown", args.positionals[0]);

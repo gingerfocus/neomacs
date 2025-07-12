@@ -1,9 +1,8 @@
 //! TODO: Fully modular system for keymaps
 //! Dont have the nuance of reference counting escape this file
 
-const root = @import("root.zig");
+const root = @import("../root.zig");
 const std = root.std;
-const scu = root.scu;
 const trm = root.trm;
 const lua = root.lua;
 
@@ -11,7 +10,28 @@ const State = root.State;
 
 // const rc = @import("zigrc");
 
-const MapId = usize;
+const MapId = struct {
+    _: usize,
+
+    pub fn from(str: []const u8) MapId {
+        var bytes: usize = 0;
+        @memcpy(std.mem.asBytes(&bytes)[0..str.len], str);
+
+        return .{ ._ = bytes };
+    }
+
+    const Normal: MapId = .{ ._ = 'n' };
+    const Visual: MapId = .{ ._ = 'v' };
+    const Insert: MapId = .{ ._ = 'i' };
+};
+
+test "MapId.from" {
+    try std.testing.expectEqual(MapId.Normal, MapId.from("n"));
+    try std.testing.expectEqual(MapId.Visual, MapId.from("v"));
+    try std.testing.expectEqual(MapId.Insert, MapId.from("i"));
+}
+
+pub const KeyMapppppers = std.AutoArrayHashMapUnmanaged(MapId, KeyMaps);
 
 pub const action = struct {
     fn move(state: *State) !void {
@@ -35,7 +55,6 @@ pub const action = struct {
     pub fn none(_: *State) !void {}
 };
 
-
 pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
 
 pub const KeyMaps = struct {
@@ -51,7 +70,7 @@ pub const KeyMaps = struct {
     }
 
     pub fn run(self: KeyMaps, state: *State, ke: trm.KeyEvent) !void {
-        if (self.keys.get(scu.thermit.keys.bits(ke))) |function| {
+        if (self.keys.get(trm.keys.bits(ke))) |function| {
             // if there is a custom handler then run it
             try function.run(state);
 

@@ -38,9 +38,9 @@
         //     .url = "https://github.com/Aandreba/zigrc/archive/refs/tags/1.0.0.tar.gz",
         //     .hash = "zigrc-1.0.0-lENlW5HIAADbYDdbz3y2nJEodEelv8MIG2W2f63An9fl",
         // },
-        .@"tree-sitter" = .{
-            .url = "git+https://github.com/tree-sitter/zig-tree-sitter.git#b4b72c903e69998fc88e27e154a5e3cc9166551b",
-            .hash = "tree_sitter-0.25.0-8heIf51vAQConvVIgvm-9mVIbqh7yabZYqPXfOpS3YoG",
-        },
+        // .@"tree-sitter" = .{
+        //     .url = "git+https://github.com/tree-sitter/zig-tree-sitter.git#b4b72c903e69998fc88e27e154a5e3cc9166551b",
+        //     .hash = "tree_sitter-0.25.0-8heIf51vAQConvVIgvm-9mVIbqh7yabZYqPXfOpS3YoG",
+        // },
     },
 }

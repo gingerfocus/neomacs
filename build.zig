@@ -150,11 +150,11 @@ pub fn build(b: *std.Build) !void {
 
     // -------------------------------------------------------------------------
 
-    const treesitter = b.dependency("tree-sitter", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    neomacs.addImport("tree-sitter", treesitter.module("tree-sitter"));
+    // const treesitter = b.dependency("tree-sitter", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // neomacs.addImport("tree-sitter", treesitter.module("tree-sitter"));
 
     // -------------------------------------------------------------------------
 
@@ -187,6 +187,15 @@ pub fn build(b: *std.Build) !void {
     check.dependOn(&zssExe.step);
     // check.dependOn(&wevExe.step);
     check.dependOn(&neomacsExe.step);
+
+    // -------------------------------------------------------------------------
+
+    const testStep = b.step("test", "Run tests");
+    const tests = b.addTest(.{
+        .root_module = neomacs,
+    });
+    const run_unit_tests = b.addRunArtifact(tests);
+    testStep.dependOn(&run_unit_tests.step);
 
     // -------------------------------------------------------------------------
 

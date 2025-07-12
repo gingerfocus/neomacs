@@ -6,7 +6,7 @@ const lib = root.lib;
 const rc = root.rc;
 
 const lua = @import("lua.zig");
-const km = @import("keymaps.zig");
+const km = root.km;
 
 const State = @import("State.zig");
 const Buffer = root.Buffer;
