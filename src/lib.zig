@@ -20,8 +20,7 @@ pub const Vec4 = struct {
 pub const shm = struct {
     const RANDOMNESS: usize = 10;
 
-    const ShmError = std.posix.OpenError // thign
-    || std.posix.UnlinkError || std.posix.TruncateError;
+    const ShmError = std.posix.OpenError || std.posix.UnlinkError || std.posix.TruncateError;
 
     /// Allocates a shared memory file of the given size.
     pub fn file(size: usize) ShmError!std.posix.fd_t {
@@ -31,6 +30,7 @@ pub const shm = struct {
             const template = "/dev/shm/wev-";
             var buf: [63:0]u8 = undefined;
 
+            std.debug.assert(RANDOMNESS > 5);
             std.debug.assert(buf.len >= template.len + RANDOMNESS);
 
             @memcpy(buf[0..template.len], template);

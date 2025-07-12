@@ -13,6 +13,7 @@ pub const lua = @import("lua.zig");
 pub const render = @import("render/root.zig");
 pub const State = @import("State.zig");
 pub const zss = @import("zss.zig");
+pub const Config = @import("Config.zig");
 
 // pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
 

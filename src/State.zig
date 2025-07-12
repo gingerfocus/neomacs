@@ -50,7 +50,7 @@ currentKeyMap: ?*km.KeyMaps = null,
 // dont touch this as if you try to be clever it will just be set to null
 // currentKeyMap: ?*km.KeyMaps = null,
 
-L: *lua.LuaState,
+L: *lua.State,
 
 config: Config = .{},
 
@@ -60,8 +60,8 @@ resized: bool = false,
 
 buffers: std.ArrayListUnmanaged(*Buffer),
 /// Always a memeber of the buffers array
-buffer: *Buffer, // todo: might be better to make it an index
-// bufferindex: usize = 0,
+// buffer: *Buffer, // todo: might be better to make it an index
+bufferindex: usize = 0,
 
 // resized: bool = true,
 
@@ -98,7 +98,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
 
         .command = try Command.init(a),
         .buffers = .{},
-        .buffer = undefined,
+        // .buffer = undefined,
 
         // .loop = try xev.Loop.init(.{}),
     };
@@ -123,7 +123,6 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
     try buffers.append(a, buffer);
 
     state.buffers = buffers;
-    state.buffer = buffer;
 
     try render.init(&state);
 
@@ -168,7 +167,8 @@ pub fn deinit(state: *State) void {
 // }
 
 pub fn getCurrentBuffer(state: *State) ?*Buffer {
-    return state.buffer;
+    if (state.bufferindex >= state.buffers.items.len) return null;
+    return state.buffers.items[state.bufferindex];
 }
 
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
@@ -184,14 +184,19 @@ pub fn press(state: *State, ke: trm.KeyEvent) !void {
     try state.getKeyMaps().run(state, ke);
 }
 
-fn getKeyMaps(state: *const State) *const km.KeyMaps {
+// TODO: make a const and mut version
+fn getKeyMaps(state: *State) *km.KeyMaps {
     if (state.currentKeyMap) |map| {
         std.log.info("using current keymap", .{});
         return map;
     }
 
-    const buffer = state.buffer;
-    return buffer.curkeymap orelse return state.namedmaps.get(Buffer.ModeId.Normal).?;
+    if (state.getCurrentBuffer()) |buffer| {
+        if (buffer.curkeymap) |map| {
+            return map;
+        }
+    }
+    return state.namedmaps.get(Buffer.ModeId.Normal).?;
 }
 
 pub const Repeating = struct {
@@ -233,28 +238,31 @@ fn checkfirstrun(a: std.mem.Allocator) !void {
 pub fn bufferNext(state: *State) void {
     if (state.buffers.items.len < 2) return;
 
-    for (state.buffers.items, 0..) |buf, i| {
-        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
-            if (i == state.buffers.items.len - 1) {
-                state.buffer = state.buffers.items[0];
-            } else {
-                state.buffer = state.buffers.items[i + 1];
-            }
-            return;
-        }
-    }
+    state.bufferindex = if (state.bufferindex == state.buffers.items.len - 1) 0 else state.bufferindex + 1;
+    // for (state.buffers.items, 0..) |buf, i| {
+    //     if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
+    //         if (i == state.buffers.items.len - 1) {
+    //             state.buffer = state.buffers.items[0];
+    //         } else {
+    //             state.buffer = state.buffers.items[i + 1];
+    //         }
+    //         return;
+    //     }
+    // }
 }
 pub fn bufferPrev(state: *State) void {
     if (state.buffers.items.len < 2) return;
 
-    for (state.buffers.items, 0..) |buf, i| {
-        if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
-            if (i == 0) {
-                state.buffer = state.buffers.items[state.buffers.items.len - 1];
-            } else {
-                state.buffer = state.buffers.items[i - 1];
-            }
-        }
-        return;
-    }
+    state.bufferindex = if (state.bufferindex == 0) state.buffers.items.len - 1 else state.bufferindex - 1;
+
+    // for (state.buffers.items, 0..) |buf, i| {
+    //     if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
+    //         if (i == 0) {
+    //             state.buffer = state.buffers.items[state.buffers.items.len - 1];
+    //         } else {
+    //             state.buffer = state.buffers.items[i - 1];
+    //         }
+    //     }
+    //     return;
+    // }
 }

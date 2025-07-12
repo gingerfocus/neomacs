@@ -1,9 +1,13 @@
+//! There is no file I hate more than this one. It is at the top of the list
+//! for every rewrite.
+//!
 const root = @import("root.zig");
 const std = root.std;
 const trm = root.trm;
 const lua = root.lua;
 const km = root.km;
 const State = root.State;
+const Buffer = root.Buffer;
 
 const Command = @This();
 
@@ -40,12 +44,14 @@ const thunk = struct {
         //     std.log.debug("finish: {any}", .{h[0]});
         // }
 
-        lua.runCommand(state.L, cmd) catch |err| {
+        lua.run(state.L, cmd) catch |err| {
             root.log(@src(), .err, "lua command line error: {}", .{err});
         };
 
         state.command.is = false;
-        // state.buffer.mode = .normal;
+
+        const buffer = state.getCurrentBuffer() orelse return;
+        buffer.setMode(Buffer.ModeId.Normal);
     }
 };
 

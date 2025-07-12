@@ -1423,7 +1423,7 @@ const inserts = struct {
         buffer.row = @max(0, buffer.row - 1);
 
         state.repeating.reset();
-        state.buffer.setMode(ModeId.Insert);
+        buffer.setMode(ModeId.Insert);
     }
 
     fn below(state: *State) !void {

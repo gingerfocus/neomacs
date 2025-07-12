@@ -29,7 +29,6 @@ pub fn build(b: *std.Build) !void {
     }
 
     const target = b.standardTargetOptions(query);
-
     const optimize = b.standardOptimizeOption(.{});
 
     // ---------
@@ -50,24 +49,7 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    if (staticlua) {
-        if (b.lazyDependency("luajit-build", .{
-            .target = target,
-            .optimize = optimize,
-            .link_as = .static,
-        })) |luajit_build_dep| {
-            const luajit_build = luajit_build_dep.module("luajit-build");
-            neomacs.addImport("syslua", luajit_build);
-        }
-    } else {
-        const luajit_c = b.addModule("syslua", .{
-            .target = target,
-            .optimize = optimize,
-            .root_source_file = b.path("src/ffi/luajitc.zig"),
-        });
-        neomacs.addImport("syslua", luajit_c);
-        neomacs.linkSystemLibrary("luajit-5.1", .{});
-    }
+    addLuaImport(b, neomacs, staticlua, target, optimize);
 
     // ---------
 
@@ -217,7 +199,21 @@ pub fn build(b: *std.Build) !void {
     testStep.dependOn(&run_unit_tests.step);
 
     // -------------------------------------------------------------------------
-
+    //
+    // default to false
+    const usekennel = b.option(bool, "usekennel", "compile the with support for literate programming") orelse true;
+    //
+    // const kennel = b.addModule("kennel", .{
+    //     .root_source_file = b.path("src/kennel/root.zig"),
+    // });
+    // addLuaImport(kennel, staticlua, target, optimize);
+    //
+    options.addOption(bool, "usekennel", usekennel);
+    // if (usekennel) {
+    //     neomacs.addImport("kennel", kennel);
+    // }
+    //
+    // -------------------------------------------------------------------------
     // TODO: man pages to share/man/man1
 }
 
@@ -237,4 +233,31 @@ fn addBuildAndRunSteps(
     if (b.args) |args| run.addArgs(args);
     const runStep = b.step(name ++ "-run", "Run " ++ name);
     runStep.dependOn(&run.step);
+}
+
+fn addLuaImport(
+    b: *std.Build,
+    module: *std.Build.Module,
+    static: bool,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) void {
+    if (static) {
+        if (b.lazyDependency("luajit-build", .{
+            .target = target,
+            .optimize = optimize,
+            .link_as = .static,
+        })) |luajit_build_dep| {
+            const luajit_build = luajit_build_dep.module("luajit-build");
+            module.addImport("syslua", luajit_build);
+        }
+    } else {
+        const luajit_c = b.addModule("syslua", .{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/ffi/luajitc.zig"),
+        });
+        module.addImport("syslua", luajit_c);
+        module.linkSystemLibrary("luajit-5.1", .{});
+    }
 }

@@ -73,7 +73,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     }
 
     {
-        const mode = state.buffer.getKeymap();
+        const mode = buffer.getKeymap();
         const modenname = mode.name orelse "UNKNOWN";
 
         for (modenname, 0..) |ch, i| {
