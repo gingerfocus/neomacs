@@ -25,6 +25,7 @@
             // .hash = "luajit_build-1.1.4-HFjoU14-AACEEcPwP8nRnDSLS3EByuR8u5ZWAXBq08PH"
             .url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz",
             .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
+            .lazy = true,
         },
         .libxev = .{
             .url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz",

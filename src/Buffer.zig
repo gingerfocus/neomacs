@@ -105,21 +105,20 @@ pub fn initFile(
 ) !Buffer {
     // const maps = try state.maps.clone(state.a);
 
-    const file = try std.fs.cwd().createFile(filename, .{
-        .truncate = false,
-        .read = true,
-    }); // a+
-    defer file.close();
-
     var lines = std.ArrayList(Line).init(a);
-    while (true) {
-        const line = try file.reader().readUntilDelimiterOrEofAlloc(a, '\n', 128 * 1024) orelse break;
-        // if (line.len == 0) break;
 
-        const l = Line.fromOwnedSlice(line);
+    if (std.fs.cwd().openFile(filename, .{})) |file| {
+        defer file.close();
 
-        try lines.append(l);
-    }
+        while (true) {
+            const line = try file.reader().readUntilDelimiterOrEofAlloc(a, '\n', 128 * 1024) orelse break;
+            // if (line.len == 0) break;
+
+            const l = Line.fromOwnedSlice(line);
+
+            try lines.append(l);
+        }
+    } else |_| {}
 
     // not stable
     // const fid = std.hash.murmur.Murmur2_64.hash(filename);

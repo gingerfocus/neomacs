@@ -27,30 +27,25 @@
         # inputsFrom = with neon; [neomacs zss];
 
         packages = [
-          pkgs.valgrind
-          pkgs.strace
           pkgs.zon2nix
-
-          pkgs.scdoc
-          pkgs.freetype
-          pkgs.atk
 
           pkgs.gtk3
           pkgs.cairo
           pkgs.gobject-introspection
-          # pkgs.skia
 
-          pkgs.python3
-          pkgs.pyright
-          pkgs.bearssl
+          # pkgs.python3
+          # pkgs.pyright
+          # pkgs.bearssl
 
           pkgs.luajit
 
           pkgs.pkg-config
-          pkgs.wayland
-          pkgs.wayland-scanner
-          pkgs.wayland-protocols
-          pkgs.libxkbcommon
+          # pkgs.wayland
+          # pkgs.wayland-scanner
+          # pkgs.wayland-protocols
+          # pkgs.libxkbcommon
+          # pkgs.freetype
+          # pkgs.atk
 
           # Development
           pkgs.alejandra

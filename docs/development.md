@@ -1,6 +1,6 @@
 # Dev Log
 ## Previewing Ui
-```bash
+```sh
 zig build run -- -R tmp.txt <file>
 ```
 
@@ -27,6 +27,13 @@ to add to it.
 This raises more problems than it may solve as now I have to make a version managment sytem
 for keybinds just to save some memory sometimes
 
+**Mode Maps**
+I have now implemented the above using a mode map where you can create
+arbitrary new maps. I think it is a fine meathod the one downside is that a
+have a pointer to a list of pointers. Where a better meathod could just leave
+me with a single pointer. At some point I also need to implement reference
+counting.
+
 ## Libraries
 It may be worth it to just use gtk for rendering. Also I think long term using
 [libghostty](https://github.com/ghostty-org/ghostty) for the terminal would be a good idea but I should at least finish
@@ -45,7 +52,7 @@ Most libraries should have a binding for this so the data never needs to pass
 through lua.
 
 ## Wasm
-No, I dont think so.
+No, I dont think so. But maybe.
 
 ## Async
 I dont want to go all in on xev only for the new zig IO model to come out and

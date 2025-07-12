@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) !void {
 
     // TODO: do more warning for this or make it a compile error
     const static = if (needsdyn) false else b.option(bool, "static", "try to complile everything statically") orelse true;
-    const staticlua = if (static) true else b.option(bool, "static-lua", "complile lua statically") orelse true;
+    const staticlua = if (static) true else b.option(bool, "static-lua", "complile lua statically") orelse static;
 
     // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
     // const runtimeVar = b.option([]const u8, "runtime", "set the runtime directory");
@@ -51,13 +51,14 @@ pub fn build(b: *std.Build) !void {
     // ---------
 
     if (staticlua) {
-        const luajit_build_dep = b.dependency("luajit-build", .{
+        if (b.lazyDependency("luajit-build", .{
             .target = target,
             .optimize = optimize,
             .link_as = .static,
-        });
-        const luajit_build = luajit_build_dep.module("luajit-build");
-        neomacs.addImport("syslua", luajit_build);
+        })) |luajit_build_dep| {
+            const luajit_build = luajit_build_dep.module("luajit-build");
+            neomacs.addImport("syslua", luajit_build);
+        }
     } else {
         const luajit_c = b.addModule("syslua", .{
             .target = target,

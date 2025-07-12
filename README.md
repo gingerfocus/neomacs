@@ -29,16 +29,17 @@ straight lua meaning that there is no second syntax to learn and you can type
 `os.exit(1)` right into the command line if you wanted.
 
 # Devolopment
-## All features
-By default, build a capable editor linking to as much as the build system can
-given your os configuration.
+## Binary Size
+By default, compile to a static, 740k binary with:
 ```sh
-zig build -Doptimize=ReleaseFast
+zig build --release=small
 ```
 
-## Binary Size
-Compile to a static, 740k binary with:
+
+## All features
+You can also build a fully capable editor by saying what you can informing what
+you can link to.
 ```bash
-zig build -Dwindowing=false -Dstatic=true -Doptimize=ReleaseSmall
+zig build -Dgtk=true -Dstatic-lua=false --release=safe
 ```
 
