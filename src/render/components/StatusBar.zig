@@ -73,8 +73,10 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     }
 
     {
-        const mode = state.buffer.mode.toString();
-        for (mode, 0..) |ch, i| {
+        const mode = state.buffer.getKeymap();
+        const modenname = mode.name orelse "UNKNOWN";
+
+        for (modenname, 0..) |ch, i| {
             writer.draw(
                 .{ .col = view.x + i, .row = view.y + 0 },
                 .{

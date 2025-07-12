@@ -39,12 +39,13 @@ const WaylandEvent = struct {
 const FrameBuffer = struct {
     width: i32,
     height: i32,
-    data: []align(4096) u8,
-    // wl: *wl.wl_buffer,
+    // TODO: get 4096
+    data: []align(64) u8,
 
     pub fn init(a: std.mem.Allocator, width: i32, height: i32) !FrameBuffer {
         const amount = @as(usize, @intCast(width * height * 4));
-        const data = try a.alignedAlloc(u8, 4096, amount);
+        // I need 4096 alligned data
+        const data = try a.alignedAlloc(u8, .@"64", amount);
         return FrameBuffer{
             .width = width,
             .height = height,

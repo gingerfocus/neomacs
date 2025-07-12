@@ -5,36 +5,16 @@ const root = @import("../root.zig");
 const std = root.std;
 const trm = root.trm;
 const lua = root.lua;
+// const rc = @import("zigrc");
 
 const State = root.State;
 
-// const rc = @import("zigrc");
+pub const ModeId = root.Buffer.ModeId;
 
-const MapId = struct {
-    _: usize,
-
-    pub fn from(str: []const u8) MapId {
-        var bytes: usize = 0;
-        @memcpy(std.mem.asBytes(&bytes)[0..str.len], str);
-
-        return .{ ._ = bytes };
-    }
-
-    const Normal: MapId = .{ ._ = 'n' };
-    const Visual: MapId = .{ ._ = 'v' };
-    const Insert: MapId = .{ ._ = 'i' };
-};
-
-test "MapId.from" {
-    try std.testing.expectEqual(MapId.Normal, MapId.from("n"));
-    try std.testing.expectEqual(MapId.Visual, MapId.from("v"));
-    try std.testing.expectEqual(MapId.Insert, MapId.from("i"));
-}
-
-pub const KeyMapppppers = std.AutoArrayHashMapUnmanaged(MapId, KeyMaps);
+pub const ModeToKeys = std.AutoArrayHashMapUnmanaged(ModeId, *KeyMaps);
 
 pub const action = struct {
-    fn move(state: *State) !void {
+    pub fn move(state: *State) !void {
         try moveKeep(state);
 
         const buffer = state.getCurrentBuffer() orelse return;
@@ -55,16 +35,32 @@ pub const action = struct {
     pub fn none(_: *State) !void {}
 };
 
-pub const KeyMapings = std.AutoArrayHashMapUnmanaged(u16, KeyMap);
+pub const KeyToFunction = std.AutoArrayHashMapUnmanaged(u16, KeyFunction);
 
 pub const KeyMaps = struct {
-    keys: KeyMapings = .{},
-    fallback: ?KeyMap = null,
-    targeter: *const fn (*State) anyerror!void = action.move,
+    keys: KeyToFunction = .{},
+
+    fallback: ?KeyFunction = null,
+    targeter: ?KeyFunction = .{ .Native = action.move },
+
+    name: ?[]const u8 = null,
+
+    // use this as name instead of name
+    // modeid: ModeId, 
+
+    // Note: you can statically init this but just be sure to use the same
+    // allocator for everything
+    // pub fn init(name: ?[]const u8) KeyMaps {
+    //     return .{
+    //         .name = name,
+    //     };
+    // }
 
     pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
         var iter = self.keys.iterator();
         while (iter.next()) |key| key.value_ptr.deinit(a);
+
+        if (self.name) |name| a.free(name);
 
         self.keys.deinit(a);
     }
@@ -74,7 +70,13 @@ pub const KeyMaps = struct {
             // if there is a custom handler then run it
             try function.run(state);
 
-            try self.targeter(state);
+            if (self.targeter) |targeter| {
+                if (targeter == .SubMap) {
+                    std.log.debug("you cant set targeter as submap", .{});
+                    return;
+                }
+                try targeter.run(state);
+            }
         } else if (self.fallback) |fallback| {
             // if there is no handler and its just a regular key then send it to
             // the buffer
@@ -82,7 +84,7 @@ pub const KeyMaps = struct {
         }
     }
 
-    pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: KeyMap) !void {
+    pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: KeyFunction) !void {
         try self.keys.put(a, character, value);
     }
 
@@ -101,12 +103,12 @@ pub const KeyMaps = struct {
         }
         const map = try a.create(KeyMaps);
         map.* = KeyMaps{};
-        res.value_ptr.* = KeyMap{ .SubMap = map };
+        res.value_ptr.* = KeyFunction{ .SubMap = map };
         return map;
     }
 };
 
-pub const KeyMap = union(enum) {
+pub const KeyFunction = union(enum) {
     const Callback = *const fn (*State) anyerror!void; // Id
     const LuaRef = c_int;
 
@@ -114,7 +116,7 @@ pub const KeyMap = union(enum) {
     LuaFnc: LuaRef,
     SubMap: *KeyMaps,
 
-    pub fn deinit(self: KeyMap, a: std.mem.Allocator) void {
+    pub fn deinit(self: KeyFunction, a: std.mem.Allocator) void {
         switch (self) {
             .SubMap => |map| {
                 map.deinit(a);
@@ -124,7 +126,7 @@ pub const KeyMap = union(enum) {
         }
     }
 
-    pub fn initLua(L: *lua.LuaState, index: c_int) !KeyMap {
+    pub fn initLua(L: *lua.LuaState, index: c_int) !KeyFunction {
         if (lua.lua_type(L, index) != lua.LUA_TFUNCTION) {
             return error.NotALuaFunction;
             // lua.lua_pushliteral(L, "vim.schedule: expected function");
@@ -142,7 +144,7 @@ pub const KeyMap = union(enum) {
         return .{ .LuaFnc = ref };
     }
 
-    pub fn run(self: KeyMap, state: *State) anyerror!void {
+    pub fn run(self: KeyFunction, state: *State) anyerror!void {
         switch (self) {
             .Native => |fc| {
                 try fc(state);

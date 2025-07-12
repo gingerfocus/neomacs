@@ -10,6 +10,7 @@ const km = root.km;
 
 const State = @import("State.zig");
 const Buffer = root.Buffer;
+const ModeId = Buffer.ModeId;
 
 const norm = scu.thermit.keys.norm;
 const ctrl = scu.thermit.keys.ctrl;
@@ -25,7 +26,7 @@ const Ks = trm.KeySymbol;
 pub fn create(
     alloc: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
-) !std.AutoArrayHashMapUnmanaged(Buffer.Mode, *km.KeyMaps) {
+) !km.ModeToKeys {
     const fallback = struct {
         fn bufInsert(s: *State) !void {
             if (s.ch.modifiers.bits() == 0) {
@@ -37,19 +38,20 @@ pub fn create(
 
     const a = arena.allocator();
 
-    var list = std.AutoArrayHashMapUnmanaged(Buffer.Mode, *km.KeyMaps){};
+    var list = km.ModeToKeys{};
 
     const normal = try a.create(km.KeyMaps);
     normal.* = km.KeyMaps{};
-    try list.put(alloc, .normal, normal);
+    normal.name = try a.dupe(u8, "NORMAL");
+    try list.put(alloc, ModeId.Normal, normal);
 
     const insert = try a.create(km.KeyMaps);
     insert.* = km.KeyMaps{};
-    try list.put(alloc, .insert, insert);
+    try list.put(alloc, ModeId.Insert, insert);
 
     const visual = try a.create(km.KeyMaps);
     visual.* = km.KeyMaps{};
-    try list.put(alloc, .visual, visual);
+    try list.put(alloc, ModeId.Visual, visual);
 
     // insert
     try initInsertKeys(a, insert);
@@ -67,7 +69,7 @@ pub fn create(
     try initMotionKeys(a, visual);
     try visual.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
     try visual.put(a, norm('d'), .{ .Native = actions.delete });
-    visual.targeter = km.action.moveKeep;
+    visual.targeter = .{ .Native = km.action.moveKeep };
 
     return list;
 }
@@ -104,7 +106,7 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
     const d = try maps.then(a, norm('d'));
     try d.put(a, norm('d'), .{ .Native = targeter.line });
     try initMotionKeys(a, d);
-    d.targeter = actions.delete;
+    d.targeter = .{ .Native = actions.delete };
 }
 
 fn initToVisualKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
@@ -1332,7 +1334,7 @@ const actions = struct {
             // try buffer.data.replaceRange(state.a, start, end - start, &.{});
         }
         buffer.target = null;
-        buffer.mode = .normal;
+        // buffer.mode = .normal;
     }
 
     fn command(state: *State) anyerror!void {
@@ -1341,7 +1343,7 @@ const actions = struct {
 
     fn normal(state: *State) anyerror!void {
         const buffer = state.getCurrentBuffer() orelse return;
-        buffer.mode = .normal;
+        // buffer.mode = .normal;
         buffer.target = null;
 
         //     state.*.cur_undo.end = buffer.*.cursor;
@@ -1366,10 +1368,10 @@ const actions = struct {
 const inserts = struct {
     fn before(state: *State) !void {
         root.log(@src(), .debug, "inserts before", .{});
-        const buffer = state.getCurrentBuffer() orelse return;
+        // const buffer = state.getCurrentBuffer() orelse return;
 
         state.repeating.reset();
-        buffer.mode = .insert;
+        // buffer.mode = .insert;
     }
 
     fn after(state: *State) !void {
@@ -1417,7 +1419,8 @@ const inserts = struct {
         buffer.row = @max(0, buffer.row - 1);
 
         state.repeating.reset();
-        state.buffer.mode = .insert;
+        state.buffer.setMode(ModeId.Insert);
+        // state.buffer.mode = .insert;
     }
 
     fn below(state: *State) !void {
@@ -1428,7 +1431,7 @@ const inserts = struct {
         try buffer.newlineInsert(state.a);
 
         state.repeating.reset();
-        state.buffer.mode = .insert;
+        // state.buffer.mode = .insert;
     }
 };
 
@@ -1439,7 +1442,7 @@ const visuals = struct {
                 const buffer = state.getCurrentBuffer() orelse return;
                 const cur = buffer.position();
 
-                buffer.mode = .visual;
+                // buffer.mode = .visual;
                 buffer.target = .{ .mode = mode, .start = cur, .end = cur };
             }
         }.set;

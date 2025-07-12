@@ -43,7 +43,7 @@ status_bar_msg: ?[]const u8 = null,
 
 // defaultKeyMap: [3]rc.RcUnmanaged(km.KeyMaps),
 
-namedmaps: std.AutoArrayHashMapUnmanaged(Buffer.Mode, *km.KeyMaps),
+namedmaps: *km.ModeToKeys,
 currentKeyMap: ?*km.KeyMaps = null,
 
 // If null then do the normal key map look up, else use this as the key maps,
@@ -76,11 +76,11 @@ components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
     try checkfirstrun(a);
 
-
     const L = lua.init();
 
     var arena = std.heap.ArenaAllocator.init(a);
-    const maps = try keys.create(a, &arena);
+    const maps = try a.create(km.ModeToKeys);
+    maps.* = try keys.create(a, &arena);
 
     var state = State{
         .a = a,
@@ -107,13 +107,13 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
     const buffer = try a.create(Buffer);
     if (file) |f| {
         root.log(@src(), .debug, "opening file ({s})", .{f});
-        buffer.* = Buffer.initFile(&state, f) catch |err| {
+        buffer.* = Buffer.initFile(a, maps, f) catch |err| {
             root.log(@src(), .err, "File Not Found: {s}", .{f});
             a.destroy(buffer);
             return err;
         };
     } else {
-        buffer.* = Buffer.initEmpty();
+        buffer.* = Buffer.initEmpty(maps);
     }
 
     // for (0..Buffer.Mode.COUNT) |i| {
@@ -150,6 +150,8 @@ pub fn deinit(state: *State) void {
     // keymaps before lua as they reference the lua state
     //                                 v comfirm it got released
     state.namedmaps.deinit(state.a);
+    state.a.destroy(state.namedmaps);
+
     state.components.deinit(state.a);
 
     lua.deinit(state.L);
@@ -189,7 +191,7 @@ fn getKeyMaps(state: *const State) *const km.KeyMaps {
     }
 
     const buffer = state.buffer;
-    return state.namedmaps.get(buffer.mode) orelse state.namedmaps.get(.normal).?;
+    return buffer.curkeymap orelse return state.namedmaps.get(Buffer.ModeId.Normal).?;
 }
 
 pub const Repeating = struct {

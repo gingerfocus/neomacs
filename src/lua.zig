@@ -277,7 +277,7 @@ fn nluaBufOpen(L: ?*LuaState) callconv(.C) c_int {
     };
 
     const buf = state.a.create(root.Buffer) catch return 0;
-    buf.* = root.Buffer.initFile(state, file) catch {
+    buf.* = root.Buffer.initFile(state.a, state.namedmaps, file) catch {
         state.a.destroy(buf);
         root.log(@src(), .err, "File Not Found: {s}", .{file});
         return 0;

@@ -54,7 +54,7 @@ pub fn init(a: std.mem.Allocator) !Command {
     var maps = km.KeyMaps{
         .keys = .{},
         .fallback = .{ .Native = thunk.append },
-        .targeter = km.action.none,
+        .targeter = .{ .Native = km.action.none },
     };
 
     try maps.put(a, trm.keys.norm(trm.KeySymbol.Backspace.toBits()), .{ .Native = thunk.delete });

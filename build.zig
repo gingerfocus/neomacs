@@ -1,22 +1,35 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) !void {
-    const windowing = b.option(bool, "windowing", "add window backend") orelse false;
-    const static = b.option(bool, "static", "try to complile everything statically") orelse true;
+    const usegtk = b.option(bool, "gtk", "compile the gtk backend") orelse false;
+    const usewayland = b.option(bool, "wayland", "compile the wayland backend") orelse false;
+    const needsdyn = usegtk or usewayland;
+
+    // TODO: do more warning for this or make it a compile error
+    const static = if (needsdyn) false else b.option(bool, "static", "try to complile everything statically") orelse true;
+    const staticlua = if (static) true else b.option(bool, "static-lua", "complile lua statically") orelse true;
+
     // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
     // const runtimeVar = b.option([]const u8, "runtime", "set the runtime directory");
 
-    if (windowing and static) {
-        std.debug.print("error: Executable can't link in a windowing system and be built statically!\n", .{});
-        std.process.exit(1);
-    }
     const options = b.addOptions();
-    options.addOption(bool, "windowing", windowing);
+
+    options.addOption(bool, "usegtk", usegtk);
+    options.addOption(bool, "usewayland", usewayland);
+
+    // std.debug.print("using options: \n{any}\n", .{.{ .gtk = usegtk, .wayland = usewayland, .static = static }});
 
     // ---------
 
-    // b.graph.host
-    const target = b.standardTargetOptions(if (static) .{ .default_target = .{ .abi = .musl } } else .{});
+    var query = std.Build.StandardTargetOptionsArgs{};
+    const builtin = @import("builtin");
+    // use musl for static builds on linux
+    if (static and builtin.os.tag == .linux) {
+        query.default_target.abi = .musl;
+    }
+
+    const target = b.standardTargetOptions(query);
+
     const optimize = b.standardOptimizeOption(.{});
 
     // ---------
@@ -37,7 +50,7 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    if (static) {
+    if (staticlua) {
         const luajit_build_dep = b.dependency("luajit-build", .{
             .target = target,
             .optimize = optimize,
@@ -63,7 +76,7 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    if (windowing) {
+    if (usewayland) {
         const clientHeaderCommand = b.addSystemCommand(&.{ "wayland-scanner", "client-header" });
         clientHeaderCommand.addFileArg(b.path("etc/xdg-shell.xml"));
         const clientHeader = clientHeaderCommand.addOutputFileArg("xdg-shell-protocol.h");
@@ -80,6 +93,17 @@ pub fn build(b: *std.Build) !void {
 
         neomacs.linkSystemLibrary("freetype2", .{});
 
+        // ---------
+
+        const graphi = b.dependency("graphi", .{
+            .target = target,
+            .optimize = optimize,
+        });
+        neomacs.linkLibrary(graphi.artifact("graphi"));
+        neomacs.addIncludePath(graphi.namedLazyPath("include"));
+    }
+
+    if (usegtk) {
         neomacs.linkSystemLibrary("gtk-3", .{});
         neomacs.linkSystemLibrary("gdk-3", .{});
         neomacs.linkSystemLibrary("atk-1.0", .{});
@@ -89,12 +113,6 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    const graphi = b.dependency("graphi", .{
-        .target = target,
-        .optimize = optimize,
-    });
-    neomacs.linkLibrary(graphi.artifact("graphi"));
-    neomacs.addIncludePath(graphi.namedLazyPath("include"));
     // neomacs.linkSystemLibrary("graphi", .{});
 
     // ---------
@@ -131,7 +149,7 @@ pub fn build(b: *std.Build) !void {
     const neomacsRun = b.addRunArtifact(neomacsExe);
     if (b.args) |args| neomacsRun.addArgs(args) else {
         // open a demo file
-        neomacsRun.addArg("etc/demo.txt");
+        neomacsRun.addArg("etc/demo.md");
     }
     const run = b.step("run", "run neomacs");
     run.dependOn(&neomacsRun.step);

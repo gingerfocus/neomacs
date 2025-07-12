@@ -9,8 +9,9 @@ const Buffer = @This();
 
 /// Unique id for this buffer, never changes once created
 id: usize,
-/// File mode
-mode: Mode = .normal,
+
+// File mode
+// mode: ModeId = ModeId.Normal,
 
 /// Motion keys have two ways in which they select text, a region and a
 /// point. A motion can set this structure to not null to indicate what it
@@ -31,25 +32,38 @@ col: usize = 0,
 
 filename: []const u8,
 
-// keymap: *km.KeyMaps,
+/// Not owned
+/// TODO: do ref counting for this
+keymaps: *km.ModeToKeys,
+
+curkeymap: ?*km.KeyMaps = null,
+
+pub fn getKeymap(buffer: *Buffer) *km.KeyMaps {
+    return buffer.curkeymap orelse return buffer.keymaps.get(Buffer.ModeId.Normal).?;
+}
+
+pub fn setMode(buffer: *Buffer, mode: Buffer.ModeId) void {
+    // buffer.mode = mode;
+    buffer.curkeymap = buffer.keymaps.get(mode);
+}
 
 const Line = std.ArrayListUnmanaged(u8);
 
-pub const Mode = enum {
-    normal,
-    insert,
-    visual,
-
-    pub const COUNT = @typeInfo(Mode).@"enum".fields.len;
-
-    pub fn toString(self: Mode) []const u8 {
-        return switch (self) {
-            .normal => "NORMAL",
-            .insert => "INSERT",
-            .visual => "VISUAL",
-        };
-    }
-};
+// pub const Mode = enum {
+//     normal,
+//     insert,
+//     visual,
+//
+//     pub const COUNT = @typeInfo(Mode).@"enum".fields.len;
+//
+//     pub fn toString(self: Mode) []const u8 {
+//         return switch (self) {
+//             .normal => "NORMAL",
+//             .insert => "INSERT",
+//             .visual => "VISUAL",
+//         };
+//     }
+// };
 
 pub const Visual = struct {
     mode: VisualMode = .Range,
@@ -73,21 +87,22 @@ pub const VisualMode = enum {
 // }
 
 pub fn initEmpty(
-    // state: *State,
+    keymaps: *km.ModeToKeys,
 ) Buffer {
     return Buffer{
         .id = idgen.next(),
         .filename = "",
         .lines = .{},
+        .keymaps = keymaps,
         // .keymap = state,
     };
 }
 
 pub fn initFile(
-    state: *State,
+    a: std.mem.Allocator,
+    keymaps: *km.ModeToKeys,
     filename: []const u8,
 ) !Buffer {
-    const a = state.a;
     // const maps = try state.maps.clone(state.a);
 
     const file = try std.fs.cwd().createFile(filename, .{
@@ -116,8 +131,7 @@ pub fn initFile(
         .id = idgen.next(),
         .filename = try a.dupe(u8, filename),
         .lines = lines.moveToUnmanaged(),
-        // .keymap = maps.get(Token.NORMAL).?,
-        // .namedmaps = maps,
+        .keymaps = keymaps,
     };
 }
 
@@ -128,6 +142,8 @@ pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
     buffer.lines.deinit(a);
 
     a.free(buffer.filename);
+
+    buffer.* = undefined;
 }
 
 pub fn position(buffer: *Buffer) lib.Vec2 {
@@ -650,3 +666,48 @@ const idgen = struct {
 //     down: ?isize = null,
 //     left: ?isize = null,
 // };
+
+pub const ModeId = struct {
+    _: usize,
+
+    pub fn from(str: []const u8) ModeId {
+        var bytes: usize = 0;
+        @memcpy(std.mem.asBytes(&bytes)[0..str.len], str);
+
+        return .{ ._ = bytes };
+    }
+
+    pub const new = @compileError("TODO: walk the states maps and find the next a tag greater than 65535");
+
+    pub fn toString(self: ModeId) []const u8 {
+        return switch (self._) {
+            'n' => "NORMAL",
+            'i' => "INSERT",
+            'v' => "VISUAL",
+            else => "UNKNOWN",
+        };
+    }
+
+    // const static = struct {
+    //     const id: usize = 65535;
+    // };
+
+    pub const Normal: ModeId = .{ ._ = 'n' };
+    pub const Visual: ModeId = .{ ._ = 'v' };
+    pub const Insert: ModeId = .{ ._ = 'i' };
+
+    test "MapId.from" {
+        // I would be interested to see if these work on little endian machines
+        try std.testing.expectEqual(ModeId.Normal, ModeId.from("n"));
+        try std.testing.expectEqual(ModeId.Visual, ModeId.from("v"));
+        try std.testing.expectEqual(ModeId.Insert, ModeId.from("i"));
+    }
+
+    test "ModeId comptime" {
+        try std.testing.expectEqualStrings("NORMAL", comptime ModeId.from("n").toString());
+        try std.testing.expectEqualStrings("VISUAL", comptime ModeId.from("v").toString());
+        try std.testing.expectEqualStrings("INSERT", comptime ModeId.from("i").toString());
+
+        try std.testing.expectEqualStrings("UNKNOWN", comptime ModeId.from("x").toString());
+    }
+};

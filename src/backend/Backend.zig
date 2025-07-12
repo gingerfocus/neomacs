@@ -20,32 +20,42 @@ const Self = @This();
 const Args = root.Args;
 
 pub fn init(a: std.mem.Allocator, args: Args) !Self {
-    if (args.dosnapshot) |render_path| {
+    if (args.dosnapshot) |path| {
         // this path must always converge
-        const file = try BackendFile.init(a, render_path);
+        const file = try BackendFile.init(a, path);
         return file.backend();
     }
 
-    if (options.windowing) {
-        if (args.gtk) {
+    if (args.terminal) {
+        if (BackendTerminal.init(a)) |term| {
+            return term.backend();
+        } else |err| {
+            std.log.err("could not open terminal backend: {any}", .{err});
+        }
+    }
+
+    if (args.gtk) {
+        if (options.usegtk) {
             if (BackendGtk.init(a)) |window| {
                 return window.backend();
             } else |err| {
                 root.log(@src(), .warn, "could not open gtk backend: {any}", .{err});
             }
-        }
-
-        if (BackendWayland.init(a)) |window| {
-            return window.backend();
-        } else |err| {
-            root.log(@src(), .warn, "could not open wayland backend: {any}", .{err});
+        } else {
+            std.log.err("gtk backend is disabled", .{});
         }
     }
 
-    if (BackendTerminal.init(a)) |term| {
-        return term.backend();
-    } else |err| {
-        std.log.err("could not open terminal backend: {any}", .{err});
+    if (args.wayland) {
+        if (options.usewayland) {
+            if (BackendWayland.init(a)) |window| {
+                return window.backend();
+            } else |err| {
+                root.log(@src(), .warn, "could not open wayland backend: {any}", .{err});
+            }
+        } else {
+            std.log.err("wayland backend is disabled", .{});
+        }
     }
 
     std.log.err("could not open any backend, falling back to headless backend", .{});
