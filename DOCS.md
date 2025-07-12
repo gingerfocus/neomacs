@@ -1,7 +1,7 @@
 # Dev Log
 ## Previewing Ui
 ```bash
-zig build run -- --dosnapshot tmp.txt <file>
+zig build run -- -R tmp.txt <file>
 ```
 
 ## Input / Command Line
@@ -46,3 +46,7 @@ through lua.
 
 ## Wasm
 No, I dont think so.
+
+## Async
+I dont want to go all in on xev only for the new zig IO model to come out and
+be stuck.

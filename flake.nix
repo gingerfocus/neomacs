@@ -1,10 +1,12 @@
 {
   inputs.nixpkgs.url = "nixpkgs-unstable"; # "nixpkgs";
+  inputs.zig.url = "github:mitchellh/zig-overlay/6f9a3c160daca2a701a638a7ea7b0e675c1a1848";
+  inputs.zig.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = {
     self,
     nixpkgs,
-    # graphi,
+    zig,
   }: let
     lib = nixpkgs.lib;
     systems = ["aarch64-linux" "x86_64-linux"];
@@ -24,40 +26,47 @@
       devShells.default = pkgs.mkShell {
         # inputsFrom = with neon; [neomacs zss];
 
-        packages = with pkgs; [
-          valgrind
-          strace
-          zon2nix
+        packages = [
+          pkgs.valgrind
+          pkgs.strace
+          pkgs.zon2nix
 
-          scdoc
-          freetype
-          atk
+          pkgs.scdoc
+          pkgs.freetype
+          pkgs.atk
 
-          gtk3
-          cairo
-          gobject-introspection
-          #skia
+          pkgs.gtk3
+          pkgs.cairo
+          pkgs.gobject-introspection
+          # pkgs.skia
 
-          python3
-          pyright
-          bearssl
+          pkgs.python3
+          pkgs.pyright
+          pkgs.bearssl
 
-          zig
-          luajit
-          pkg-config
-          wayland
-          wayland-scanner
-          wayland-protocols
-          libxkbcommon
+          pkgs.luajit
 
-
+          pkgs.pkg-config
+          pkgs.wayland
+          pkgs.wayland-scanner
+          pkgs.wayland-protocols
+          pkgs.libxkbcommon
 
           # Development
-          alejandra
-          zig
-          stylua
-          lua-language-server
+          pkgs.alejandra
+          pkgs.stylua
+          pkgs.lua-language-server
+
+          zig.packages."${system}".master
+          # pkgs.zig
         ];
+
+        # shellHook = ''
+        #   export ZIG_CACHE_DIR = "./.zig-cache";
+        #   export PATH="$PATH:${pkgs.zig}/bin"
+        #   export PATH="$PATH:${pkgs.luajit}/bin"
+        #   export PATH="$PATH:${pkgs.python3}/bin"
+        # '';
       };
 
       formatter = pkgs.alejandra;

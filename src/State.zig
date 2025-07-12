@@ -2,7 +2,7 @@ const root = @import("root.zig");
 const std = root.std;
 const scu = root.scu;
 const trm = root.trm;
-const xev = root.xev;
+// const xev = root.xev;
 const lua = root.lua;
 const km = root.km;
 
@@ -70,8 +70,8 @@ components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 // TreeSitter Parsers
 // tsmap: std.ArrayListUnmanaged(void) = .{},
 
-loop: xev.Loop,
-inputcallback: ?struct { *xev.Completion, xev.Async } = null,
+// loop: xev.Loop,
+// inputcallback: ?struct { *xev.Completion, xev.Async } = null,
 
 pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
     try checkfirstrun(a);
@@ -100,7 +100,7 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         .buffers = .{},
         .buffer = undefined,
 
-        .loop = try xev.Loop.init(.{}),
+        // .loop = try xev.Loop.init(.{}),
     };
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
@@ -157,7 +157,7 @@ pub fn deinit(state: *State) void {
     std.log.debug("closing backend", .{});
     state.backend.deinit();
 
-    state.loop.deinit();
+    // state.loop.deinit();
     state.arena.deinit();
 }
 
@@ -170,7 +170,7 @@ pub fn getCurrentBuffer(state: *State) ?*Buffer {
 }
 
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
-    try state.loop.run(.no_wait);
+    // try state.loop.run(.no_wait);
 
     // -- Command Thing --------------------
     if (state.command.is) {

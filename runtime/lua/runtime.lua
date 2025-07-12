@@ -1,5 +1,7 @@
 local M = {}
 
+local neon = _G.neon
+
 M.portage = function(name)
     -- standard package management
     if not name then
@@ -14,33 +16,43 @@ M.portage = function(name)
     package.path = package.path .. neon.opt.packpath .. name .. "/lua/?.lua;"
 end
 
--- Only run once by the embedded lua startup code
+--- Ran by the embedded startup script, you can call this again at your own risk
 M.startup = function()
     print("neon runtime loaded")
 
     local home = os.getenv("HOME")
     xpcall(function()
-        if not neon.loop.stat(home .. "/.config/neomacs/init.lua") then
-            print("neon: init.lua not found")
-            print("writing default init.lua")
-            -- TODO: do it
-            -- vim.opt.runtime .. "init.lua"
-            return
+        -- neon.loop.stat(home .. "/.config/neomacs/init.lua")
+        local init = loadfile(home .. "/.config/neomacs/init.lua")
+
+        if not init then
+            print("neon: init.lua not found, using default")
+            -- print("writing default init.lua")
+
+            init = loadfile(vim.opt.runtime .. "init.lua") or function() end
         end
 
-        loadfile(home .. "/.config/neomacs/init.lua")()
+        init()
     end, function(err)
         print(tostring(err))
         -- print(debug.traceback(nil, 2))
     end)
-
-    neon.cmd.portage = M.portage
-
-    -- package.path = neon.opt.runtime .. "/lua/?.lua;" .. package.path
 end
 
+---@class rt.SetupOpts
+---@field portage boolean enable the builtin in package management system
+
+---@param opts? rt.SetupOpts
 M.setup = function(opts)
-    _ = opts
+    ---@type rt.SetupOpts
+    local defaults = {
+        portage = true,
+    }
+    opts = opts or defaults
+
+    if opts.portage then
+        neon.cmd.portage = M.portage
+    end
 end
 
 -- TODO: make this something more formal
@@ -58,5 +70,8 @@ M.compat = function()
     neon.cmd.bn = neon.buffer.next
     neon.cmd.bp = neon.buffer.prev
 end
+
+-- HACK: this is just for testing beacuse im bad
+M.compat()
 
 return M

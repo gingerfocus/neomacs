@@ -1,8 +1,8 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) !void {
-    const windowing = b.option(bool, "windowing", "add window backend") orelse true;
-    const static = b.option(bool, "static", "try to complile everything statically") orelse false;
+    const windowing = b.option(bool, "windowing", "add window backend") orelse false;
+    const static = b.option(bool, "static", "try to complile everything statically") orelse true;
     // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
     // const runtimeVar = b.option([]const u8, "runtime", "set the runtime directory");
 
@@ -99,12 +99,12 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    const xev = b.dependency("libxev", .{
-        .target = target,
-        .optimize = optimize,
-        .@"emit-man-pages" = true,
-    });
-    neomacs.addImport("xev", xev.module("xev"));
+    // const xev = b.dependency("libxev", .{
+    //     .target = target,
+    //     .optimize = optimize,
+    //     .@"emit-man-pages" = true,
+    // });
+    // neomacs.addImport("xev", xev.module("xev"));
 
     // ---------
 

@@ -8,21 +8,19 @@ const desktop = @import("desktop.zig");
 
 const Self = @This();
 
-const gtk = struct {
-    usingnamespace @cImport({
-        @cDefine("GDK_DISABLE_DEPRECATED", "1");
-        @cDefine("GTK_DISABLE_DEPRECATED", "1");
-        @cInclude("gtk/gtk.h");
-        @cInclude("gdk/gdk.h");
-        @cInclude("gdk/gdkkeysyms.h");
-        @cInclude("cairo/cairo.h"); // Make sure cairo is included for cairo functions
-    });
+const gtk = @cImport({
+    @cDefine("GDK_DISABLE_DEPRECATED", "1");
+    @cDefine("GTK_DISABLE_DEPRECATED", "1");
+    @cInclude("gtk/gtk.h");
+    @cInclude("gdk/gdk.h");
+    @cInclude("gdk/gdkkeysyms.h");
+    @cInclude("cairo/cairo.h"); // Make sure cairo is included for cairo functions
+});
 
-    // shim for c.g_signal_connect as translate-c is broken for this macro
-    fn gSignalConnect(instance: gtk.gpointer, detailed_signal: [*c]const u8, c_handler: gtk.GCallback, data: gtk.gpointer) void {
-        _ = gtk.g_signal_connect_data(@ptrCast(instance), detailed_signal, c_handler, data, null, @as(gtk.GConnectFlags, 0));
-    }
-};
+// shim for c.g_signal_connect as translate-c is broken for this macro
+fn gtkGSignalConnect(instance: gtk.gpointer, detailed_signal: [*c]const u8, c_handler: gtk.GCallback, data: gtk.gpointer) void {
+    _ = gtk.g_signal_connect_data(@ptrCast(instance), detailed_signal, c_handler, data, null, @as(gtk.GConnectFlags, 0));
+}
 
 events: std.ArrayListUnmanaged(Backend.Event) = .{},
 modifiers: trm.KeyModifiers = .{},
@@ -61,12 +59,12 @@ pub fn init(a: std.mem.Allocator) !*Self {
         .drawarea = drawarea,
     };
 
-    gtk.gSignalConnect(drawarea, "draw", @ptrCast(&eventDraw), self);
-    gtk.gSignalConnect(drawarea, "configure-event", @ptrCast(&eventConfigure), self);
-    gtk.gSignalConnect(mainwin, "key-press-event", @ptrCast(&eventKey), self);
-    gtk.gSignalConnect(mainwin, "key-release-event", @ptrCast(&eventKey), self);
-    gtk.gSignalConnect(mainwin, "destroy", @ptrCast(&eventDestroy), self);
-    gtk.gSignalConnect(mainwin, "size-allocate", @ptrCast(&eventSizeAllocate), self);
+    gtkGSignalConnect(drawarea, "draw", @ptrCast(&eventDraw), self);
+    gtkGSignalConnect(drawarea, "configure-event", @ptrCast(&eventConfigure), self);
+    gtkGSignalConnect(mainwin, "key-press-event", @ptrCast(&eventKey), self);
+    gtkGSignalConnect(mainwin, "key-release-event", @ptrCast(&eventKey), self);
+    gtkGSignalConnect(mainwin, "destroy", @ptrCast(&eventDestroy), self);
+    gtkGSignalConnect(mainwin, "size-allocate", @ptrCast(&eventSizeAllocate), self);
 
     gtk.gtk_widget_show_all(mainwin);
 

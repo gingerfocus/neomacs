@@ -34,11 +34,11 @@ const thunk = struct {
 
         std.log.debug("running command: {s}", .{cmd});
 
-        if (state.inputcallback) |h| {
-            try h[1].notify();
-            try state.loop.run(.once);
-            std.log.debug("finish: {any}", .{h[0]});
-        }
+        // if (state.inputcallback) |h| {
+        //     try h[1].notify();
+        //     try state.loop.run(.once);
+        //     std.log.debug("finish: {any}", .{h[0]});
+        // }
 
         lua.runCommand(state.L, cmd) catch |err| {
             root.log(@src(), .err, "lua command line error: {}", .{err});

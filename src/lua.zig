@@ -44,7 +44,7 @@ pub fn init() *LuaState {
     // Neomacs Object This is the entire api
     push(L, .{
         .ui = .{
-            .input = nluaUiInput,
+            // .input = nluaUiInput,
             // .prompt =
         },
         .loop = .{
@@ -760,37 +760,37 @@ fn nluaOptIndex(L: ?*LuaState) callconv(.C) c_int {
     return 0;
 }
 
-const xev = root.xev;
-fn callback(
-    ud: ?*void,
-    l: *xev.Loop,
-    c: *xev.Completion,
-    r: xev.Async.WaitError!void,
-) xev.CallbackAction {
-    _ = ud;
-    _ = l;
-    _ = c;
-    r catch {};
-
-    root.log(@src(), .warn, "callback", .{});
-    return xev.CallbackAction.disarm;
-}
-fn nluaUiInput(L: ?*LuaState) callconv(.C) c_int {
-    root.log(@src(), .debug, "ui.input", .{});
-
-    const s = root.state();
-    const as = xev.Async.init() catch unreachable;
-
-    // xev.Stream.initFd()
-
-    const c = s.a.create(xev.Completion) catch unreachable;
-    as.wait(&s.loop, c, void, null, callback);
-
-    s.inputcallback = .{ c, as };
-    _ = L;
-
-    return 0;
-}
+// const xev = root.xev;
+// fn callback(
+//     ud: ?*void,
+//     l: *xev.Loop,
+//     c: *xev.Completion,
+//     r: xev.Async.WaitError!void,
+// ) xev.CallbackAction {
+//     _ = ud;
+//     _ = l;
+//     _ = c;
+//     r catch {};
+//
+//     root.log(@src(), .warn, "callback", .{});
+//     return xev.CallbackAction.disarm;
+// }
+// fn nluaUiInput(L: ?*LuaState) callconv(.C) c_int {
+//     root.log(@src(), .debug, "ui.input", .{});
+//
+//     const s = root.state();
+//     const as = xev.Async.init() catch unreachable;
+//
+//     // xev.Stream.initFd()
+//
+//     const c = s.a.create(xev.Completion) catch unreachable;
+//     as.wait(&s.loop, c, void, null, callback);
+//
+//     s.inputcallback = .{ c, as };
+//     _ = L;
+//
+//     return 0;
+// }
 
 const FsStat = struct { size: u64, kind: []const u8 };
 

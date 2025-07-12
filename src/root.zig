@@ -2,7 +2,7 @@ pub const std = @import("std");
 
 pub const scu = @import("scured");
 pub const trm = @import("thermit");
-pub const xev = @import("xev");
+// pub const xev = @import("xev");
 
 pub const alloc = @import("alloc.zig");
 pub const Args = @import("Args.zig");

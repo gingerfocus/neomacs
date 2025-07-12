@@ -11,6 +11,8 @@ relativenumber: bool = false,
 autoindent: bool = true,
 scrolloff: u16 = 8,
 
+runtime: []const u8 = "",
+
 // syntax: c_int = 1,
 // indent: c_int = 0,
 // undo_size: c_int = 16,

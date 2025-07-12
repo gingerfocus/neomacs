@@ -2,9 +2,12 @@
 //! the luajit C API into a shared library.
 //!
 
-pub usingnamespace @cImport({
+const c = @cImport({
     @cInclude("lua.h");
     @cInclude("lualib.h");
     @cInclude("luajit.h");
     @cInclude("luajit-2.1/lauxlib.h");
 });
+
+pub const lua_State = c.lua_State;
+

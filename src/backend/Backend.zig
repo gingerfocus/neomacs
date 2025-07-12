@@ -26,14 +26,6 @@ pub fn init(a: std.mem.Allocator, args: Args) !Self {
         return file.backend();
     }
 
-    if (args.terminal) {
-        if (BackendTerminal.init(a)) |term| {
-            return term.backend();
-        } else |err| {
-            std.log.err("could not open terminal backend: {any}", .{err});
-        }
-    }
-
     if (options.windowing) {
         if (args.gtk) {
             if (BackendGtk.init(a)) |window| {
@@ -48,6 +40,12 @@ pub fn init(a: std.mem.Allocator, args: Args) !Self {
         } else |err| {
             root.log(@src(), .warn, "could not open wayland backend: {any}", .{err});
         }
+    }
+
+    if (BackendTerminal.init(a)) |term| {
+        return term.backend();
+    } else |err| {
+        std.log.err("could not open terminal backend: {any}", .{err});
     }
 
     std.log.err("could not open any backend, falling back to headless backend", .{});
