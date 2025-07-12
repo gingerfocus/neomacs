@@ -47,10 +47,12 @@ pub fn create(
 
     const insert = try a.create(km.KeyMaps);
     insert.* = km.KeyMaps{};
+    insert.name = try a.dupe(u8, "INSERT");
     try list.put(alloc, ModeId.Insert, insert);
 
     const visual = try a.create(km.KeyMaps);
     visual.* = km.KeyMaps{};
+    visual.name = try a.dupe(u8, "VISUAL");
     try list.put(alloc, ModeId.Visual, visual);
 
     // insert
@@ -1334,7 +1336,7 @@ const actions = struct {
             // try buffer.data.replaceRange(state.a, start, end - start, &.{});
         }
         buffer.target = null;
-        // buffer.mode = .normal;
+        buffer.setMode(ModeId.Normal);
     }
 
     fn command(state: *State) anyerror!void {
@@ -1343,7 +1345,7 @@ const actions = struct {
 
     fn normal(state: *State) anyerror!void {
         const buffer = state.getCurrentBuffer() orelse return;
-        // buffer.mode = .normal;
+        buffer.setMode(ModeId.Normal);
         buffer.target = null;
 
         //     state.*.cur_undo.end = buffer.*.cursor;
@@ -1365,47 +1367,49 @@ const actions = struct {
     }
 };
 
+// TODO: remake this functions by just saying, move to target, then go insert
+// using the appropriate abstractions
 const inserts = struct {
     fn before(state: *State) !void {
         root.log(@src(), .debug, "inserts before", .{});
-        // const buffer = state.getCurrentBuffer() orelse return;
-
+        const buffer = state.getCurrentBuffer() orelse return;
         state.repeating.reset();
-        // buffer.mode = .insert;
+        buffer.setMode(ModeId.Insert);
     }
 
     fn after(state: *State) !void {
-        _ = state; // autofix
-        // const buffer = state.getEditBuffer() orelse return;
+        const buffer = state.getCurrentBuffer() orelse return;
+
+        // targeter.right()
+        // buffer.moveRight(buffer.position(), 1);
+
         // if (buffer.cursor < buffer.data.items.len) {
         //     buffer.cursor += 1;
         // }
-        // state.repeating.reset();
-        // state.buffer.mode = .insert;
+        //state.repeating.reset();
+        buffer.setMode(ModeId.Insert);
     }
 
     fn start(state: *State) !void {
-        _ = state; // autofix
-        // const buffer = state.getEditBuffer() orelse return;
+        const buffer = state.getCurrentBuffer() orelse return;
         // const row = buffer.rows.items[buffer.row];
         //
         // buffer.cursor = row.start;
         // buffer.col = 0;
         //
         // state.repeating.reset();
-        // state.buffer.mode = .insert;
+        buffer.setMode(ModeId.Insert);
     }
 
     fn end(state: *State) !void {
-        _ = state; // autofix
-        // const buffer = state.getEditBuffer() orelse return;
+        const buffer = state.getCurrentBuffer() orelse return;
         // const row = buffer.rows.items[buffer.row];
         //
         // buffer.cursor = row.end;
         // buffer.col = row.end - row.start;
         //
         // state.repeating.reset();
-        // state.buffer.mode = .insert;
+        buffer.setMode(ModeId.Insert);
     }
 
     fn above(state: *State) !void {
@@ -1420,7 +1424,6 @@ const inserts = struct {
 
         state.repeating.reset();
         state.buffer.setMode(ModeId.Insert);
-        // state.buffer.mode = .insert;
     }
 
     fn below(state: *State) !void {
@@ -1431,7 +1434,7 @@ const inserts = struct {
         try buffer.newlineInsert(state.a);
 
         state.repeating.reset();
-        // state.buffer.mode = .insert;
+        buffer.setMode(ModeId.Insert);
     }
 };
 
@@ -1442,7 +1445,7 @@ const visuals = struct {
                 const buffer = state.getCurrentBuffer() orelse return;
                 const cur = buffer.position();
 
-                // buffer.mode = .visual;
+                buffer.setMode(ModeId.Visual);
                 buffer.target = .{ .mode = mode, .start = cur, .end = cur };
             }
         }.set;

@@ -116,10 +116,7 @@ pub fn initFile(
         const line = try file.reader().readUntilDelimiterOrEofAlloc(a, '\n', 128 * 1024) orelse break;
         // if (line.len == 0) break;
 
-        const l = Line{
-            .items = line,
-            .capacity = line.len,
-        };
+        const l = Line.fromOwnedSlice(line);
 
         try lines.append(l);
     }
@@ -181,7 +178,9 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
         const line = &buffer.lines.items[buffer.row];
         const prev = &buffer.lines.items[buffer.row - 1];
         try prev.appendSlice(a, line.items);
-        _ = buffer.lines.orderedRemove(buffer.row);
+
+        var oldline = buffer.lines.orderedRemove(buffer.row);
+        oldline.deinit(a);
 
         buffer.row -= 1;
     } else {
