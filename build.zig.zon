@@ -21,8 +21,10 @@
             .hash = "thermit-0.1.0-wTQBCK6xAACeA7Jn4eYRowWfeV8KT94NaNQs-f62JTfd",
         },
         .@"luajit-build" = .{
-            .url = "https://github.com/sackosoft/zig-luajit-build/archive/eeae54c83591f4376f1adea00a03e1497aea2425.tar.gz",
-            .hash = "luajit_build-1.1.4-HFjoU14-AACEEcPwP8nRnDSLS3EByuR8u5ZWAXBq08PH"
+            // .url = "https://github.com/sackosoft/zig-luajit-build/archive/eeae54c83591f4376f1adea00a03e1497aea2425.tar.gz",
+            // .hash = "luajit_build-1.1.4-HFjoU14-AACEEcPwP8nRnDSLS3EByuR8u5ZWAXBq08PH"
+            .url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz",
+            .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
         },
         .libxev = .{
             .url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz",

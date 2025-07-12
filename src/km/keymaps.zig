@@ -46,7 +46,7 @@ pub const KeyMaps = struct {
     name: ?[]const u8 = null,
 
     // use this as name instead of name
-    // modeid: ModeId, 
+    // modeid: ModeId,
 
     // Note: you can statically init this but just be sure to use the same
     // allocator for everything

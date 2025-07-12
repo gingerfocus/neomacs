@@ -714,7 +714,8 @@ fn nluaOptNewIndex(L: ?*LuaState) callconv(.C) c_int {
 
             @field(root.state().config, field.name) = val;
 
-            root.log(@src(), .debug, "set({s}={any})", .{ field.name, val });
+            const fmt = if (field.type == []const u8) "set({s}={s})" else "set({s}={any})";
+            root.log(@src(), .debug, fmt, .{ field.name, val });
 
             return 0;
         }

@@ -57,8 +57,8 @@
           pkgs.stylua
           pkgs.lua-language-server
 
-          zig.packages."${system}".master
-          # pkgs.zig
+          # zig.packages."${system}".master
+          pkgs.zig
         ];
 
         # shellHook = ''

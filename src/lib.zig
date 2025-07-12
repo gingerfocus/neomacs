@@ -20,9 +20,8 @@ pub const Vec4 = struct {
 pub const shm = struct {
     const RANDOMNESS: usize = 10;
 
-    const ShmError = std.posix.OpenError  // thign
-        || std.posix.UnlinkError 
-        || std.posix.TruncateError;
+    const ShmError = std.posix.OpenError // thign
+    || std.posix.UnlinkError || std.posix.TruncateError;
 
     /// Allocates a shared memory file of the given size.
     pub fn file(size: usize) ShmError!std.posix.fd_t {
@@ -69,5 +68,4 @@ pub const shm = struct {
 
         return std.posix.OpenError.PathAlreadyExists;
     }
-
 };

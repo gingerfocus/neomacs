@@ -5,7 +5,7 @@ pub const keymap = @import("keymap.zig");
 pub const lib = @import("lib.zig");
 
 pub fn alloc(a: *std.mem.Allocator, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.C) ?*anyopaque {
-    std.log.info("alloc (ptr={*}, old={d}, new={d})", .{ptr, osize, nsize});
+    std.log.info("alloc (ptr={*}, old={d}, new={d})", .{ ptr, osize, nsize });
 
     if (nsize == 0) {
         if (ptr == null) return null;

@@ -19,6 +19,13 @@ linkFarm "zig-packages" [
     };
   }
   {
+    name = "libxev-0.0.0-86vtc4b1EgCl0Kvo2Ixmjfl5PgAaJmvCXRIn_n89nCaR";
+    path = fetchzip {
+      url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz";
+      hash = "sha256-nlJzFS/4BdKUmBwacdvEmFRn+E8YWnD6R/c2OcStd7w=";
+    };
+  }
+  {
     name = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw";
     path = fetchzip {
       url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz";

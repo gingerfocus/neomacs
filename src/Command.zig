@@ -44,7 +44,6 @@ const thunk = struct {
             root.log(@src(), .err, "lua command line error: {}", .{err});
         };
 
-
         state.command.is = false;
         // state.buffer.mode = .normal;
     }

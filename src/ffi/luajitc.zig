@@ -10,4 +10,3 @@ const c = @cImport({
 });
 
 pub const lua_State = c.lua_State;
-

@@ -25,7 +25,6 @@ pub fn init(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
     try maps.put(a, trm.keys.norm('\n'), .{ .Native = thunk.run });
 }
 
-
 const thunk = struct {
     fn append(state: *State) !void {
         if (state.ch.modifiers.bits() == 0)
