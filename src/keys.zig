@@ -27,14 +27,14 @@ pub fn create(
     alloc: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
 ) !km.ModeToKeys {
-    const fallback = struct {
-        fn bufInsert(s: *State) !void {
-            if (s.ch.modifiers.bits() == 0) {
-                const buf = s.getCurrentBuffer() orelse return;
-                try buf.insertCharacter(s.a, s.ch.character);
-            }
-        }
-    };
+    // const fallback = struct {
+    //     fn bufInsert(s: *State) !void {
+    //         if (s.ch.modifiers.bits() == 0) {
+    //             const buf = s.getCurrentBuffer() orelse return;
+    //             try buf.insertCharacter(s.a, s.ch.character);
+    //         }
+    //     }
+    // };
 
     const a = arena.allocator();
 
@@ -55,23 +55,23 @@ pub fn create(
     visual.name = try a.dupe(u8, "VISUAL");
     try list.put(alloc, ModeId.Visual, visual);
 
-    // insert
-    try initInsertKeys(a, insert);
-    try insert.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
-    insert.fallback = .{ .Native = fallback.bufInsert };
-
-    // normal
-    try initToInsertKeys(a, normal);
-    try initToVisualKeys(a, normal);
-    try initMotionKeys(a, normal);
-    try initNormalKeys(a, normal);
-    try initModifyingKeys(a, normal);
-
-    // visual
-    try initMotionKeys(a, visual);
-    try visual.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
-    try visual.put(a, norm('d'), .{ .Native = actions.delete });
-    visual.targeter = .{ .Native = km.action.moveKeep };
+    // // insert
+    // try initInsertKeys(a, insert);
+    // try insert.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
+    // insert.fallback = .{ .Native = fallback.bufInsert };
+    //
+    // // normal
+    // try initToInsertKeys(a, normal);
+    // try initToVisualKeys(a, normal);
+    // try initMotionKeys(a, normal);
+    // try initNormalKeys(a, normal);
+    // try initModifyingKeys(a, normal);
+    //
+    // // visual
+    // try initMotionKeys(a, visual);
+    // try visual.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
+    // try visual.put(a, norm('d'), .{ .Native = actions.delete });
+    // visual.targeter = .{ .Native = km.action.moveKeep };
 
     return list;
 }
@@ -1110,15 +1110,14 @@ const targeter = struct {
 
     fn motionDown(state: *State) !void {
         const buffer = state.getCurrentBuffer() orelse return;
-
         const count = state.takeRepeating();
 
-        buffer.row += count;
-        if (buffer.row >= buffer.lines.items.len) {
-            buffer.row = buffer.lines.items.len - 1;
-        }
-        buffer.col = @min(buffer.col, buffer.lines.items[buffer.row].items.len);
-        // buffer.updatePostionKeepRow();
+        const start = buffer.position();
+        var end = start;
+        end.row = @min(start.row + count, buffer.lines.items.len - 1);
+        end.col = @min(end.col, buffer.lines.items[end.row].items.len);
+
+        buffer.updateEnd(start, end);
     }
 
     fn motionUp(state: *State) !void {
@@ -1455,3 +1454,83 @@ const visuals = struct {
     const block = setModeMeta(.Block);
     const range = setModeMeta(.Range);
 };
+
+// const root = @import("root.zig");
+// const std = root.std;
+// const trm = root.trm;
+// const lua = root.lua;
+// const km = root.km;
+// const State = root.State;
+// const Buffer = root.Buffer;
+//
+// const Command = @This();
+//
+// is: bool = false,
+// buffer: std.ArrayListUnmanaged(u8) = .{},
+// maps: km.KeyMaps,
+//
+// const thunk = struct {
+//     fn append(state: *State) !void {
+//         if (state.ch.modifiers.bits() == 0)
+//             try state.command.buffer.append(state.a, state.ch.character);
+//     }
+//
+//     fn delete(state: *State) !void {
+//         _ = state.command.buffer.pop();
+//     }
+//
+//     fn gotoNormal(state: *State) !void {
+//         state.command.buffer.clearRetainingCapacity();
+//         state.command.is = false;
+//     }
+//
+//     // TODO: have a colon commandline and a semicolon command line
+//     // the colon is the same as vim and the semi is a direct lua function
+//     fn run(state: *State) !void {
+//         const cmd = try state.command.buffer.toOwnedSliceSentinel(state.a, 0);
+//         defer state.a.free(cmd);
+//
+//         std.log.debug("running command: {s}", .{cmd});
+//
+//         // if (state.inputcallback) |h| {
+//         //     try h[1].notify();
+//         //     try state.loop.run(.once);
+//         //     std.log.debug("finish: {any}", .{h[0]});
+//         // }
+//
+//         lua.run(state.L, cmd) catch |err| {
+//             root.log(@src(), .err, "lua command line error: {}", .{err});
+//         };
+//
+//         state.command.is = false;
+//
+//         const buffer = state.getCurrentBuffer() orelse return;
+//         buffer.setMode(Buffer.ModeId.Normal);
+//     }
+// };
+//
+// pub fn init(a: std.mem.Allocator) !Command {
+//     var maps = km.KeyMaps{
+//         .keys = .{},
+//         .fallback = .{ .Native = thunk.append },
+//         .targeter = .{ .Native = km.action.none },
+//     };
+//
+//     try maps.put(a, trm.keys.norm(trm.KeySymbol.Backspace.toBits()), .{ .Native = thunk.delete });
+//
+//     try maps.put(a, trm.keys.norm(trm.KeySymbol.Esc.toBits()), .{
+//         .Native = thunk.gotoNormal,
+//     });
+//     try maps.put(a, trm.keys.ctrl('c'), .{
+//         .Native = thunk.gotoNormal,
+//     });
+//
+//     try maps.put(a, trm.keys.norm('\n'), .{ .Native = thunk.run });
+//
+//     return Command{ .maps = maps };
+// }
+//
+// pub fn deinit(self: *Command, L: ?*lua.State, a: std.mem.Allocator) void {
+//     self.buffer.deinit(a);
+//     self.maps.deinit(L, a);
+// }

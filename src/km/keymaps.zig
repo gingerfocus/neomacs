@@ -7,6 +7,8 @@ const trm = root.trm;
 const lua = root.lua;
 // const rc = @import("zigrc");
 
+pub const KeyFunction = @import("KeyFunction.zig");
+
 const State = root.State;
 
 pub const ModeId = root.Buffer.ModeId;
@@ -14,7 +16,7 @@ pub const ModeId = root.Buffer.ModeId;
 pub const ModeToKeys = std.AutoArrayHashMapUnmanaged(ModeId, *KeyMaps);
 
 pub const action = struct {
-    pub fn move(state: *State) !void {
+    pub fn move(state: *State, _: ?*anyopaque) !void {
         try moveKeep(state);
 
         const buffer = state.getCurrentBuffer() orelse return;
@@ -41,7 +43,7 @@ pub const KeyMaps = struct {
     keys: KeyToFunction = .{},
 
     fallback: ?KeyFunction = null,
-    targeter: ?KeyFunction = .{ .Native = action.move },
+    targeter: ?KeyFunction = KeyFunction.initstate(action.move),
 
     name: ?[]const u8 = null,
 
@@ -56,9 +58,9 @@ pub const KeyMaps = struct {
     //     };
     // }
 
-    pub fn deinit(self: *KeyMaps, a: std.mem.Allocator) void {
+    pub fn deinit(self: *KeyMaps, L: ?*lua.State, a: std.mem.Allocator) void {
         var iter = self.keys.iterator();
-        while (iter.next()) |key| key.value_ptr.deinit(a);
+        while (iter.next()) |key| key.value_ptr.deinit(L, a);
 
         if (self.name) |name| a.free(name);
 
@@ -105,68 +107,5 @@ pub const KeyMaps = struct {
         map.* = KeyMaps{};
         res.value_ptr.* = KeyFunction{ .SubMap = map };
         return map;
-    }
-};
-
-pub const KeyFunction = union(enum) {
-    const Callback = *const fn (*State) anyerror!void; // Id
-    const LuaRef = c_int;
-
-    Native: Callback,
-    LuaFnc: LuaRef,
-    SubMap: *KeyMaps,
-
-    pub fn deinit(self: KeyFunction, a: std.mem.Allocator) void {
-        switch (self) {
-            .SubMap => |map| {
-                map.deinit(a);
-                a.destroy(map);
-            },
-            else => {},
-        }
-    }
-
-    pub fn initLua(L: *lua.LuaState, index: c_int) !KeyFunction {
-        if (lua.lua_type(L, index) != lua.LUA_TFUNCTION) {
-            return error.NotALuaFunction;
-            // lua.lua_pushliteral(L, "vim.schedule: expected function");
-            // return lua.lua_error(L);
-        }
-
-        lua.lua_pushvalue(L, index);
-        const ref = lua.luaL_ref(L, lua.LUA_REGISTRYINDEX);
-        if (ref > 0) {
-            // ref_state->ref_count++;
-        } else {
-            return error.CantMakeReference;
-        }
-
-        return .{ .LuaFnc = ref };
-    }
-
-    pub fn run(self: KeyFunction, state: *State) anyerror!void {
-        switch (self) {
-            .Native => |fc| {
-                try fc(state);
-                state.currentKeyMap = null;
-            },
-            .LuaFnc => |id| {
-                std.debug.assert(id > 0);
-
-                lua.sys.lua_rawgeti(state.L, lua.sys.LUA_REGISTRYINDEX, id);
-                lua.sys.luaL_unref(state.L, lua.sys.LUA_REGISTRYINDEX, id);
-                // ref_state->ref_count--;
-
-                if (lua.sys.lua_pcall(state.L, 0, 0, 0) != 0) {
-                    // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
-                    return error.ExecuteLuaCallback;
-                }
-                state.currentKeyMap = null;
-            },
-            .SubMap => |map| {
-                state.currentKeyMap = map;
-                return;
-            },
-        }
     }
 };

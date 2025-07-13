@@ -9,7 +9,6 @@ const km = root.km;
 const Buffer = root.Buffer;
 const Args = root.Args;
 
-const Command = @import("Command.zig");
 const Config = @import("Config.zig");
 const keys = @import("keys.zig");
 const Component = @import("render/Component.zig");
@@ -34,8 +33,6 @@ backend: Backend,
 
 ch: trm.KeyEvent = @bitCast(@as(u16, 0)),
 repeating: Repeating = .{},
-
-command: Command,
 
 /// Message to show in the status bar, remains until cleared
 /// must be arena allocated
@@ -96,7 +93,6 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         // .redo_stack = Undo_Stack.init(a),
         // .cur_undo = Undo{},
 
-        .command = try Command.init(a),
         .buffers = .{},
         // .buffer = undefined,
 
@@ -138,8 +134,6 @@ pub fn deinit(state: *State) void {
 
     // state.a.free(state.status_bar_msg);
 
-    state.command.deinit(state.a);
-
     for (state.buffers.items) |buffer| {
         buffer.deinit(state.a);
         state.a.destroy(buffer);
@@ -173,13 +167,6 @@ pub fn getCurrentBuffer(state: *State) ?*Buffer {
 
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
     // try state.loop.run(.no_wait);
-
-    // -- Command Thing --------------------
-    if (state.command.is) {
-        try state.command.maps.run(state, ke);
-        return;
-    }
-    // -------------------------
 
     try state.getKeyMaps().run(state, ke);
 }

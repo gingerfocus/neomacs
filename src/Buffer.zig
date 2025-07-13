@@ -65,6 +65,18 @@ const Line = std.ArrayListUnmanaged(u8);
 //     }
 // };
 
+pub fn updateEnd(buffer: *Buffer, start: lib.Vec2, end: lib.Vec2) void {
+    if (buffer.target) |*t| {
+        // TODO: what do I do with start here?
+        t.end = end;
+    } else {
+        buffer.target = .{
+            .mode = .Range,
+            .start = start,
+            .end = end,
+        };
+    }
+}
 pub const Visual = struct {
     mode: VisualMode = .Range,
     start: lib.Vec2,
@@ -143,6 +155,8 @@ pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
 }
 
 pub fn position(buffer: *Buffer) lib.Vec2 {
+    if (buffer.target) |t| return t.end;
+
     return .{
         .row = buffer.row,
         .col = buffer.col,

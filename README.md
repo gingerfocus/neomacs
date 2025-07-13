@@ -30,7 +30,7 @@ straight lua meaning that there is no second syntax to learn and you can type
 
 # Devolopment
 ## Binary Size
-By default, compile to a static, 740k binary with:
+By default, compile to a static, 756k binary with:
 ```sh
 zig build --release=small
 ```

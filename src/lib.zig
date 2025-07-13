@@ -69,3 +69,57 @@ pub const shm = struct {
         return std.posix.OpenError.PathAlreadyExists;
     }
 };
+
+pub const types = struct {
+    pub fn typeid(comptime T: type) usize {
+        _ = T;
+        const H = struct {
+            var byte: u8 = 0;
+        };
+        return @intFromPtr(&H.byte);
+    }
+
+    /// This is a really heavy structure and I dont know how to make it better
+    /// so i think it would be better to just limit the use instead of trying
+    /// to make it better
+    pub const TypeErasedData = packed struct {
+        id: usize,
+        size: usize,
+        alignof: std.mem.Alignment,
+
+        pub fn get(self: *TypeErasedData, comptime T: type) ?*T {
+            if (self.id != typeid(T)) return null;
+            return @ptrCast(@alignCast(self + @sizeOf(TypeErasedData)));
+        }
+
+        pub fn deinit(self: *TypeErasedData, a: std.mem.Allocator) void {
+            var data: [*]u8 = @ptrCast(@alignCast(self));
+            a.rawFree(data[0..self.size], self.alignof, @returnAddress());
+
+            @memset(data[0..self.size], undefined);
+        }
+    };
+
+    pub fn TypeErased(comptime T: type) type {
+        return packed struct {
+            data: TypeErasedData,
+            value: T,
+
+            pub fn init(a: std.mem.Allocator, value: T) !*TypeErasedData {
+                const size = @sizeOf(@This());
+                const self = try a.create(@This());
+                const allign = @alignOf(@This());
+
+                self.* = .{
+                    .data = .{
+                        .id = 0,
+                        .size = size,
+                    },
+                    .value = value,
+                    .alignof = allign,
+                };
+                return &self.data;
+            }
+        };
+    }
+};
