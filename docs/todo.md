@@ -1,23 +1,39 @@
-# Core Features
-- [ ] Finish Targeters
-- [ ] Deletion (target and character)
-  - [ ] Changing Text
+# For 0.1.1
+- [ ] Targeters 
+  - [ ] w
+  - [ ] b
+  - [ ] e
+  - [ ] t
+  - [ ] f
+  - [ ] $
+  - [ ] 0
+- [ ] Deletion (d/x)
+- [ ] Changing (c/r)
 - [ ] Visual Mode Targeting
 - [ ] Scroll off
 
-# Important
-- [ ] Better renering of text
+# For 0.2.0
 - [ ] Window Split
 - [ ] Lua API
-- [ ] Allow Keymaps to have State
+- [ ] Undo
 - [ ] Make an example plugin
+
+# Later
+- [ ] Allow Keymaps to have State
+  - [ ] Buffer local keymaps (only take `*Buffer` as argument)
 - [ ] Swap Files
 - [ ] Batch Rendering Primitives
+- [ ] Better renering of text
 - [ ] Font Support
 - [ ] Packager
-- [ ] Literate Programming
+- [ ] Marks
+- [ ] Vim `s` or Flash `s`?
+- [ ] `z` commands
+- [ ] swaping the start and end position visual selection
+- [ ] Oil/Netrw/Dired/Neotree alternative
+- [ ] Multi Backend
 
-# Fluff
+# Much Later
 - [ ] Inline Image preview
 - [ ] Shader support
   - [ ] Shaders from Lua
@@ -25,4 +41,5 @@
   - [ ] Typst support
 - [ ] RPC
 - [ ] C/Wasi Api
+- [ ] Literate Programming
 

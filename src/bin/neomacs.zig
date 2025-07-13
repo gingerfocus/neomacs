@@ -13,6 +13,8 @@ pub fn main() u8 {
     defer if (logFile) |file| file.close();
     scu.log.file = logFile;
 
+    root.alloc.init();
+
     neomacs() catch |err| {
         std.debug.print("Some unrecoverable error occorred. Check log file for details.\n", .{});
         root.log(@src(), .err, "Error: {}\n", .{err});
@@ -23,22 +25,19 @@ pub fn main() u8 {
         }
         return 1;
     };
-    return 0;
+
+    return switch (root.alloc.deinit()) {
+        .leak => blk: {
+            std.debug.print("leaked memory\n", .{});
+            break :blk 1;
+        },
+        .ok => 0,
+    };
 }
 
 //-----------------------------------------------------------------------------
 
 fn neomacs() !void {
-    var endtime: i64 = undefined;
-    defer {
-        const end = std.time.microTimestamp();
-        std.debug.print("Close taken: {} us\n", .{end - endtime});
-    }
-    root.alloc.init();
-    defer root.alloc.deinit();
-    // var alloc = std.heap.GeneralPurposeAllocator(.{}){}; // alloc.init();
-    // defer _ = alloc.deinit();
-    // const a = alloc.allocator();
     const a = root.alloc.allocator();
 
     root.log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
@@ -85,7 +84,6 @@ fn neomacs() !void {
     }
 
     std.log.info("Quitting", .{});
-    endtime = std.time.microTimestamp();
 
     // const parser = treesitter.ts_parser_new();
     // treesitter.ts_parser_set_language(parser, tree_sitter_json());
@@ -97,4 +95,5 @@ fn neomacs() !void {
     //   strlen(source_code)
     // );
     // _ = allocator.deinit();
+
 }

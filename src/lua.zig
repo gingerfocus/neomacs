@@ -65,8 +65,9 @@ pub fn init() *State {
             },
         },
         .keymap = .{
-            // .del = nluaKeymapDel,
-            // .set = nluaKeymapSet,
+            .del = nlua.keymap.del,
+            .set = nlua.keymap.set,
+            // .mode = nluaKeymapMode,
         },
         .cmd = .{
             // .tutor = nluaTutor,
@@ -322,25 +323,44 @@ pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
     }
 }
 
-// /// Wraps an arbitrary function in a Lua C-API using version
-// pub fn wrap(comptime func: anytype) sys.lua_CFunction {
-//     const Args: type = std.meta.ArgsTuple(@TypeOf(func));
-//     // See https://github.com/ziglang/zig/issues/229
-//     return struct {
-//         fn thunk(L: ?*State) callconv(.C) c_int {
-//             var args: Args = undefined;
-//             comptime var i = 0;
-//             inline while (i < args.len) : (i += 1) {
-//                 args[i] = lua.check(L, i + 1, @TypeOf(args[i]));
-//             }
-//             const result = @call(.auto, func, args);
+// pub const FunctionReference = struct {
+//     _: c_int,
 //
-//             if (@TypeOf(result) == void) {
-//                 return 0;
-//             } else {
-//                 // state.lua.check(result);
-//                 return 0; // 1
-//             }
-//         }
-//     }.thunk;
-// }
+//     pub fn init(L: *State, id: c_int) !FunctionReference {
+//     }
+//     pub fn deinit(self: FunctionReference, L: *State) void {
+//     }
+// };
+
+/// Wraps an arbitrary function in a Lua C-API using version
+pub fn wrap(comptime func: fn (L: *State) anyerror!c_int) sys.lua_CFunction {
+    // const Args: type = std.meta.ArgsTuple(@TypeOf(func));
+
+    // See https://github.com/ziglang/zig/issues/229
+    return struct {
+        fn thunk(Lua: ?*State) callconv(.C) c_int {
+            const L = Lua orelse unreachable;
+
+            return func(L) catch |err| {
+                var buf: [512]u8 = undefined;
+                const msg = std.fmt.bufPrint(&buf, "{s}", .{@errorName(err)}) catch unreachable;
+                sys.lua_pushlstring(L, msg.ptr, msg.len);
+                return sys.lua_error(L);
+            };
+
+            // var args: Args = undefined;
+            // comptime var i = 0;
+            // inline while (i < args.len) : (i += 1) {
+            //     args[i] = check(L, i + 1, @TypeOf(args[i]));
+            // }
+            // const result = @call(.auto, func, args);
+            //
+            // if (@TypeOf(result) == void) {
+            //     return 0;
+            // } else {
+            //     // state.lua.check(result);
+            //     return 0; // 1
+            // }
+        }
+    }.thunk;
+}

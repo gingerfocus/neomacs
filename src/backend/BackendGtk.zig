@@ -89,7 +89,7 @@ fn eventDraw(widget: *gtk.GtkWidget, cr: *gtk.cairo_t, self: *Self) callconv(.C)
     _ = widget;
 
     // Clear the drawing area with the background color
-    gtk.cairo_set_source_rgb(cr, 0.18, 0.18, 0.18); // #282828
+    gtk.cairo_set_source_rgba(cr, 0.18, 0.18, 0.18, 0.9); // #282828
     gtk.cairo_paint(cr);
 
     // The actual rendering will happen when the Backend calls thunk.draw for each node.
@@ -117,7 +117,7 @@ fn eventKey(widget: *gtk.GtkWidget, arg_event: *gtk.GdkEventKey, self: *Self) ca
     _ = widget;
 
     const event = @as(*GdkEventKey, @ptrCast(@alignCast(arg_event)));
-    std.debug.print("data: {any}\n", .{event});
+    // std.debug.print("data: {any}\n", .{event});
 
     const char = event[7];
     const pressed = event[0] == gtk.GDK_KEY_PRESS; // 9 for release

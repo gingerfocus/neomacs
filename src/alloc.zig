@@ -9,8 +9,8 @@ const static = struct {
 pub fn init() void {
     // ts.ts_set_allocator(malloc, calloc, realloc, free);
 }
-pub fn deinit() void {
-    _ = static.alloc.deinit();
+pub fn deinit() std.heap.Check {
+    return static.alloc.deinit();
 }
 
 pub fn allocator() std.mem.Allocator {
