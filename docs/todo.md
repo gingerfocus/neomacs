@@ -34,6 +34,7 @@
 - [ ] Multi Backend
 
 # Much Later
+- [ ] Allow Keymaps to have State
 - [ ] Inline Image preview
 - [ ] Shader support
   - [ ] Shaders from Lua
@@ -42,4 +43,5 @@
 - [ ] RPC
 - [ ] C/Wasi Api
 - [ ] Literate Programming
+- [ ] TigerStyle type fuzzing
 

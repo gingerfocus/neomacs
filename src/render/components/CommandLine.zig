@@ -9,20 +9,23 @@ const View = @import("../Component.zig").View;
 
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
     _ = self;
-    if (state.command.is) {
-        const command = std.fmt.allocPrint(state.a, ":{s}", .{state.command.buffer.items}) catch return;
-        defer state.a.free(command);
-
-        for (command, 0..) |ch, i| {
-            writer.draw(
-                .{ .col = view.x + i, .row = view.y },
-                .{
-                    .background = Color.Black,
-                    .foreground = Color.White,
-                    .content = .{ .Text = ch },
-                },
-            );
-        }
-        writer.setCursor(.{ .col = view.x + command.len, .row = view.y });
-    }
+    _ = state;
+    _ = writer;
+    _ = view;
+    // if (state.command.is) {
+    //     const command = std.fmt.allocPrint(state.a, ":{s}", .{state.command.buffer.items}) catch return;
+    //     defer state.a.free(command);
+    //
+    //     for (command, 0..) |ch, i| {
+    //         writer.draw(
+    //             .{ .col = view.x + i, .row = view.y },
+    //             .{
+    //                 .background = Color.Black,
+    //                 .foreground = Color.White,
+    //                 .content = .{ .Text = ch },
+    //             },
+    //         );
+    //     }
+    //     writer.setCursor(.{ .col = view.x + command.len, .row = view.y });
+    // }
 }

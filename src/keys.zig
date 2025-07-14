@@ -41,18 +41,21 @@ pub fn create(
     var list = km.ModeToKeys{};
 
     const normal = try a.create(km.KeyMaps);
-    normal.* = km.KeyMaps{};
-    normal.name = try a.dupe(u8, "NORMAL");
+    normal.* = km.KeyMaps{
+        .modeid = ModeId.Normal,
+    };
     try list.put(alloc, ModeId.Normal, normal);
 
     const insert = try a.create(km.KeyMaps);
-    insert.* = km.KeyMaps{};
-    insert.name = try a.dupe(u8, "INSERT");
+    insert.* = km.KeyMaps{
+        .modeid = ModeId.Insert,
+    };
     try list.put(alloc, ModeId.Insert, insert);
 
     const visual = try a.create(km.KeyMaps);
-    visual.* = km.KeyMaps{};
-    visual.name = try a.dupe(u8, "VISUAL");
+    visual.* = km.KeyMaps{
+        .modeid = ModeId.Visual,
+    };
     try list.put(alloc, ModeId.Visual, visual);
 
     // // insert

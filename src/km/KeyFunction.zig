@@ -60,6 +60,31 @@ pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
     self.function.deinit(L, a);
 }
 
+pub fn run(self: Self, state: *State) anyerror!void {
+    switch (self.function) {
+        .Native => |fc| {
+            try fc(state, @ptrCast(self.dataptr));
+            state.currentKeyMap = null;
+        },
+        .LuaFnc => |id| {
+            std.debug.assert(id > 0);
+
+            lua.sys.lua_rawgeti(state.L, lua.sys.LUA_REGISTRYINDEX, id);
+
+            if (lua.sys.lua_pcall(state.L, 0, 0, 0) != 0) {
+                // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
+                return error.ExecuteLuaCallback;
+            }
+            state.currentKeyMap = null;
+        },
+        .SubMap => |map| {
+            state.currentKeyMap = map;
+            return;
+        },
+        else => unreachable,
+    }
+}
+
 // TODO: inline these fuction calls, just make this a data class
 const FunctionAction = union(enum) {
     const LuaRef = c_int;
@@ -94,31 +119,6 @@ const FunctionAction = union(enum) {
             return .{ .LuaFnc = ref };
         } else {
             return error.CantMakeReference;
-        }
-    }
-
-    pub fn run(self: FunctionAction, state: *State) anyerror!void {
-        switch (self) {
-            .Native => |fc| {
-                try fc(state);
-                state.currentKeyMap = null;
-            },
-            .LuaFnc => |id| {
-                std.debug.assert(id > 0);
-
-                lua.sys.lua_rawgeti(state.L, lua.sys.LUA_REGISTRYINDEX, id);
-
-                if (lua.sys.lua_pcall(state.L, 0, 0, 0) != 0) {
-                    // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
-                    return error.ExecuteLuaCallback;
-                }
-                state.currentKeyMap = null;
-            },
-            .SubMap => |map| {
-                state.currentKeyMap = map;
-                return;
-            },
-            else => unreachable,
         }
     }
 };

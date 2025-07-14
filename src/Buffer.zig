@@ -693,6 +693,7 @@ pub const ModeId = struct {
 
     pub fn toString(self: ModeId) []const u8 {
         return switch (self._) {
+            0 => "NULL",
             'n' => "NORMAL",
             'i' => "INSERT",
             'v' => "VISUAL",
@@ -704,6 +705,7 @@ pub const ModeId = struct {
     //     const id: usize = 65535;
     // };
 
+    pub const Null: ModeId = .{ ._ = 0 };
     pub const Normal: ModeId = .{ ._ = 'n' };
     pub const Visual: ModeId = .{ ._ = 'v' };
     pub const Insert: ModeId = .{ ._ = 'i' };
