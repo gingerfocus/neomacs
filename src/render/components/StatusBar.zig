@@ -24,7 +24,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
         }
     }
 
-    const buffer = state.getCurrentBuffer() orelse return;
+    const buffer = state.getCurrentBuffer();
 
     if (state.status_bar_msg) |print_msg| {
         for (print_msg, 0..) |ch, i| {

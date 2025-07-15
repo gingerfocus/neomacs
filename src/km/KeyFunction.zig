@@ -16,55 +16,70 @@ const thunk = struct {
     }
 };
 
-/// This is allocated in the arena of the KeyMap so if you are not keeping this
-/// in that structure you need to be responsible for freeing it
-dataptr: ?*lib.types.TypeErasedData,
-function: FunctionAction,
+// TODO: move to lua file
+pub const LuaRef = c_int;
 
-// id: usize = 0,
+// pub const KeyDataptr = lib.types.TypeErasedData;
+pub const KeyDataptr = anyopaque;
+
+// dataptr: ?*lib.types.TypeErasedData,
+
+function: FunctionAction,
 
 const Self = @This();
 
-pub fn initstate(func: *const fn (*State, ?*anyopaque) anyerror!void) Self {
+pub fn initstate(func: *const fn (*State, ?*KeyDataptr) anyerror!void) Self {
     return .{
-        .dataptr = null,
+        // .dataptr = null,
         .function = .{ .Native = func },
     };
 }
 
-pub fn initbuffer(func: *const fn (*Buffer, ?*anyopaque) anyerror!void) Self {
+pub fn initbuffer(func: *const fn (*Buffer, ?*KeyDataptr) anyerror!void) Self {
     return .{
-        .dataptr = null,
+        // .dataptr = null,
         .function = .{ .buffer = func },
     };
 }
 
-pub fn initlua(L: ?*lua.State, index: c_int) !Self {
+pub fn initlua(L: ?*lua.State, index: LuaRef) !Self {
     return .{
-        .dataptr = null,
+        // .dataptr = null,
         .function = try FunctionAction.initLua(L, index),
     };
 }
 
-pub fn setdata(self: *Self, comptime T: type, alloc: std.mem.Allocator, value: T) !void {
-    self.dataptr = try lib.types.TypeErased(T).init(alloc, value);
-}
-
-pub fn getdata(self: *Self, comptime T: type) ?*T {
-    if (self.dataptr) |ptr| return ptr.get(T);
-    return null;
-}
+// pub fn setdata(self: *Self, comptime T: type, alloc: std.mem.Allocator, value: T) !void {
+//     self.dataptr = try lib.types.TypeErased(T).init(alloc, value);
+// }
+//
+// pub fn getdata(self: *Self, comptime T: type) ?*T {
+//     if (self.dataptr) |ptr| return ptr.get(T);
+//     return null;
+// }
 
 pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
-    if (self.dataptr) |ptr| ptr.deinit(a);
-    self.function.deinit(L, a);
+    // if (self.dataptr) |ptr| ptr.deinit(a);
+
+    switch (self.function) {
+        .SubMap => |map| {
+            map.deinit(L, a);
+            a.destroy(map);
+        },
+        .LuaFnc => |id| {
+            lua.sys.luaL_unref(L, lua.sys.LUA_REGISTRYINDEX, id);
+        },
+        else => {},
+    }
 }
 
 pub fn run(self: Self, state: *State) anyerror!void {
-    switch (self.function) {
+    return switch (self.function) {
         .Native => |fc| {
-            try fc(state, @ptrCast(self.dataptr));
-            state.currentKeyMap = null;
+            try fc(state, null);
+
+            const buffer = state.getCurrentBuffer();
+            buffer.curkeymap = null;
         },
         .LuaFnc => |id| {
             std.debug.assert(id > 0);
@@ -75,40 +90,26 @@ pub fn run(self: Self, state: *State) anyerror!void {
                 // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
                 return error.ExecuteLuaCallback;
             }
-            state.currentKeyMap = null;
+
+            const buffer = state.getCurrentBuffer();
+            buffer.curkeymap = null;
         },
         .SubMap => |map| {
-            state.currentKeyMap = map;
-            return;
+            const buffer = state.getCurrentBuffer();
+            buffer.curkeymap = map;
         },
         else => unreachable,
-    }
+    };
 }
 
 // TODO: inline these fuction calls, just make this a data class
 const FunctionAction = union(enum) {
-    const LuaRef = c_int;
-
-    Native: *const fn (*State, ?*anyopaque) anyerror!void,
+    Native: *const fn (*State, ?*KeyDataptr) anyerror!void,
     LuaFnc: LuaRef,
     SubMap: *KeyMaps,
+    buffer: *const fn (*Buffer, ?*KeyDataptr) anyerror!void,
 
-    buffer: *const fn (*Buffer, ?*anyopaque) anyerror!void,
-
-    pub fn deinit(self: FunctionAction, L: ?*lua.State, a: std.mem.Allocator) void {
-        switch (self) {
-            .SubMap => |map| {
-                map.deinit(L, a);
-                a.destroy(map);
-            },
-            .LuaFnc => |id| {
-                lua.sys.luaL_unref(L, lua.sys.LUA_REGISTRYINDEX, id);
-            },
-            else => {},
-        }
-    }
-
-    pub fn initLua(L: ?*lua.State, index: c_int) !FunctionAction {
+    pub fn initLua(L: ?*lua.State, index: LuaRef) !FunctionAction {
         if (lua.sys.lua_type(L, index) != lua.sys.LUA_TFUNCTION) {
             return error.NotALuaFunction;
         }

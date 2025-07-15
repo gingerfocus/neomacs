@@ -26,6 +26,8 @@ const id = struct {
     }
 };
 
+/// TODO: change args so this doesnt have to take a finished state but can be
+/// done as part of startup
 pub fn init(state: *State) !void {
     const size = state.backend.getSize();
     const rootView = View{ .x = 0, .y = 0, .w = size.row, .h = size.col };

@@ -44,7 +44,7 @@ pub fn set(L: ?*lua.State) callconv(.C) c_int {
     const state = root.state();
     const mode = root.km.ModeId.from(modestr);
 
-    const maps = state.namedmaps.get(mode) orelse {
+    const maps = state.scratchbuffer.keymaps.get(mode) orelse {
         // TODO: make a new mode for this
         // use getOrPut
         return 0;

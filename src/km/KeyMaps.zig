@@ -79,14 +79,14 @@ pub const action = struct {
     pub fn move(state: *State, _: ?*anyopaque) !void {
         try moveKeep(state);
 
-        const buffer = state.getCurrentBuffer() orelse return;
+        const buffer = state.getCurrentBuffer();
 
         buffer.target = null; // reset the target
-        state.currentKeyMap = null;
+        buffer.curkeymap = null;
     }
 
     pub fn moveKeep(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+        const buffer = state.getCurrentBuffer();
 
         if (buffer.target) |target| {
             buffer.row = target.end.row;

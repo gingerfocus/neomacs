@@ -24,7 +24,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
         }
     }
 
-    const buffer = state.getCurrentBuffer() orelse return;
+    const buffer = state.getCurrentBuffer();
     const row_render_start = std.math.sub(usize, buffer.row, view.h) catch 0;
 
     var renderRow: usize = row_render_start;

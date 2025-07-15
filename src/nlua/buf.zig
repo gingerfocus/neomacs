@@ -6,7 +6,9 @@ const lua = root.lua;
 pub fn write(_: ?*lua.State) callconv(.C) c_int {
     const state = root.state();
 
-    const buffer = state.getCurrentBuffer() orelse return 0;
+    const buffer = state.getCurrentBuffer();
+    if (!buffer.hasbackingfile) return 0;
+
     buffer.save() catch |err| {
         root.log(@src(), .err, "could not save buffer {s}: {any}", .{ buffer.filename, err });
         return 0;
@@ -24,7 +26,9 @@ pub fn open(L: ?*lua.State) callconv(.C) c_int {
     };
 
     const nbuf = state.a.create(root.Buffer) catch return 0;
-    nbuf.* = root.Buffer.initFile(state.a, state.namedmaps, file) catch {
+
+    // TODO: make sure its the scratch buffer
+    nbuf.* = root.Buffer.init(state.a, state.scratchbuffer.keymaps, file) catch {
         state.a.destroy(nbuf);
         root.log(@src(), .err, "File Not Found: {s}", .{file});
         return 0;
@@ -49,7 +53,7 @@ pub fn prev(_: ?*lua.State) callconv(.C) c_int {
 
 pub fn name(L: ?*lua.State) callconv(.C) c_int {
     const state = root.state();
-    const buffer = state.getCurrentBuffer() orelse return 0;
+    const buffer = state.getCurrentBuffer();
     lua.push(L, buffer.filename);
     return 1;
 }

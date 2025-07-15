@@ -40,9 +40,6 @@ status_bar_msg: ?[]const u8 = null,
 
 // defaultKeyMap: [3]rc.RcUnmanaged(km.KeyMaps),
 
-namedmaps: *km.ModeToKeys,
-currentKeyMap: ?*km.KeyMaps = null,
-
 // If null then do the normal key map look up, else use this as the key maps,
 // dont touch this as if you try to be clever it will just be set to null
 // currentKeyMap: ?*km.KeyMaps = null,
@@ -53,12 +50,13 @@ config: Config = .{},
 
 resized: bool = false,
 
-// zygotbuffer: *Buffer,
+/// Also call zygot buffer sometimes
+scratchbuffer: *Buffer,
 
 buffers: std.ArrayListUnmanaged(*Buffer),
-/// Always a memeber of the buffers array
-// buffer: *Buffer, // todo: might be better to make it an index
-bufferindex: usize = 0,
+
+/// null selects the scratch buffer
+bufferindex: ?usize,
 
 // resized: bool = true,
 
@@ -79,6 +77,34 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
     const maps = try a.create(km.ModeToKeys);
     maps.* = try keys.create(a, &arena);
 
+    // ---------
+
+    const scratch: *Buffer = try a.create(Buffer);
+    scratch.* = Buffer{
+        .filename = "*scratch*",
+        .hasbackingfile = false,
+        .keymaps = maps,
+        .id = Buffer.idgen.next(),
+        .lines = .{},
+    };
+
+    var buffers = std.ArrayListUnmanaged(*Buffer){};
+    if (file) |f| {
+        const buffer = try a.create(Buffer);
+        root.log(@src(), .debug, "opening file ({s})", .{f});
+        buffer.* = Buffer.init(a, maps, f) catch |err| {
+            root.log(@src(), .err, "File Not Found: {s}", .{f});
+            a.destroy(buffer);
+            return err;
+        };
+        try buffers.append(a, buffer);
+    }
+
+    // try scratch.insertCharacter(a, 't');
+    // scratch
+
+    // TODO: append welcome content to scratch buffer
+
     var state = State{
         .a = a,
         .arena = arena,
@@ -87,38 +113,16 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         // .term = t,
         .backend = try Backend.init(a, args),
 
-        .namedmaps = maps,
-
         // .undo_stack = Undo_Stack.init,
         // .redo_stack = Undo_Stack.init(a),
         // .cur_undo = Undo{},
 
-        .buffers = .{},
-        // .buffer = undefined,
+        .scratchbuffer = scratch,
+        .buffers = buffers,
+        .bufferindex = 0,
 
         // .loop = try xev.Loop.init(.{}),
     };
-
-    var buffers = std.ArrayListUnmanaged(*Buffer){};
-    const buffer = try a.create(Buffer);
-    if (file) |f| {
-        root.log(@src(), .debug, "opening file ({s})", .{f});
-        buffer.* = Buffer.initFile(a, maps, f) catch |err| {
-            root.log(@src(), .err, "File Not Found: {s}", .{f});
-            a.destroy(buffer);
-            return err;
-        };
-    } else {
-        buffer.* = Buffer.initEmpty(maps);
-    }
-
-    // for (0..Buffer.Mode.COUNT) |i| {
-    //     buffer.keymap = state.defaultKeyMaps[i].clone();
-    // }
-
-    try buffers.append(a, buffer);
-
-    state.buffers = buffers;
 
     try render.init(&state);
 
@@ -134,16 +138,18 @@ pub fn deinit(state: *State) void {
 
     // state.a.free(state.status_bar_msg);
 
+    // The scratchbuffer owns the keymaps.
+    // The keymaps must be released before lua as they reference each other.
+    state.scratchbuffer.keymaps.deinit(state.a);
+    state.a.destroy(state.scratchbuffer.keymaps);
+    state.scratchbuffer.deinit(state.a);
+    state.a.destroy(state.scratchbuffer);
+
     for (state.buffers.items) |buffer| {
         buffer.deinit(state.a);
         state.a.destroy(buffer);
     }
     state.buffers.deinit(state.a);
-
-    // keymaps before lua as they reference the lua state
-    //                                 v comfirm it got released
-    state.namedmaps.deinit(state.a);
-    state.a.destroy(state.namedmaps);
 
     state.components.deinit(state.a);
 
@@ -160,9 +166,14 @@ pub fn deinit(state: *State) void {
 //     return state.buffers.items[state.bufferindex];
 // }
 
-pub fn getCurrentBuffer(state: *State) ?*Buffer {
-    if (state.bufferindex >= state.buffers.items.len) return null;
-    return state.buffers.items[state.bufferindex];
+pub fn getCurrentBuffer(state: *State) *Buffer {
+    const idx = state.bufferindex orelse return state.scratchbuffer;
+
+    std.debug.assert(state.buffers.items.len >= 1);
+    // TODO: this might be better as a runtime check
+    // also it might be cool to create the buffer on demand
+    std.debug.assert(idx <= state.buffers.items.len);
+    return state.buffers.items[idx];
 }
 
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
@@ -173,17 +184,10 @@ pub fn press(state: *State, ke: trm.KeyEvent) !void {
 
 // TODO: make a const and mut version
 fn getKeyMaps(state: *State) *km.KeyMaps {
-    if (state.currentKeyMap) |map| {
-        std.log.info("using current keymap", .{});
-        return map;
-    }
+    const buffer = state.getCurrentBuffer();
+    if (buffer.curkeymap) |map| return map;
 
-    if (state.getCurrentBuffer()) |buffer| {
-        if (buffer.curkeymap) |map| {
-            return map;
-        }
-    }
-    return state.namedmaps.get(Buffer.ModeId.Normal).?;
+    return buffer.keymaps.get(Buffer.ModeId.Normal).?;
 }
 
 pub const Repeating = struct {
@@ -225,31 +229,19 @@ fn checkfirstrun(a: std.mem.Allocator) !void {
 pub fn bufferNext(state: *State) void {
     if (state.buffers.items.len < 2) return;
 
-    state.bufferindex = if (state.bufferindex == state.buffers.items.len - 1) 0 else state.bufferindex + 1;
-    // for (state.buffers.items, 0..) |buf, i| {
-    //     if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
-    //         if (i == state.buffers.items.len - 1) {
-    //             state.buffer = state.buffers.items[0];
-    //         } else {
-    //             state.buffer = state.buffers.items[i + 1];
-    //         }
-    //         return;
-    //     }
-    // }
+    const idx = state.bufferindex orelse {
+        if (state.buffers.items.len != 0) state.bufferindex = 0;
+        return;
+    };
+
+    state.bufferindex = if (idx == state.buffers.items.len - 1) 0 else idx + 1;
 }
 pub fn bufferPrev(state: *State) void {
     if (state.buffers.items.len < 2) return;
 
-    state.bufferindex = if (state.bufferindex == 0) state.buffers.items.len - 1 else state.bufferindex - 1;
-
-    // for (state.buffers.items, 0..) |buf, i| {
-    //     if (@intFromPtr(buf) == @intFromPtr(state.buffer)) {
-    //         if (i == 0) {
-    //             state.buffer = state.buffers.items[state.buffers.items.len - 1];
-    //         } else {
-    //             state.buffer = state.buffers.items[i - 1];
-    //         }
-    //     }
-    //     return;
-    // }
+    const idx = state.bufferindex orelse {
+        if (state.buffers.items.len != 0) state.bufferindex = 0;
+        return;
+    };
+    state.bufferindex = if (idx == 0) state.buffers.items.len - 1 else idx - 1;
 }
