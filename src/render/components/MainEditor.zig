@@ -24,7 +24,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
         }
     }
 
-    const buffer = state.getCurrentBuffer() orelse return;
+    const buffer = state.getCurrentBuffer();
     const row_render_start = std.math.sub(usize, buffer.row, view.h) catch 0;
 
     var renderRow: usize = row_render_start;
@@ -64,7 +64,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     }
 
     // render the cursor
-    if (!state.command.is) {
-        writer.setCursor(.{ .col = view.x + buffer.col + 1, .row = view.y + buffer.row - row_render_start });
-    }
+    // if (!state.command.is) {
+    //     writer.setCursor(.{ .col = view.x + buffer.col + 1, .row = view.y + buffer.row - row_render_start });
+    // }
 }

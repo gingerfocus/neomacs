@@ -1,5 +1,7 @@
-const std = @import("std");
+//! TODO: figure out how to compose these, have one component nest others
+//!
 const root = @import("../root.zig");
+const std = root.std;
 const lib = root.lib;
 
 const State = root.State;

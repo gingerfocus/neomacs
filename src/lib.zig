@@ -89,10 +89,13 @@ pub const types = struct {
 
         pub fn get(self: *TypeErasedData, comptime T: type) ?*T {
             if (self.id != typeid(T)) return null;
-            return @ptrCast(@alignCast(self + @sizeOf(TypeErasedData)));
+
+            const value: *TypeErased(T) = @fieldParentPtr("data", self);
+            return &value.value;
         }
 
         pub fn deinit(self: *TypeErasedData, a: std.mem.Allocator) void {
+            // TODO: this makes the free dependent on the layout
             var data: [*]u8 = @ptrCast(@alignCast(self));
             a.rawFree(data[0..self.size], self.alignof, @returnAddress());
 
@@ -101,7 +104,7 @@ pub const types = struct {
     };
 
     pub fn TypeErased(comptime T: type) type {
-        return packed struct {
+        return struct {
             data: TypeErasedData,
             value: T,
 
@@ -114,9 +117,9 @@ pub const types = struct {
                     .data = .{
                         .id = 0,
                         .size = size,
+                        .alignof = std.mem.Alignment.fromByteUnits(allign),
                     },
                     .value = value,
-                    .alignof = allign,
                 };
                 return &self.data;
             }

@@ -29,7 +29,7 @@ M.startup = function()
             print("neon: init.lua not found, using default")
             -- print("writing default init.lua")
 
-            init = loadfile(vim.opt.runtime .. "init.lua") or function() end
+            init = loadfile(vim.opt.runtime .. "/init.lua") or function() end
         end
 
         init()
@@ -58,6 +58,8 @@ end
 -- TODO: make this something more formal
 -- Could be better as a neon.compat function not runtime.compat
 M.compat = function()
+    print("doing best effort vim api emulation")
+
     _G.vim = neon
 
     neon.cmd.w = neon.buf.write
@@ -67,8 +69,8 @@ M.compat = function()
         neon.api.quit()
     end
     neon.cmd.e = neon.buf.edit
-    neon.cmd.bn = neon.buffer.next
-    neon.cmd.bp = neon.buffer.prev
+    neon.cmd.bn = neon.buf.next
+    neon.cmd.bp = neon.buf.prev
 end
 
 -- HACK: this is just for testing beacuse im bad

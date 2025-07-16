@@ -40,6 +40,6 @@ stdenv.mkDerivation {
   # nativeBuildInputs = [zig.hook];
   # zigBuildFlags = ["--system" "${callPackage ./neomacs-zig-zon.nix {}}"];
 
-  nativeBuildInputs = [ zig ];
+  nativeBuildInputs = [zig];
   buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
 }

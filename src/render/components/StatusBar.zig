@@ -24,23 +24,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
         }
     }
 
-    if (state.command.is) {
-        const command = std.fmt.allocPrint(state.a, ":{s}", .{state.command.buffer.items}) catch return;
-        defer state.a.free(command);
-
-        for (command, 0..) |ch, i| {
-            writer.draw(
-                .{ .col = view.x + i, .row = view.y + 1 },
-                .{
-                    .background = Color.Black,
-                    .foreground = Color.White,
-                    .content = .{ .Text = ch },
-                },
-            );
-        }
-    }
-
-    const buffer = state.getCurrentBuffer() orelse return;
+    const buffer = state.getCurrentBuffer();
 
     if (state.status_bar_msg) |print_msg| {
         for (print_msg, 0..) |ch, i| {
@@ -74,7 +58,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
 
     {
         const mode = buffer.getKeymap();
-        const modenname = mode.name orelse "UNKNOWN";
+        const modenname = mode.modeid.toString();
 
         for (modenname, 0..) |ch, i| {
             writer.draw(

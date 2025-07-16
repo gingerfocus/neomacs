@@ -42,4 +42,5 @@
 - [ ] RPC
 - [ ] C/Wasi Api
 - [ ] Literate Programming
+- [ ] TigerStyle type fuzzing
 

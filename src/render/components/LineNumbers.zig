@@ -9,7 +9,8 @@ const View = @import("../Component.zig").View;
 
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
     _ = self;
-    const buffer = state.getCurrentBuffer() orelse return;
+    // TODO: this should have buffer as its self
+    const buffer = state.getCurrentBuffer();
     const row_render_start = std.math.sub(usize, buffer.row, view.h) catch 0;
 
     var renderRow: usize = row_render_start;

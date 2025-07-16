@@ -1,21 +1,44 @@
-const root = @import("root.zig");
-const std = @import("std");
-const scu = @import("scured");
-const trm = scu.thermit;
+const root = @import("../root.zig");
+const std = root.std;
+const scu = root.scu;
+const trm = root.trm;
 const lib = root.lib;
-const rc = root.rc;
-
-const lua = @import("lua.zig");
+// const rc = root.rc;
+const lua = root.lua;
 const km = root.km;
-
-const State = @import("State.zig");
+const State = root.State;
 const Buffer = root.Buffer;
-const ModeId = Buffer.ModeId;
 
-const norm = scu.thermit.keys.norm;
-const ctrl = scu.thermit.keys.ctrl;
+const ModeId = km.ModeId;
+
+const norm = trm.keys.norm;
+const ctrl = trm.keys.ctrl;
+
+pub const command = @import("command.zig");
 
 const Ks = trm.KeySymbol;
+
+const action = struct {
+    pub fn move(state: *State, ctx: km.KeyFunctionDataValue) !void {
+        try moveKeep(state, ctx);
+
+        const buffer = state.getCurrentBuffer();
+
+        buffer.target = null; // reset the target
+        // buffer.curkeymap = null;
+    }
+
+    pub fn moveKeep(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+
+        if (buffer.target) |target| {
+            buffer.row = target.end.row;
+            buffer.col = target.end.col;
+        }
+    }
+
+    pub fn none(_: *State) !void {}
+};
 
 // const MAPIDS = struct {
 //     const INSERT = 0;
@@ -27,65 +50,70 @@ pub fn create(
     alloc: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
 ) !km.ModeToKeys {
-    // const fallback = struct {
-    //     fn bufInsert(s: *State) !void {
-    //         if (s.ch.modifiers.bits() == 0) {
-    //             const buf = s.getCurrentBuffer() orelse return;
-    //             try buf.insertCharacter(s.a, s.ch.character);
-    //         }
-    //     }
-    // };
+    const fallback = struct {
+        fn bufInsert(s: *State, _: km.KeyFunctionDataValue) !void {
+            if (s.ch.modifiers.bits() == 0) {
+                const buf = s.getCurrentBuffer();
+                try buf.insertCharacter(s.a, s.ch.character);
+            }
+        }
+    };
 
     const a = arena.allocator();
 
-    var list = km.ModeToKeys{};
+    var modes = km.ModeToKeys{};
 
     const normal = try a.create(km.KeyMaps);
-    normal.* = km.KeyMaps{};
-    normal.name = try a.dupe(u8, "NORMAL");
-    try list.put(alloc, ModeId.Normal, normal);
+    normal.* = km.KeyMaps{ .modeid = ModeId.Normal };
+    try modes.put(alloc, ModeId.Normal, normal);
 
     const insert = try a.create(km.KeyMaps);
-    insert.* = km.KeyMaps{};
-    insert.name = try a.dupe(u8, "INSERT");
-    try list.put(alloc, ModeId.Insert, insert);
+    insert.* = km.KeyMaps{ .modeid = ModeId.Insert };
+    try modes.put(alloc, ModeId.Insert, insert);
 
     const visual = try a.create(km.KeyMaps);
-    visual.* = km.KeyMaps{};
-    visual.name = try a.dupe(u8, "VISUAL");
-    try list.put(alloc, ModeId.Visual, visual);
+    visual.* = km.KeyMaps{ .modeid = ModeId.Visual };
+    try modes.put(alloc, ModeId.Visual, visual);
 
-    // // insert
-    // try initInsertKeys(a, insert);
-    // try insert.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
-    // insert.fallback = .{ .Native = fallback.bufInsert };
-    //
-    // // normal
-    // try initToInsertKeys(a, normal);
-    // try initToVisualKeys(a, normal);
-    // try initMotionKeys(a, normal);
-    // try initNormalKeys(a, normal);
-    // try initModifyingKeys(a, normal);
-    //
-    // // visual
-    // try initMotionKeys(a, visual);
-    // try visual.put(a, norm(Ks.Esc.toBits()), .{ .Native = actions.normal });
-    // try visual.put(a, norm('d'), .{ .Native = actions.delete });
-    // visual.targeter = .{ .Native = km.action.moveKeep };
+    const commandmode = try a.create(km.KeyMaps);
+    commandmode.* = km.KeyMaps{ .modeid = ModeId.Command };
+    try modes.put(alloc, ModeId.Command, commandmode);
 
-    return list;
+    // insert
+    try initInsertKeys(a, insert);
+    try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initstate(actions.normal));
+    insert.targeter = km.KeyFunction.initstate(action.move);
+    insert.fallback = km.KeyFunction.initstate(fallback.bufInsert);
+
+    // normal
+    try initToInsertKeys(a, normal);
+    try initToVisualKeys(a, normal);
+    try initMotionKeys(a, normal, &modes);
+    try initNormalKeys(a, normal);
+    try initModifyingKeys(a, normal, &modes);
+    normal.targeter = km.KeyFunction.initstate(action.move);
+
+    // visual
+    try initMotionKeys(a, visual, &modes);
+    try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initstate(actions.normal));
+    try visual.put(a, norm('d'), km.KeyFunction.initstate(actions.delete));
+    visual.targeter = km.KeyFunction.initstate(action.moveKeep);
+
+    // command
+    try command.init(a, commandmode);
+    return modes;
 }
 
-pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
+pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeToKeys) !void {
     // arrow keys?
-    try maps.put(a, norm('j'), .{ .Native = targeter.motionDown });
-    try maps.put(a, norm('k'), .{ .Native = targeter.motionUp });
-    try maps.put(a, norm('l'), .{ .Native = targeter.right });
-    try maps.put(a, norm('h'), .{ .Native = targeter.left });
+    try maps.put(a, norm('j'), km.KeyFunction.initstate(targeter.motionDown));
+    try maps.put(a, norm('k'), km.KeyFunction.initstate(targeter.motionUp));
+    try maps.put(a, norm('l'), km.KeyFunction.initstate(targeter.right));
+    try maps.put(a, norm('h'), km.KeyFunction.initstate(targeter.left));
 
-    try maps.put(a, norm('G'), .{ .Native = targeter.bot });
-    try maps.put(a, '$', .{ .Native = targeter.motionEnd });
-    try maps.put(a, '0', .{ .Native = targeter.motionBegin });
+    try maps.put(a, norm('G'), km.KeyFunction.initstate(targeter.bot));
+    try maps.put(a, '$', km.KeyFunction.initstate(targeter.motionEnd));
+    try maps.put(a, '0', km.KeyFunction.initstate(targeter.motionBegin));
 
     // motion_e(state);
     // motion_b(state);
@@ -93,41 +121,47 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
 
     //  @as(c_int, 37) buffer_next_brace(buffer);
 
-    const g = try maps.then(a, norm('g'));
-    try g.put(a, norm('g'), .{ .Native = targeter.top });
+    const g = try maps.then(a, modes, norm('g'));
+    try g.put(a, norm('g'), km.KeyFunction.initstate(targeter.top));
+    g.fallback = km.KeyFunction.initbuffer(struct {
+        fn testting(buffer: *Buffer, _: km.KeyFunctionDataValue) anyerror!void {
+            buffer.curkeymap = null;
+            // std.log.debug("testting", .{});
+        }
+    }.testting);
 
     // const gq = try g.then(a, 'q');
     // _ = gq; // autofix
 }
 
-pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
+pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeToKeys) !void {
     // x - buffer_delete_ch(buffer, state);
 
     // c - buffer_replace_ch(buffer, state);
 
-    const d = try maps.then(a, norm('d'));
-    try d.put(a, norm('d'), .{ .Native = targeter.line });
-    try initMotionKeys(a, d);
-    d.targeter = .{ .Native = actions.delete };
+    const d = try maps.then(a, modes, norm('d'));
+    try d.put(a, norm('d'), km.KeyFunction.initstate(targeter.line));
+    try initMotionKeys(a, d, modes);
+    d.targeter = km.KeyFunction.initstate(actions.delete);
 }
 
 fn initToVisualKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
-    try normal.put(a, norm('v'), .{ .Native = visuals.range });
-    try normal.put(a, norm('V'), .{ .Native = visuals.line });
-    try normal.put(a, ctrl('v'), .{ .Native = visuals.block });
+    try normal.put(a, norm('v'), km.KeyFunction.initstate(visuals.range));
+    try normal.put(a, norm('V'), km.KeyFunction.initstate(visuals.line));
+    try normal.put(a, ctrl('v'), km.KeyFunction.initstate(visuals.block));
 }
 
 fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
-    try normal.put(a, norm('i'), .{ .Native = inserts.before });
-    try normal.put(a, norm('I'), .{ .Native = inserts.start });
-    try normal.put(a, norm('a'), .{ .Native = inserts.after });
-    try normal.put(a, norm('A'), .{ .Native = inserts.end });
-    try normal.put(a, norm('o'), .{ .Native = inserts.below });
-    try normal.put(a, norm('O'), .{ .Native = inserts.above });
+    try normal.put(a, norm('i'), km.KeyFunction.initstate(inserts.before));
+    try normal.put(a, norm('I'), km.KeyFunction.initstate(inserts.start));
+    try normal.put(a, norm('a'), km.KeyFunction.initstate(inserts.after));
+    try normal.put(a, norm('A'), km.KeyFunction.initstate(inserts.end));
+    try normal.put(a, norm('o'), km.KeyFunction.initstate(inserts.below));
+    try normal.put(a, norm('O'), km.KeyFunction.initstate(inserts.above));
 }
 
 fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
-    try normal.put(a, norm(':'), .{ .Native = actions.command });
+    try normal.put(a, norm(':'), km.KeyFunction.initbuffer(actions.command));
 
     // if (tools.check_keymaps(buffer, state)) return;
 
@@ -401,23 +435,23 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
     // }
 }
 
-fn deleteBufferCharacter(state: *State) !void {
-    const buffer = state.getCurrentBuffer() orelse return;
+fn deleteBufferCharacter(state: *State, _: km.KeyFunctionDataValue) !void {
+    const buffer = state.getCurrentBuffer();
     try buffer.bufferDelete(state.a);
 }
 
-fn insertTab(state: *State) !void {
-    const buffer = state.getCurrentBuffer() orelse return;
+fn insertTab(state: *State, _: km.KeyFunctionDataValue) !void {
+    const buffer = state.getCurrentBuffer();
     for (0..4) |_| {
         try buffer.insertCharacter(state.a, ' ');
     }
 }
 fn initInsertKeys(a: std.mem.Allocator, insert: *km.KeyMaps) !void {
-    try insert.put(a, norm(Ks.Backspace.toBits()), .{ .Native = deleteBufferCharacter });
+    try insert.put(a, norm(Ks.Backspace.toBits()), km.KeyFunction.initstate(deleteBufferCharacter));
 
-    try insert.put(a, norm(Ks.Tab.toBits()), .{ .Native = insertTab });
+    try insert.put(a, norm(Ks.Tab.toBits()), km.KeyFunction.initstate(insertTab));
 
-    // try insert.put(a, ctrl('s'), .{ .Native = {
+    // try insert.put(a, ctrl('s'), km.KeyFunction.initstate({
     //     handle_save(buffer);
     //     state.*.config.QUIT = 1;
     // } });
@@ -600,295 +634,296 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *km.KeyMaps) !void {
     // }
 }
 
-pub fn handle_search_keys(arg_buffer: *Buffer, state: *State) anyerror!void {
-    _ = arg_buffer; // autofix
-    _ = state; // autofix
-    // var buffer = arg_buffer;
-    // _ = &buffer;
-    // while (true) {
-    //     switch (state.*.ch) {
-    //         @as(c_int, 8), @as(c_int, 127), @as(c_int, 263) => {
-    //             {
-    //                 if (state.*.x != @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) {
-    //                     shift_str_left(state.*.command, &state.*.command_s, blk: {
-    //                         const ref = &state.*.x;
-    //                         ref.* -%= 1;
-    //                         break :blk ref.*;
-    //                     });
-    //                     frontend_move_cursor(state.*.status_bar, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))), state.*.x);
-    //                 }
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 3), @as(c_int, 27) => {
-    //             reset_command(state.*.command, &state.*.command_s);
-    //             state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-    //             break;
-    //         },
-    //         @as(c_int, 10) => {
-    //             {
-    //                 var index_1: usize = search(buffer, state.*.command, state.*.command_s);
-    //                 _ = &index_1;
-    //                 if ((state.*.command_s > @as(usize, @bitCast(@as(c_long, @as(c_int, 2))))) and (strncmp(state.*.command, "s/", @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 2))))) == @as(c_int, 0))) {
-    //                     var str: [128]u8 = undefined;
-    //                     _ = &str;
-    //                     _ = strncpy(@as(*u8, @ptrCast(@alignCast(&str))), state.*.command + @as(usize, @bitCast(@as(isize, @intCast(@as(c_int, 2))))), state.*.command_s -% @as(usize, @bitCast(@as(c_long, @as(c_int, 2)))));
-    //                     str[state.*.command_s -% @as(usize, @bitCast(@as(c_long, @as(c_int, 2))))] = '\x00';
-    //                     var token: *u8 = strtok(@as(*u8, @ptrCast(@alignCast(&str))), "/");
-    //                     _ = &token;
-    //                     var count: c_int = 0;
-    //                     _ = &count;
-    //                     var args: [2][100]u8 = undefined;
-    //                     _ = &args;
-    //                     while (token != @as(*u8, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0))))))) {
-    //                         var temp_buffer: [100]u8 = undefined;
-    //                         _ = &temp_buffer;
-    //                         _ = strcpy(@as(*u8, @ptrCast(@alignCast(&temp_buffer))), token);
-    //                         if (count == @as(c_int, 0)) {
-    //                             _ = strcpy(@as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))]))), @as(*u8, @ptrCast(@alignCast(&temp_buffer))));
-    //                         } else if (count == @as(c_int, 1)) {
-    //                             _ = strcpy(@as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 1)))]))), @as(*u8, @ptrCast(@alignCast(&temp_buffer))));
-    //                         }
-    //                         count += 1;
-    //                         token = strtok(null, "/");
-    //                     }
-    //                     index_1 = search(buffer, @as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))]))), strlen(@as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))])))));
-    //                     find_and_replace(buffer, state, @as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))]))), @as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 1)))]))));
-    //                 }
-    //                 buffer.*.cursor = index_1;
-    //                 state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 19) => {
-    //             {
-    //                 handle_save(buffer);
-    //                 state.*.config.QUIT = 1;
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 260) => {
-    //             if (state.*.x > @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) {
-    //                 state.*.x -%= 1;
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 258) => break,
-    //         @as(c_int, 259) => break,
-    //         @as(c_int, 261) => {
-    //             if (state.*.x < state.*.command_s) {
-    //                 state.*.x +%= 1;
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 410) => {
-    //             frontend_resize_window(state);
-    //             break;
-    //         },
-    //         else => {
-    //             {
-    //                 shift_str_right(state.*.command, &state.*.command_s, state.*.x);
-    //                 state.*.command[
-    //                     (blk: {
-    //                         const ref = &state.*.x;
-    //                         const tmp = ref.*;
-    //                         ref.* +%= 1;
-    //                         break :blk tmp;
-    //                     }) -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))
-    //                 ] = @as(u8, @bitCast(@as(i8, @truncate(state.*.ch))));
-    //             }
-    //             break;
-    //         },
-    //     }
-    //     break;
-    // }
-}
-pub fn handle_visual_keys(buffer: *Buffer, state: *State) anyerror!void {
-    _ = buffer; // autofix
-    _ = state; // autofix
-    // frontend_cursor_visible(@as(c_int, 0));
-    // while (true) {
-    //     switch (state.*.ch) {
-    //         @as(c_int, 3), @as(c_int, 27) => {
-    //             {
-    //                 state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-    //                 frontend_cursor_visible(@as(c_int, 1));
-    //                 state.*.buffer.*.visual = Visual{
-    //                     .start = @as(usize, @bitCast(@as(c_long, @as(c_int, 0)))),
-    //                     .end = @import("std").mem.zeroes(usize),
-    //                     .is_line = 0,
-    //                 };
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 10) => break,
-    //         @as(c_int, 19) => {
-    //             {
-    //                 handle_save(buffer);
-    //                 state.*.config.QUIT = 1;
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 100), @as(c_int, 120) => {
-    //             {
-    //                 var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
-    //                 _ = &cond;
-    //                 var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //                 _ = &start;
-    //                 var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
-    //                 _ = &end;
-    //                 while (true) {
-    //                     var undo: Undo = Undo{
-    //                         .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-    //                         .data = @import("std").mem.zeroes(Data),
-    //                         .start = @import("std").mem.zeroes(usize),
-    //                         .end = @import("std").mem.zeroes(usize),
-    //                     };
-    //                     _ = &undo;
-    //                     undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
-    //                     undo.start = start;
-    //                     state.*.cur_undo = undo;
-    //                     if (!false) break;
-    //                 }
-    //                 buffer_delete_selection(buffer, state, start, end);
-    //                 undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-    //                 state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-    //                 frontend_cursor_visible(@as(c_int, 1));
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 62) => {
-    //             {
-    //                 var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
-    //                 _ = &cond;
-    //                 var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //                 _ = &start;
-    //                 var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
-    //                 _ = &end;
-    //                 var position: usize = buffer.*.cursor +% @as(usize, @bitCast(@as(c_long, state.*.config.indent)));
-    //                 _ = &position;
-    //                 var row: usize = index_get_row(buffer, start);
-    //                 _ = &row;
-    //                 var end_row: usize = index_get_row(buffer, end);
-    //                 _ = &end_row;
-    //                 {
-    //                     var i: usize = row;
-    //                     _ = &i;
-    //                     while (i <= end_row) : (i +%= 1) {
-    //                         buffer_calculate_rows(buffer);
-    //                         buffer.*.cursor = buffer.*.rows.data[i].start;
-    //                         if (state.*.config.indent > @as(c_int, 0)) {
-    //                             {
-    //                                 var i_1: usize = 0;
-    //                                 _ = &i_1;
-    //                                 while (@as(c_int, @bitCast(@as(c_uint, @truncate(i_1)))) < state.*.config.indent) : (i_1 +%= 1) {
-    //                                     buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, ' '))))));
-    //                                 }
-    //                             }
-    //                         } else {
-    //                             buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '\t'))))));
-    //                         }
-    //                     }
-    //                 }
-    //                 buffer.*.cursor = position;
-    //                 state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-    //                 frontend_cursor_visible(@as(c_int, 1));
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 60) => {
-    //             {
-    //                 var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
-    //                 _ = &cond;
-    //                 var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //                 _ = &start;
-    //                 var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
-    //                 _ = &end;
-    //                 var row: usize = index_get_row(buffer, start);
-    //                 _ = &row;
-    //                 var end_row: usize = index_get_row(buffer, end);
-    //                 _ = &end_row;
-    //                 var offset: usize = 0;
-    //                 _ = &offset;
-    //                 {
-    //                     var i: usize = row;
-    //                     _ = &i;
-    //                     while (i <= end_row) : (i +%= 1) {
-    //                         buffer_calculate_rows(buffer);
-    //                         buffer.*.cursor = buffer.*.rows.data[i].start;
-    //                         if (state.*.config.indent > @as(c_int, 0)) {
-    //                             {
-    //                                 var j: usize = 0;
-    //                                 _ = &j;
-    //                                 while (@as(c_int, @bitCast(@as(c_uint, @truncate(j)))) < state.*.config.indent) : (j +%= 1) {
-    //                                     if ((@as(c_int, @bitCast(@as(c_uint, (blk: {
-    //                                         const tmp = @as(c_int, @bitCast(@as(c_uint, buffer.*.data.data[buffer.*.cursor])));
-    //                                         if (tmp >= 0) break :blk __ctype_b_loc().* + @as(usize, @intCast(tmp)) else break :blk __ctype_b_loc().* - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-    //                                     }).*))) & @as(c_int, @bitCast(@as(c_uint, @as(c_ushort, @bitCast(@as(c_short, @truncate(_ISspace)))))))) != 0) {
-    //                                         buffer_delete_char(buffer, state);
-    //                                         offset +%= 1;
-    //                                         buffer_calculate_rows(buffer);
-    //                                     }
-    //                                 }
-    //                             }
-    //                         } else {
-    //                             if ((@as(c_int, @bitCast(@as(c_uint, (blk: {
-    //                                 const tmp = @as(c_int, @bitCast(@as(c_uint, buffer.*.data.data[buffer.*.cursor])));
-    //                                 if (tmp >= 0) break :blk __ctype_b_loc().* + @as(usize, @intCast(tmp)) else break :blk __ctype_b_loc().* - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-    //                             }).*))) & @as(c_int, @bitCast(@as(c_uint, @as(c_ushort, @bitCast(@as(c_short, @truncate(_ISspace)))))))) != 0) {
-    //                                 buffer_delete_char(buffer, state);
-    //                                 offset +%= 1;
-    //                                 buffer_calculate_rows(buffer);
-    //                             }
-    //                         }
-    //                     }
-    //                 }
-    //                 state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-    //                 frontend_cursor_visible(@as(c_int, 1));
-    //             }
-    //             break;
-    //         },
-    //         @as(c_int, 121) => {
-    //             {
-    //                 reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-    //                 var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
-    //                 _ = &cond;
-    //                 var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //                 _ = &start;
-    //                 var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
-    //                 _ = &end;
-    //                 buffer_yank_selection(buffer, state, start, end);
-    //                 buffer.*.cursor = start;
-    //                 state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
-    //                 frontend_cursor_visible(@as(c_int, 1));
-    //                 break;
-    //             }
-    //         },
-    //         else => {
-    //             {
-    //                 if (buffer.*.visual.is_line != 0) {
-    //                     buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].end;
-    //                     if (buffer.*.visual.start >= buffer.*.visual.end) {
-    //                         buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].start;
-    //                         buffer.*.visual.start = buffer.*.rows.data[index_get_row(buffer, buffer.*.visual.start)].end;
-    //                     }
-    //                 } else {
-    //                     buffer.*.visual.end = buffer.*.cursor;
-    //                 }
-    //             }
-    //             break;
-    //         },
-    //     }
-    //     break;
-    // }
-}
+// pub fn handle_search_keys(arg_buffer: *Buffer, state: *State, _: km.KeyFunctionDataValue) anyerror!void {
+//     _ = arg_buffer; // autofix
+//     _ = state; // autofix
+//     var buffer = arg_buffer;
+//     _ = &buffer;
+//     while (true) {
+//         switch (state.*.ch) {
+//             @as(c_int, 8), @as(c_int, 127), @as(c_int, 263) => {
+//                 {
+//                     if (state.*.x != @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) {
+//                         shift_str_left(state.*.command, &state.*.command_s, blk: {
+//                             const ref = &state.*.x;
+//                             ref.* -%= 1;
+//                             break :blk ref.*;
+//                         });
+//                         frontend_move_cursor(state.*.status_bar, @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))), state.*.x);
+//                     }
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 3), @as(c_int, 27) => {
+//                 reset_command(state.*.command, &state.*.command_s);
+//                 state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+//                 break;
+//             },
+//             @as(c_int, 10) => {
+//                 {
+//                     var index_1: usize = search(buffer, state.*.command, state.*.command_s);
+//                     _ = &index_1;
+//                     if ((state.*.command_s > @as(usize, @bitCast(@as(c_long, @as(c_int, 2))))) and (strncmp(state.*.command, "s/", @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 2))))) == @as(c_int, 0))) {
+//                         var str: [128]u8 = undefined;
+//                         _ = &str;
+//                         _ = strncpy(@as(*u8, @ptrCast(@alignCast(&str))), state.*.command + @as(usize, @bitCast(@as(isize, @intCast(@as(c_int, 2))))), state.*.command_s -% @as(usize, @bitCast(@as(c_long, @as(c_int, 2)))));
+//                         str[state.*.command_s -% @as(usize, @bitCast(@as(c_long, @as(c_int, 2))))] = '\x00';
+//                         var token: *u8 = strtok(@as(*u8, @ptrCast(@alignCast(&str))), "/");
+//                         _ = &token;
+//                         var count: c_int = 0;
+//                         _ = &count;
+//                         var args: [2][100]u8 = undefined;
+//                         _ = &args;
+//                         while (token != @as(*u8, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0))))))) {
+//                             var temp_buffer: [100]u8 = undefined;
+//                             _ = &temp_buffer;
+//                             _ = strcpy(@as(*u8, @ptrCast(@alignCast(&temp_buffer))), token);
+//                             if (count == @as(c_int, 0)) {
+//                                 _ = strcpy(@as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))]))), @as(*u8, @ptrCast(@alignCast(&temp_buffer))));
+//                             } else if (count == @as(c_int, 1)) {
+//                                 _ = strcpy(@as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 1)))]))), @as(*u8, @ptrCast(@alignCast(&temp_buffer))));
+//                             }
+//                             count += 1;
+//                             token = strtok(null, "/");
+//                         }
+//                         index_1 = search(buffer, @as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))]))), strlen(@as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))])))));
+//                         find_and_replace(buffer, state, @as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 0)))]))), @as(*u8, @ptrCast(@alignCast(&args[@as(c_uint, @intCast(@as(c_int, 1)))]))));
+//                     }
+//                     buffer.*.cursor = index_1;
+//                     state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 19) => {
+//                 {
+//                     handle_save(buffer);
+//                     state.*.config.QUIT = 1;
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 260) => {
+//                 if (state.*.x > @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) {
+//                     state.*.x -%= 1;
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 258) => break,
+//             @as(c_int, 259) => break,
+//             @as(c_int, 261) => {
+//                 if (state.*.x < state.*.command_s) {
+//                     state.*.x +%= 1;
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 410) => {
+//                 frontend_resize_window(state);
+//                 break;
+//             },
+//             else => {
+//                 {
+//                     shift_str_right(state.*.command, &state.*.command_s, state.*.x);
+//                     state.*.command[
+//                         (blk: {
+//                             const ref = &state.*.x;
+//                             const tmp = ref.*;
+//                             ref.* +%= 1;
+//                             break :blk tmp;
+//                         }) -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))
+//                     ] = @as(u8, @bitCast(@as(i8, @truncate(state.*.ch))));
+//                 }
+//                 break;
+//             },
+//         }
+//         break;
+//     }
+// }
+
+// pub fn handle_visual_keys(buffer: *Buffer, state: *State, _: km.KeyFunctionDataValue) anyerror!void {
+//     _ = buffer; // autofix
+//     _ = state; // autofix
+//     frontend_cursor_visible(@as(c_int, 0));
+//     while (true) {
+//         switch (state.*.ch) {
+//             @as(c_int, 3), @as(c_int, 27) => {
+//                 {
+//                     state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+//                     frontend_cursor_visible(@as(c_int, 1));
+//                     state.*.buffer.*.visual = Visual{
+//                         .start = @as(usize, @bitCast(@as(c_long, @as(c_int, 0)))),
+//                         .end = @import("std").mem.zeroes(usize),
+//                         .is_line = 0,
+//                     };
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 10) => break,
+//             @as(c_int, 19) => {
+//                 {
+//                     handle_save(buffer);
+//                     state.*.config.QUIT = 1;
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 100), @as(c_int, 120) => {
+//                 {
+//                     var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+//                     _ = &cond;
+//                     var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
+//                     _ = &start;
+//                     var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+//                     _ = &end;
+//                     while (true) {
+//                         var undo: Undo = Undo{
+//                             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
+//                             .data = @import("std").mem.zeroes(Data),
+//                             .start = @import("std").mem.zeroes(usize),
+//                             .end = @import("std").mem.zeroes(usize),
+//                         };
+//                         _ = &undo;
+//                         undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
+//                         undo.start = start;
+//                         state.*.cur_undo = undo;
+//                         if (!false) break;
+//                     }
+//                     buffer_delete_selection(buffer, state, start, end);
+//                     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
+//                     state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+//                     frontend_cursor_visible(@as(c_int, 1));
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 62) => {
+//                 {
+//                     var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+//                     _ = &cond;
+//                     var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
+//                     _ = &start;
+//                     var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+//                     _ = &end;
+//                     var position: usize = buffer.*.cursor +% @as(usize, @bitCast(@as(c_long, state.*.config.indent)));
+//                     _ = &position;
+//                     var row: usize = index_get_row(buffer, start);
+//                     _ = &row;
+//                     var end_row: usize = index_get_row(buffer, end);
+//                     _ = &end_row;
+//                     {
+//                         var i: usize = row;
+//                         _ = &i;
+//                         while (i <= end_row) : (i +%= 1) {
+//                             buffer_calculate_rows(buffer);
+//                             buffer.*.cursor = buffer.*.rows.data[i].start;
+//                             if (state.*.config.indent > @as(c_int, 0)) {
+//                                 {
+//                                     var i_1: usize = 0;
+//                                     _ = &i_1;
+//                                     while (@as(c_int, @bitCast(@as(c_uint, @truncate(i_1)))) < state.*.config.indent) : (i_1 +%= 1) {
+//                                         buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, ' '))))));
+//                                     }
+//                                 }
+//                             } else {
+//                                 buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '\t'))))));
+//                             }
+//                         }
+//                     }
+//                     buffer.*.cursor = position;
+//                     state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+//                     frontend_cursor_visible(@as(c_int, 1));
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 60) => {
+//                 {
+//                     var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+//                     _ = &cond;
+//                     var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
+//                     _ = &start;
+//                     var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+//                     _ = &end;
+//                     var row: usize = index_get_row(buffer, start);
+//                     _ = &row;
+//                     var end_row: usize = index_get_row(buffer, end);
+//                     _ = &end_row;
+//                     var offset: usize = 0;
+//                     _ = &offset;
+//                     {
+//                         var i: usize = row;
+//                         _ = &i;
+//                         while (i <= end_row) : (i +%= 1) {
+//                             buffer_calculate_rows(buffer);
+//                             buffer.*.cursor = buffer.*.rows.data[i].start;
+//                             if (state.*.config.indent > @as(c_int, 0)) {
+//                                 {
+//                                     var j: usize = 0;
+//                                     _ = &j;
+//                                     while (@as(c_int, @bitCast(@as(c_uint, @truncate(j)))) < state.*.config.indent) : (j +%= 1) {
+//                                         if ((@as(c_int, @bitCast(@as(c_uint, (blk: {
+//                                             const tmp = @as(c_int, @bitCast(@as(c_uint, buffer.*.data.data[buffer.*.cursor])));
+//                                             if (tmp >= 0) break :blk __ctype_b_loc().* + @as(usize, @intCast(tmp)) else break :blk __ctype_b_loc().* - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
+//                                         }).*))) & @as(c_int, @bitCast(@as(c_uint, @as(c_ushort, @bitCast(@as(c_short, @truncate(_ISspace)))))))) != 0) {
+//                                             buffer_delete_char(buffer, state);
+//                                             offset +%= 1;
+//                                             buffer_calculate_rows(buffer);
+//                                         }
+//                                     }
+//                                 }
+//                             } else {
+//                                 if ((@as(c_int, @bitCast(@as(c_uint, (blk: {
+//                                     const tmp = @as(c_int, @bitCast(@as(c_uint, buffer.*.data.data[buffer.*.cursor])));
+//                                     if (tmp >= 0) break :blk __ctype_b_loc().* + @as(usize, @intCast(tmp)) else break :blk __ctype_b_loc().* - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
+//                                 }).*))) & @as(c_int, @bitCast(@as(c_uint, @as(c_ushort, @bitCast(@as(c_short, @truncate(_ISspace)))))))) != 0) {
+//                                     buffer_delete_char(buffer, state);
+//                                     offset +%= 1;
+//                                     buffer_calculate_rows(buffer);
+//                                 }
+//                             }
+//                         }
+//                     }
+//                     state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+//                     frontend_cursor_visible(@as(c_int, 1));
+//                 }
+//                 break;
+//             },
+//             @as(c_int, 121) => {
+//                 {
+//                     reset_command(state.*.clipboard.str, &state.*.clipboard.len);
+//                     var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+//                     _ = &cond;
+//                     var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
+//                     _ = &start;
+//                     var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+//                     _ = &end;
+//                     buffer_yank_selection(buffer, state, start, end);
+//                     buffer.*.cursor = start;
+//                     state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
+//                     frontend_cursor_visible(@as(c_int, 1));
+//                     break;
+//                 }
+//             },
+//             else => {
+//                 {
+//                     if (buffer.*.visual.is_line != 0) {
+//                         buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].end;
+//                         if (buffer.*.visual.start >= buffer.*.visual.end) {
+//                             buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].start;
+//                             buffer.*.visual.start = buffer.*.rows.data[index_get_row(buffer, buffer.*.visual.start)].end;
+//                         }
+//                     } else {
+//                         buffer.*.visual.end = buffer.*.cursor;
+//                     }
+//                 }
+//                 break;
+//             },
+//         }
+//         break;
+//     }
+// }
 
 // ----------------------------------------------------------------------------
 
 // const Command_Token = cmmd.Command_Token;
 //
-// pub extern fn lex_command(state: *State, command: String_View, token_s: *usize) *Command_Token;
-// pub extern fn execute_command(buffer: *Buffer, state: *State, command: *Command_Token, command_s: usize) c_int;
+// pub extern fn lex_command(state: *State, _: km.KeyFunctionDataValue, command: String_View, token_s: *usize) *Command_Token;
+// pub extern fn execute_command(buffer: *Buffer, state: *State, _: km.KeyFunctionDataValue, command: *Command_Token, command_s: usize) c_int;
 //
 // pub fn search(arg_buffer: *Buffer, arg_command: *u8, arg_command_s: usize) usize {
 //     var buffer = arg_buffer;
@@ -910,7 +945,7 @@ pub fn handle_visual_keys(buffer: *Buffer, state: *State) anyerror!void {
 //     }
 //     return buffer.*.cursor;
 // }
-// pub fn replace(arg_buffer: *Buffer, arg_state: *State, arg_new_str: *u8, arg_old_str_s: usize, arg_new_str_s: usize) void {
+// pub fn replace(arg_buffer: *Buffer, arg_state: *State, _: km.KeyFunctionDataValue, arg_new_str: *u8, arg_old_str_s: usize, arg_new_str_s: usize) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
 //     var state = arg_state;
@@ -948,7 +983,7 @@ pub fn handle_visual_keys(buffer: *Buffer, state: *State) anyerror!void {
 //         }
 //     }
 // }
-// pub fn find_and_replace(arg_buffer: *Buffer, arg_state: *State, arg_old_str: *u8, arg_new_str: *u8) void {
+// pub fn find_and_replace(arg_buffer: *Buffer, arg_state: *State, _: km.KeyFunctionDataValue, arg_old_str: *u8, arg_new_str: *u8) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
 //     var state = arg_state;
@@ -969,7 +1004,7 @@ pub fn handle_visual_keys(buffer: *Buffer, state: *State) anyerror!void {
 //     }
 // }
 
-// pub fn buffer_handle_undo(arg_state: *State, arg_undo: *Undo) void {
+// pub fn buffer_handle_undo(arg_state: *State, _: km.KeyFunctionDataValue, arg_undo: *Undo) void {
 //     var state = arg_state;
 //     _ = &state;
 //     var undo = arg_undo;
@@ -1088,10 +1123,10 @@ pub fn handle_visual_keys(buffer: *Buffer, state: *State) anyerror!void {
 /// A collection of key targeters that can be applied in different contexts.
 const targeter = struct {
     /// Selects `count` full lines starting from the current cursor position.
-    fn line(state: *State) !void {
+    fn line(state: *State, _: km.KeyFunctionDataValue) !void {
         root.log(@src(), .debug, "targeter line", .{});
 
-        const buffer = state.getCurrentBuffer() orelse return;
+        const buffer = state.getCurrentBuffer();
 
         const start = lib.Vec2{ .row = buffer.row, .col = 0 };
 
@@ -1108,8 +1143,8 @@ const targeter = struct {
         };
     }
 
-    fn motionDown(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn motionDown(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
         const count = state.takeRepeating();
 
         const start = buffer.position();
@@ -1120,8 +1155,8 @@ const targeter = struct {
         buffer.updateEnd(start, end);
     }
 
-    fn motionUp(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn motionUp(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         const count = state.takeRepeating();
 
@@ -1131,8 +1166,8 @@ const targeter = struct {
         // buffer.updatePostionKeepRow();
     }
 
-    fn right(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn right(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         const count = state.takeRepeating();
 
@@ -1144,8 +1179,8 @@ const targeter = struct {
         }
     }
 
-    fn left(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn left(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         const count = state.takeRepeating();
 
@@ -1153,8 +1188,8 @@ const targeter = struct {
         buffer.target = .{ .start = start, .end = buffer.moveLeft(start, count) };
     }
 
-    fn top(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn top(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         const count = state.takeRepeating();
 
@@ -1163,8 +1198,8 @@ const targeter = struct {
         // buffer.updatePostionKeepRow();
     }
 
-    fn bot(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn bot(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         _ = state.takeRepeating();
 
@@ -1172,8 +1207,8 @@ const targeter = struct {
         buffer.row = buffer.lines.items.len - 1;
     }
 
-    pub fn motionBegin(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    pub fn motionBegin(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         buffer.target = .{
             .mode = .Range,
@@ -1188,8 +1223,8 @@ const targeter = struct {
         };
     }
 
-    pub fn motionEnd(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    pub fn motionEnd(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         buffer.target = .{
             .mode = .Range,
@@ -1208,7 +1243,7 @@ const targeter = struct {
         // buffer.col = row.end - row.start;
     }
 
-    // pub fn motion_e(arg_state: *State) void {
+    // pub fn motion_e(arg_state: *State, _: km.KeyFunctionDataValue) void {
     //     var state = arg_state;
     //     _ = &state;
     //     var start: usize = state.*.buffer.*.cursor;
@@ -1242,7 +1277,7 @@ const targeter = struct {
     //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
     // }
 
-    // pub fn motion_b(arg_state: *State) void {
+    // pub fn motion_b(arg_state: *State, _: km.KeyFunctionDataValue) void {
     //     var state = arg_state;
     //     _ = &state;
     //     var buffer: *Buffer = state.*.buffer;
@@ -1281,7 +1316,7 @@ const targeter = struct {
     //     buffer_delete_selection(buffer, state, start, end);
     //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
     // }
-    // pub fn motion_w(arg_state: *State) void {
+    // pub fn motion_w(arg_state: *State, _: km.KeyFunctionDataValue) void {
     //     var state = arg_state;
     //     _ = &state;
     //     var buffer: *Buffer = state.*.buffer;
@@ -1320,8 +1355,8 @@ const targeter = struct {
 
 /// A collection of functions that act on a target.
 const actions = struct {
-    fn delete(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn delete(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         root.log(@src(), .debug, "delete motion", .{});
 
@@ -1338,12 +1373,12 @@ const actions = struct {
         buffer.setMode(ModeId.Normal);
     }
 
-    fn command(state: *State) anyerror!void {
-        state.command.is = true;
+    fn command(buffer: *Buffer, _: ?*km.KeyFunctionDataPtr) anyerror!void {
+        buffer.setMode(Buffer.ModeId.Command);
     }
 
-    fn normal(state: *State) anyerror!void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn normal(state: *State, _: km.KeyFunctionDataValue) anyerror!void {
+        const buffer = state.getCurrentBuffer();
         buffer.setMode(ModeId.Normal);
         buffer.target = null;
 
@@ -1369,15 +1404,15 @@ const actions = struct {
 // TODO: remake this functions by just saying, move to target, then go insert
 // using the appropriate abstractions
 const inserts = struct {
-    fn before(state: *State) !void {
+    fn before(state: *State, _: km.KeyFunctionDataValue) !void {
         root.log(@src(), .debug, "inserts before", .{});
-        const buffer = state.getCurrentBuffer() orelse return;
+        const buffer = state.getCurrentBuffer();
         state.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
 
-    fn after(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn after(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         // targeter.right()
         // buffer.moveRight(buffer.position(), 1);
@@ -1389,8 +1424,8 @@ const inserts = struct {
         buffer.setMode(ModeId.Insert);
     }
 
-    fn start(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn start(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
         // const row = buffer.rows.items[buffer.row];
         //
         // buffer.cursor = row.start;
@@ -1400,8 +1435,8 @@ const inserts = struct {
         buffer.setMode(ModeId.Insert);
     }
 
-    fn end(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn end(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
         // const row = buffer.rows.items[buffer.row];
         //
         // buffer.cursor = row.end;
@@ -1411,8 +1446,8 @@ const inserts = struct {
         buffer.setMode(ModeId.Insert);
     }
 
-    fn above(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn above(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
 
         buffer.col = 0;
         try buffer.newlineInsert(state.a);
@@ -1425,8 +1460,8 @@ const inserts = struct {
         buffer.setMode(ModeId.Insert);
     }
 
-    fn below(state: *State) !void {
-        const buffer = state.getCurrentBuffer() orelse return;
+    fn below(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
         const line = &buffer.lines.items[buffer.row];
 
         buffer.col = line.items.len;
@@ -1438,10 +1473,10 @@ const inserts = struct {
 };
 
 const visuals = struct {
-    fn setModeMeta(comptime mode: Buffer.VisualMode) (*const fn (*State) anyerror!void) {
+    fn setModeMeta(comptime mode: Buffer.VisualMode) (*const fn (*State, km.KeyFunctionDataValue) anyerror!void) {
         return struct {
-            fn set(state: *State) !void {
-                const buffer = state.getCurrentBuffer() orelse return;
+            fn set(state: *State, _: km.KeyFunctionDataValue) !void {
+                const buffer = state.getCurrentBuffer();
                 const cur = buffer.position();
 
                 buffer.setMode(ModeId.Visual);

@@ -30,22 +30,14 @@ col: usize = 0,
 // cursor: lib.Vec2 = .{ .row = 0, .col = 0 },
 // desired: lib.Vec2 = .{ .row = 0, .col = 0 },
 
+/// Must be arena allocated, will not be freed
 filename: []const u8,
+hasbackingfile: bool,
 
-/// Not owned
-/// TODO: do ref counting for this
+/// Not owned, unless this is the scratch buffer
 keymaps: *km.ModeToKeys,
 
 curkeymap: ?*km.KeyMaps = null,
-
-pub fn getKeymap(buffer: *Buffer) *km.KeyMaps {
-    return buffer.curkeymap orelse return buffer.keymaps.get(Buffer.ModeId.Normal).?;
-}
-
-pub fn setMode(buffer: *Buffer, mode: Buffer.ModeId) void {
-    // buffer.mode = mode;
-    buffer.curkeymap = buffer.keymaps.get(mode);
-}
 
 const Line = std.ArrayListUnmanaged(u8);
 
@@ -65,18 +57,6 @@ const Line = std.ArrayListUnmanaged(u8);
 //     }
 // };
 
-pub fn updateEnd(buffer: *Buffer, start: lib.Vec2, end: lib.Vec2) void {
-    if (buffer.target) |*t| {
-        // TODO: what do I do with start here?
-        t.end = end;
-    } else {
-        buffer.target = .{
-            .mode = .Range,
-            .start = start,
-            .end = end,
-        };
-    }
-}
 pub const Visual = struct {
     mode: VisualMode = .Range,
     start: lib.Vec2,
@@ -110,13 +90,11 @@ pub fn initEmpty(
     };
 }
 
-pub fn initFile(
+pub fn init(
     a: std.mem.Allocator,
     keymaps: *km.ModeToKeys,
     filename: []const u8,
 ) !Buffer {
-    // const maps = try state.maps.clone(state.a);
-
     var lines = std.ArrayList(Line).init(a);
 
     if (std.fs.cwd().openFile(filename, .{})) |file| {
@@ -137,7 +115,8 @@ pub fn initFile(
 
     return Buffer{
         .id = idgen.next(),
-        .filename = try a.dupe(u8, filename),
+        .filename = filename,
+        .hasbackingfile = true,
         .lines = lines.moveToUnmanaged(),
         .keymaps = keymaps,
     };
@@ -149,10 +128,46 @@ pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
     }
     buffer.lines.deinit(a);
 
-    a.free(buffer.filename);
-
     buffer.* = undefined;
 }
+
+pub fn getKeymap(buffer: *Buffer) *km.KeyMaps {
+    return buffer.curkeymap orelse return buffer.keymaps.get(Buffer.ModeId.Normal).?;
+}
+
+pub fn setMode(buffer: *Buffer, mode: Buffer.ModeId) void {
+    // buffer.mode = mode;
+    const keymap = buffer.keymaps.get(mode) orelse {
+        buffer.curkeymap = null;
+        // std.debug.print("no keymap for mode: {any}\n", .{mode});
+        return;
+    };
+    // std.debug.print("set keymap for mode: {any}\n", .{mode});
+    buffer.curkeymap = keymap;
+}
+
+pub fn updateEnd(buffer: *Buffer, start: lib.Vec2, end: lib.Vec2) void {
+    if (buffer.target) |*t| {
+        // TODO: what do I do with start here?
+        t.end = end;
+    } else {
+        buffer.target = .{
+            .mode = .Range,
+            .start = start,
+            .end = end,
+        };
+    }
+}
+
+// keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
+
+// pub fn edit(a: std.mem.Allocator, file: []const u8) !Buffer {
+//     return .{
+//         .id = id.next(),
+//         .data = .{ .Edit = try Buffer.init(a, file) },
+//         .mode = .normal,
+//     };
+// }
 
 pub fn position(buffer: *Buffer) lib.Vec2 {
     if (buffer.target) |t| return t.end;
@@ -656,6 +671,8 @@ pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
 }
 
 pub fn save(buffer: *Buffer) !void {
+    if (buffer.filename.len == 0) return;
+
     const f = try std.fs.cwd().createFile(buffer.filename, .{});
     defer f.close();
 
@@ -666,9 +683,9 @@ pub fn save(buffer: *Buffer) !void {
 }
 
 /// using static for id assignment
-const idgen = struct {
+pub const idgen = struct {
     var count: usize = 0;
-    fn next() usize {
+    pub fn next() usize {
         count += 1;
         return count;
     }
@@ -693,20 +710,29 @@ pub const ModeId = struct {
 
     pub fn toString(self: ModeId) []const u8 {
         return switch (self._) {
+            0 => "NULL",
             'n' => "NORMAL",
             'i' => "INSERT",
             'v' => "VISUAL",
+            'c' => "COMMAND",
             else => "UNKNOWN",
         };
+    }
+
+    pub fn chain(self: ModeId, next: u16) ModeId {
+        // TODO: check for uniquness and overflow
+        return .{ ._ = self._ + next };
     }
 
     // const static = struct {
     //     const id: usize = 65535;
     // };
 
+    pub const Null: ModeId = .{ ._ = 0 };
     pub const Normal: ModeId = .{ ._ = 'n' };
     pub const Visual: ModeId = .{ ._ = 'v' };
     pub const Insert: ModeId = .{ ._ = 'i' };
+    pub const Command: ModeId = .{ ._ = 'c' };
 
     test "MapId.from" {
         // I would be interested to see if these work on little endian machines

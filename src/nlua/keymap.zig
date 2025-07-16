@@ -28,7 +28,7 @@ pub fn set(L: ?*lua.State) callconv(.C) c_int {
         root.log(@src(), .err, "neomacs.keymap.set: expected lhs", .{});
         return 0;
     };
-    const rhs = root.km.KeyFunction.initLua(L, 3) catch |err| {
+    const rhs = root.km.KeyFunction.initlua(L, 3) catch |err| {
         root.log(@src(), .err, "neomacs.keymap.set: expected rhs", .{});
         std.debug.print("error: {any}\n", .{err});
 
@@ -44,7 +44,7 @@ pub fn set(L: ?*lua.State) callconv(.C) c_int {
     const state = root.state();
     const mode = root.km.ModeId.from(modestr);
 
-    const maps = state.namedmaps.get(mode) orelse {
+    const maps = state.scratchbuffer.keymaps.get(mode) orelse {
         // TODO: make a new mode for this
         // use getOrPut
         return 0;

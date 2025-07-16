@@ -7,13 +7,14 @@ pub const trm = @import("thermit");
 pub const alloc = @import("alloc.zig");
 pub const Args = @import("Args.zig");
 pub const Buffer = @import("Buffer.zig");
-pub const km = @import("km/keymaps.zig");
+pub const km = @import("km/root.zig");
 pub const lib = @import("lib.zig");
 pub const lua = @import("lua.zig");
 pub const render = @import("render/root.zig");
 pub const State = @import("State.zig");
 pub const zss = @import("zss.zig");
 pub const Config = @import("Config.zig");
+pub const keys = @import("keys/root.zig");
 
 // pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
 

@@ -8,4 +8,3 @@ pub fn quit(_: ?*lua.State) callconv(.C) c_int {
     root.state().config.QUIT = true;
     return 0;
 }
-

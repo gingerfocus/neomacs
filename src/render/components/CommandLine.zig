@@ -9,8 +9,11 @@ const View = @import("../Component.zig").View;
 
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
     _ = self;
-    if (state.command.is) {
-        const command = std.fmt.allocPrint(state.a, ":{s}", .{state.command.buffer.items}) catch return;
+
+    // state.getCurrentBuffer().
+
+    if (state.getKeyMaps().modeid._ == root.Buffer.ModeId.Command._) {
+        const command = std.fmt.allocPrint(state.a, ":{s}", .{state.commandbuffer.items}) catch return;
         defer state.a.free(command);
 
         for (command, 0..) |ch, i| {
