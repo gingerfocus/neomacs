@@ -12,7 +12,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
 
     // state.getCurrentBuffer().
 
-    if (state.commandbuffer.items.len > 0) {
+    if (state.getKeyMaps().modeid._ == root.Buffer.ModeId.Command._) {
         const command = std.fmt.allocPrint(state.a, ":{s}", .{state.commandbuffer.items}) catch return;
         defer state.a.free(command);
 

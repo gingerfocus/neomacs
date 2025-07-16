@@ -187,7 +187,8 @@ pub fn press(state: *State, ke: trm.KeyEvent) !void {
 }
 
 // TODO: make a const and mut version
-fn getKeyMaps(state: *State) *km.KeyMaps {
+pub fn getKeyMaps(state: *State) *km.KeyMaps {
+    // std.debug.print("cmd: {s}\n", .{state.commandbuffer.items});
     const buffer = state.getCurrentBuffer();
     if (buffer.curkeymap) |map| return map;
 

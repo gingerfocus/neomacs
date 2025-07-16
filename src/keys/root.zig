@@ -78,7 +78,7 @@ pub fn create(
     try modes.put(alloc, ModeId.Visual, visual);
 
     const commandmode = try a.create(km.KeyMaps);
-    commandmode.* = km.KeyMaps{ .modeid = ModeId.Visual };
+    commandmode.* = km.KeyMaps{ .modeid = ModeId.Command };
     try modes.put(alloc, ModeId.Command, commandmode);
 
     // insert
@@ -126,7 +126,7 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeTo
     g.fallback = km.KeyFunction.initbuffer(struct {
         fn testting(buffer: *Buffer, _: km.KeyFunctionDataValue) anyerror!void {
             buffer.curkeymap = null;
-            std.log.debug("testting", .{});
+            // std.log.debug("testting", .{});
         }
     }.testting);
 
