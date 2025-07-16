@@ -1,6 +1,8 @@
+local rt = require("runtime")
+
 if neon then
     print("neon loaded")
-    neon.compat()
+    rt.compat()
 end
 
 _G.vim = vim
@@ -36,20 +38,22 @@ end
 
 -- vim.keymap.set("n", "<leader>t", ":Test<CR>")
 
+-- vim.print(neon.cmd)
+-- for k, v in pairs(vim.cmd) do
+--     vim.print(k, v)
+-- end
+
 -- cool example of shimming the editor function to write a file with a template
 local edit = vim.cmd.e
-vim.print(neon.cmd)
-for k, v in pairs(vim.cmd) do
-    vim.print(k, v)
-end
-
 vim.cmd.e = function(file)
     file = file or "tmp"
     -- vim.loop.stat(file, function(err, stat) end)
     local stat = vim.loop.stat(file)
     if not stat then
-        vim.loop.write(file, "template file\n")
+        vim.loop:write(file, "template file\n", {
+            after = function()
+                edit(file)
+            end,
+        })
     end
-
-    edit(file)
 end

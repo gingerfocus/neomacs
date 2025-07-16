@@ -19,53 +19,57 @@ const thunk = struct {
 // TODO: move to lua file
 pub const LuaRef = c_int;
 
-// pub const KeyDataptr = lib.types.TypeErasedData;
-pub const KeyDataptr = anyopaque;
+pub const KeyDataPtr = lib.types.TypeErasedData;
+// pub const KeyDataPtr = anyopaque;
 
-// dataptr: ?*lib.types.TypeErasedData,
-
+dataptr: ?*lib.types.TypeErasedData = null,
 function: FunctionAction,
 
 const Self = @This();
 
-pub fn initstate(func: *const fn (*State, ?*KeyDataptr) anyerror!void) Self {
+pub fn initstate(func: *const fn (*State, ?*KeyDataPtr) anyerror!void) Self {
     return .{
-        // .dataptr = null,
-        .function = .{ .Native = func },
+        .function = .{ .state = func },
     };
 }
 
-pub fn initbuffer(func: *const fn (*Buffer, ?*KeyDataptr) anyerror!void) Self {
+pub fn initbuffer(func: *const fn (*Buffer, ?*KeyDataPtr) anyerror!void) Self {
     return .{
-        // .dataptr = null,
         .function = .{ .buffer = func },
     };
 }
 
 pub fn initlua(L: ?*lua.State, index: LuaRef) !Self {
+    if (lua.sys.lua_type(L, index) != lua.sys.LUA_TFUNCTION) {
+        return error.NotALuaFunction;
+    }
+
+    lua.sys.lua_pushvalue(L, index);
+    const ref = lua.sys.luaL_ref(L, lua.sys.LUA_REGISTRYINDEX);
+    if (ref <= 0) return error.CantMakeReference;
+
     return .{
-        // .dataptr = null,
-        .function = try FunctionAction.initLua(L, index),
+        .function = .{ .LuaFnc = ref },
     };
 }
 
-// pub fn setdata(self: *Self, comptime T: type, alloc: std.mem.Allocator, value: T) !void {
-//     self.dataptr = try lib.types.TypeErased(T).init(alloc, value);
-// }
-//
-// pub fn getdata(self: *Self, comptime T: type) ?*T {
-//     if (self.dataptr) |ptr| return ptr.get(T);
-//     return null;
-// }
+pub fn setdata(self: *Self, comptime T: type, alloc: std.mem.Allocator, value: T) !void {
+    self.dataptr = try lib.types.TypeErased(T).init(alloc, value);
+}
+
+pub fn getdata(self: *Self, comptime T: type) ?*T {
+    if (self.dataptr) |ptr| return ptr.get(T);
+    return null;
+}
 
 pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
-    // if (self.dataptr) |ptr| ptr.deinit(a);
+    if (self.dataptr) |ptr| ptr.deinit(a);
 
     switch (self.function) {
-        .SubMap => |map| {
-            map.deinit(L, a);
-            a.destroy(map);
-        },
+        // .SubMap => |map| {
+        //     map.deinit(L, a);
+        //     a.destroy(map);
+        // },
         .LuaFnc => |id| {
             lua.sys.luaL_unref(L, lua.sys.LUA_REGISTRYINDEX, id);
         },
@@ -75,11 +79,11 @@ pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
 
 pub fn run(self: Self, state: *State) anyerror!void {
     return switch (self.function) {
-        .Native => |fc| {
-            try fc(state, null);
+        .state => |fc| {
+            // const buffer = state.getCurrentBuffer();
+            // buffer.curkeymap = null;
 
-            const buffer = state.getCurrentBuffer();
-            buffer.curkeymap = null;
+            try fc(state, self.dataptr);
         },
         .LuaFnc => |id| {
             std.debug.assert(id > 0);
@@ -91,35 +95,30 @@ pub fn run(self: Self, state: *State) anyerror!void {
                 return error.ExecuteLuaCallback;
             }
 
+            // const buffer = state.getCurrentBuffer();
+            // buffer.curkeymap = null;
+        },
+        .buffer => |fc| {
             const buffer = state.getCurrentBuffer();
             buffer.curkeymap = null;
+            try fc(buffer, self.dataptr);
         },
-        .SubMap => |map| {
+
+        .setmod => |mode| {
             const buffer = state.getCurrentBuffer();
-            buffer.curkeymap = map;
+            buffer.setMode(mode);
+
+            // std.debug.print("set mode: {any}\n", .{mode});
+            // km.debuginner(buffer.curkeymap.?, 1);
+
+            // std.log.debug("keys: {any}", .{buffer.curkeymap.?.keys.keys()});
         },
-        else => unreachable,
     };
 }
 
-// TODO: inline these fuction calls, just make this a data class
 const FunctionAction = union(enum) {
-    Native: *const fn (*State, ?*KeyDataptr) anyerror!void,
     LuaFnc: LuaRef,
-    SubMap: *KeyMaps,
-    buffer: *const fn (*Buffer, ?*KeyDataptr) anyerror!void,
-
-    pub fn initLua(L: ?*lua.State, index: LuaRef) !FunctionAction {
-        if (lua.sys.lua_type(L, index) != lua.sys.LUA_TFUNCTION) {
-            return error.NotALuaFunction;
-        }
-
-        lua.sys.lua_pushvalue(L, index);
-        const ref = lua.sys.luaL_ref(L, lua.sys.LUA_REGISTRYINDEX);
-        if (ref > 0) {
-            return .{ .LuaFnc = ref };
-        } else {
-            return error.CantMakeReference;
-        }
-    }
+    setmod: km.ModeId,
+    state: *const fn (*State, ?*KeyDataPtr) anyerror!void,
+    buffer: *const fn (*Buffer, ?*KeyDataPtr) anyerror!void,
 };

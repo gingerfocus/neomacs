@@ -72,7 +72,7 @@ pub fn init(
 
     return Buffer{
         .id = idgen.next(),
-        .filename = try a.dupe(u8, filename),
+        .filename = filename,
         .hasbackingfile = true,
         .lines = lines.moveToUnmanaged(),
         .keymaps = keymaps,
@@ -94,7 +94,13 @@ pub fn getKeymap(buffer: *Buffer) *km.KeyMaps {
 
 pub fn setMode(buffer: *Buffer, mode: Buffer.ModeId) void {
     // buffer.mode = mode;
-    buffer.curkeymap = buffer.keymaps.get(mode);
+    const keymap = buffer.keymaps.get(mode) orelse {
+        buffer.curkeymap = null;
+        // std.debug.print("no keymap for mode: {any}\n", .{mode});
+        return;
+    };
+    // std.debug.print("set keymap for mode: {any}\n", .{mode});
+    buffer.curkeymap = keymap;
 }
 
 pub fn updateEnd(buffer: *Buffer, start: lib.Vec2, end: lib.Vec2) void {
@@ -665,8 +671,14 @@ pub const ModeId = struct {
             'n' => "NORMAL",
             'i' => "INSERT",
             'v' => "VISUAL",
+            'c' => "COMMAND",
             else => "UNKNOWN",
         };
+    }
+
+    pub fn chain(self: ModeId, next: u16) ModeId {
+        // TODO: check for uniquness and overflow
+        return .{ ._ = self._ + next };
     }
 
     // const static = struct {
@@ -677,6 +689,7 @@ pub const ModeId = struct {
     pub const Normal: ModeId = .{ ._ = 'n' };
     pub const Visual: ModeId = .{ ._ = 'v' };
     pub const Insert: ModeId = .{ ._ = 'i' };
+    pub const Command: ModeId = .{ ._ = 'c' };
 
     test "MapId.from" {
         // I would be interested to see if these work on little endian machines

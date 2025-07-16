@@ -1,6 +1,6 @@
 pub const sys = @import("syslua");
 
-const kennel = @import("kennel/root.zig");
+// const kennel = @import("kennel/root.zig");
 const options = @import("options");
 
 const std = @import("std");
@@ -86,9 +86,9 @@ pub fn init() *State {
 
     // TODO: patch require(...) to a different function for profiling
 
-    if (options.usekennel) {
-        kennel.lua.hook(L);
-    }
+    // if (options.usekennel) {
+    //     kennel.lua.hook(L);
+    // }
 
     // -----------------
     root.log(@src(), .debug, "running init.lua state", .{});

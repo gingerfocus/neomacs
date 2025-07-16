@@ -13,7 +13,7 @@ const KeyMaps = @This();
 keys: KeyToFunction = .{},
 
 fallback: ?KeyFunction = null,
-targeter: ?KeyFunction = KeyFunction.initstate(action.move),
+targeter: ?KeyFunction = null,
 
 /// used as a name to self identify
 modeid: ModeId = ModeId.Null,
@@ -39,16 +39,23 @@ pub fn run(self: KeyMaps, state: *State, ke: trm.KeyEvent) !void {
         try function.run(state);
 
         if (self.targeter) |targeter| {
-            if (targeter.function == .SubMap) {
-                std.log.debug("you cant set targeter as submap", .{});
-                return;
-            }
+            // if (targeter.function == .SubMap) {
+            //     std.log.debug("you cant set targeter as submap", .{});
+            //     return;
+            // }
             try targeter.run(state);
         }
-    } else if (self.fallback) |fallback| {
+        return;
+    }
+
+    if (self.fallback) |fallback| {
         // if there is no handler and its just a regular key then send it to
         // the buffer
         try fallback.run(state);
+    } else {
+        // cause states that forget to set and exit condition to exit on unknown input
+        const buffer = state.getCurrentBuffer();
+        buffer.curkeymap = null;
     }
 }
 
@@ -56,45 +63,39 @@ pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: K
     try self.keys.put(a, character, value);
 }
 
-/// Gets the next
-pub fn then(self: *KeyMaps, a: std.mem.Allocator, character: u16) !*KeyMaps {
-    const res = try self.keys.getOrPut(a, character);
-    if (res.found_existing) {
-        switch (res.value_ptr.*) {
-            .SubMap => |map| return map,
-            .LuaFnc => |id| {
-                // TODO: unref global
-                _ = id;
-            },
-            else => {},
-        }
-    }
-    const map = try a.create(KeyMaps);
-    map.* = KeyMaps{};
-    res.value_ptr.* = KeyFunction{ .SubMap = map };
-    return map;
+/// Gets the next submap
+pub fn then(
+    self: *KeyMaps,
+    a: std.mem.Allocator,
+    // from: ModeId,
+    maps: *km.ModeToKeys,
+    character: u16,
+) !*KeyMaps {
+    // 1. create a new id
+    const newid = self.modeid.chain(character);
+
+    std.log.debug("new id: {any}", .{newid});
+
+    // 2. create a new map in the mode maps
+    const res = try maps.getOrPut(a, newid);
+    if (res.found_existing) return res.value_ptr.*;
+    res.value_ptr.* = try a.create(KeyMaps);
+    res.value_ptr.*.* = KeyMaps{ .modeid = newid };
+
+    // 3. add a key function to switch to that map
+    const kf = KeyFunction{ .function = .{ .setmod = newid } };
+    // try kf.setdata(ModeId, a, newid);
+    try self.put(a, character, kf);
+
+    // 4. return the map
+    return res.value_ptr.*;
 }
 
-pub const action = struct {
-    pub fn move(state: *State, _: ?*anyopaque) !void {
-        try moveKeep(state);
-
-        const buffer = state.getCurrentBuffer();
-
-        buffer.target = null; // reset the target
-        buffer.curkeymap = null;
-    }
-
-    pub fn moveKeep(state: *State) !void {
-        const buffer = state.getCurrentBuffer();
-
-        if (buffer.target) |target| {
-            buffer.row = target.end.row;
-            buffer.col = target.end.col;
-        }
-    }
-
-    pub fn none(_: *State) !void {}
-};
+// fn actionthen(state: *State, ctx: km.KeyFunctionDataValue) !void {
+//     const mode = km.getdata(ctx, ModeId) orelse {
+//         return error.NoModeId;
+//     };
+//     state.getCurrentBuffer().setMode(mode.*);
+// }
 
 pub const KeyToFunction = std.AutoArrayHashMapUnmanaged(u16, KeyFunction);

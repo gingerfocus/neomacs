@@ -5,12 +5,12 @@ const trm = root.trm;
 // const xev = root.xev;
 const lua = root.lua;
 const km = root.km;
+const keys = root.keys;
 
 const Buffer = root.Buffer;
 const Args = root.Args;
 
 const Config = @import("Config.zig");
-const keys = @import("keys.zig");
 const Component = @import("render/Component.zig");
 const render = @import("render/root.zig");
 
@@ -61,6 +61,8 @@ bufferindex: ?usize,
 // resized: bool = true,
 
 components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
+
+commandbuffer: std.ArrayListUnmanaged(u8) = .{},
 
 // TreeSitter Parsers
 // tsmap: std.ArrayListUnmanaged(void) = .{},
@@ -131,6 +133,8 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
 
 pub fn deinit(state: *State) void {
     std.log.debug("deiniting state", .{});
+
+    state.commandbuffer.deinit(state.a);
 
     // state.cur_undo.data.deinit(state.a);
     // state.undo_stack.deinit();

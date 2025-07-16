@@ -201,20 +201,31 @@ pub fn build(b: *std.Build) !void {
     // -------------------------------------------------------------------------
     //
     // default to false
-    const usekennel = b.option(bool, "usekennel", "compile the with support for literate programming") orelse true;
+    // const usekennel = b.option(bool, "usekennel", "compile the with support for literate programming") orelse true;
     //
     // const kennel = b.addModule("kennel", .{
     //     .root_source_file = b.path("src/kennel/root.zig"),
     // });
     // addLuaImport(kennel, staticlua, target, optimize);
     //
-    options.addOption(bool, "usekennel", usekennel);
+    // options.addOption(bool, "usekennel", usekennel);
     // if (usekennel) {
     //     neomacs.addImport("kennel", kennel);
     // }
     //
     // -------------------------------------------------------------------------
     // TODO: man pages to share/man/man1
+
+    // -------------------------------------------------------------------------
+    const lynx = b.addExecutable(.{
+        .name = "lynx",
+        .root_source_file = b.path("src/bin/lynx.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    check.dependOn(&lynx.step);
+
+    addBuildAndRunSteps(b, "lynx", lynx);
 }
 
 fn addBuildAndRunSteps(
