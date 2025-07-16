@@ -7,14 +7,6 @@ const State = root.State;
 
 const Buffer = @This();
 
-const Line = std.ArrayListUnmanaged(u8);
-pub const Visual = struct {
-    mode: VisualMode = .Range,
-    start: lib.Vec2,
-    end: lib.Vec2,
-};
-pub const VisualMode = enum { Range, Line, Block };
-
 /// Unique id for this buffer, never changes once created
 id: usize,
 
@@ -46,6 +38,57 @@ hasbackingfile: bool,
 keymaps: *km.ModeToKeys,
 
 curkeymap: ?*km.KeyMaps = null,
+
+const Line = std.ArrayListUnmanaged(u8);
+
+// pub const Mode = enum {
+//     normal,
+//     insert,
+//     visual,
+//
+//     pub const COUNT = @typeInfo(Mode).@"enum".fields.len;
+//
+//     pub fn toString(self: Mode) []const u8 {
+//         return switch (self) {
+//             .normal => "NORMAL",
+//             .insert => "INSERT",
+//             .visual => "VISUAL",
+//         };
+//     }
+// };
+
+pub const Visual = struct {
+    mode: VisualMode = .Range,
+    start: lib.Vec2,
+    end: lib.Vec2,
+};
+pub const VisualMode = enum {
+    Range,
+    Line,
+    Block,
+};
+
+// keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
+
+// pub fn edit(a: std.mem.Allocator, file: []const u8) !Buffer {
+//     return .{
+//         .id = id.next(),
+//         .data = .{ .Edit = try Buffer.init(a, file) },
+//         .mode = .normal,
+//     };
+// }
+
+pub fn initEmpty(
+    keymaps: *km.ModeToKeys,
+) Buffer {
+    return Buffer{
+        .id = idgen.next(),
+        .filename = "",
+        .lines = .{},
+        .keymaps = keymaps,
+        // .keymap = state,
+    };
+}
 
 pub fn init(
     a: std.mem.Allocator,

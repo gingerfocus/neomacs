@@ -38,7 +38,6 @@ const SessionId = usize;
 vtable: *const VTable,
 data: ?*anyopaque,
 
-
 pub fn init(allocator: *std.mem.Allocator) !Kernel {
     return Kernel{
         .allocator = allocator,
