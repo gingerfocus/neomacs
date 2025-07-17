@@ -100,7 +100,7 @@ pub fn run(self: Self, state: *State) anyerror!void {
             const buffer = state.getCurrentBuffer();
             buffer.setMode(mode);
 
-            std.debug.print("set mode: {any}\n", .{mode});
+            // std.debug.print("set mode: {any}\n", .{mode});
             // km.debuginner(buffer.curkeymap.?, 1);
 
             // std.log.debug("keys: {any}", .{buffer.curkeymap.?.keys.keys()});

@@ -93,3 +93,92 @@
 //         }
 //     ];
 // }
+
+// pub fn buffer_handle_undo(arg_state: *State, _: km.KeyFunctionDataValue, arg_undo: *Undo) void {
+//     var state = arg_state;
+//     _ = &state;
+//     var undo = arg_undo;
+//     _ = &undo;
+//     var buffer: *Buffer = state.*.buffer;
+//     _ = &buffer;
+//     var redo: Undo = Undo{
+//         .type = @as(c_uint, @bitCast(@as(c_int, 0))),
+//         .data = @import("std").mem.zeroes(Data),
+//         .start = @import("std").mem.zeroes(usize),
+//         .end = @import("std").mem.zeroes(usize),
+//     };
+//     _ = &redo;
+//     redo.start = undo.*.start;
+//     state.*.cur_undo = redo;
+//     while (true) {
+//         switch (undo.*.type) {
+//             @as(c_uint, @bitCast(@as(c_int, 0))) => break,
+//             @as(c_uint, @bitCast(@as(c_int, 1))) => {
+//                 state.*.cur_undo.type = @as(c_uint, @bitCast(if (undo.*.data.count > @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) DELETE_MULT_CHAR else DELETE_CHAR));
+//                 state.*.cur_undo.end = (undo.*.start +% undo.*.data.count) -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
+//                 buffer.*.cursor = undo.*.start;
+//                 buffer_insert_selection(buffer, &undo.*.data, undo.*.start);
+//                 break;
+//             },
+//             @as(c_uint, @bitCast(@as(c_int, 2))) => {
+//                 state.*.cur_undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
+//                 buffer.*.cursor = undo.*.start;
+//                 buffer_delete_char(buffer, state);
+//                 break;
+//             },
+//             @as(c_uint, @bitCast(@as(c_int, 3))) => {
+//                 state.*.cur_undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
+//                 state.*.cur_undo.end = undo.*.end;
+//                 buffer.*.cursor = undo.*.start;
+//                 while (true) {
+//                     var file: *FILE = fopen("logs/cano.log", "a");
+//                     _ = &file;
+//                     if (file != @as(*FILE, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0))))))) {
+//                         _ = fprintf(file, "%s:%d: %zu %zu\n", "src/keys.c", @as(c_int, 314), undo.*.start, undo.*.end);
+//                         _ = fclose(file);
+//                     }
+//                     if (!false) break;
+//                 }
+//                 buffer_delete_selection(buffer, state, undo.*.start, undo.*.end);
+//                 break;
+//             },
+//             @as(c_uint, @bitCast(@as(c_int, 4))) => {
+//                 state.*.cur_undo.type = @as(c_uint, @bitCast(REPLACE_CHAR));
+//                 buffer.*.cursor = undo.*.start;
+//                 while (true) {
+//                     if ((&undo.*.data).*.count >= (&undo.*.data).*.capacity) {
+//                         (&undo.*.data).*.capacity = if ((&undo.*.data).*.capacity == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) @as(usize, @bitCast(@as(c_long, @as(c_int, 1024)))) else (&undo.*.data).*.capacity *% @as(usize, @bitCast(@as(c_long, @as(c_int, 2))));
+//                         var new: ?*anyopaque = calloc((&undo.*.data).*.capacity +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))), @sizeOf(u8));
+//                         _ = &new;
+//                         while (true) {
+//                             if (!(new != null)) {
+//                                 frontend_end();
+//                                 _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/keys.c", @as(c_int, 320));
+//                                 _ = fprintf(stderr, "outta ram");
+//                                 _ = fprintf(stderr, "\n");
+//                                 exit(@as(c_int, 1));
+//                             }
+//                             if (!false) break;
+//                         }
+//                         _ = memcpy(new, @as(?*const anyopaque, @ptrCast((&undo.*.data).*.data)), (&undo.*.data).*.count);
+//                         free(@as(?*anyopaque, @ptrCast((&undo.*.data).*.data)));
+//                         (&undo.*.data).*.data = @as(*u8, @ptrCast(@alignCast(new)));
+//                     }
+//                     (&undo.*.data).*.data[
+//                         blk: {
+//                             const ref = &(&undo.*.data).*.count;
+//                             const tmp = ref.*;
+//                             ref.* +%= 1;
+//                             break :blk tmp;
+//                         }
+//                     ] = buffer.*.data.data[buffer.*.cursor];
+//                     if (!false) break;
+//                 }
+//                 buffer.*.data.data[buffer.*.cursor] = undo.*.data.data[@as(c_uint, @intCast(@as(c_int, 0)))];
+//                 break;
+//             },
+//             else => {},
+//         }
+//         break;
+//     }
+// }

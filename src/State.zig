@@ -151,7 +151,7 @@ pub fn press(state: *State, ke: trm.KeyEvent) !void {
     // try state.loop.run(.no_wait);
 
     const keymap = state.getKeyMaps();
-    std.debug.print("mode: {d}, ke: {d}\n", .{ keymap.modeid._, trm.keys.bits(ke) });
+    root.log(@src(), .debug, "press (mode: {d}, key: {d})", .{ keymap.modeid._, trm.keys.bits(ke) });
     try keymap.run(state, ke);
 }
 

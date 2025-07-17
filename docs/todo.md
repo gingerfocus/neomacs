@@ -7,7 +7,7 @@
   - [ ] f
   - [ ] $
   - [ ] 0
-- [ ] Deletion (d/x)
+- [x] Deletion (d/x)
 - [ ] Changing (c/r)
 - [ ] Visual Mode Targeting
 - [ ] Scroll off
