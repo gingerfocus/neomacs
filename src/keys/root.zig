@@ -18,15 +18,6 @@ pub const command = @import("command.zig");
 
 const Ks = trm.KeySymbol;
 
-const insertsfn = struct {
-    fn append(s: *State, _: km.KeyFunctionDataValue) !void {
-        if (s.ch.modifiers.bits() == 0) {
-            const buf = s.getCurrentBuffer();
-            try buf.insertCharacter(s.ch.character);
-        }
-    }
-};
-
 /// TODO: I dont think this needs an arena
 pub fn create(
     alloc: std.mem.Allocator,
@@ -94,8 +85,19 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeTo
     try maps.put(a, '0', km.KeyFunction.initstate(targeters.motionstart));
 
     try maps.put(a, norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
-    try maps.put(a, norm('e'), km.KeyFunction.initstate(targeters.motion_word_end));
-    try maps.put(a, norm('b'), km.KeyFunction.initstate(targeters.motion_word_back));
+    // try maps.put(a, norm('e'), km.KeyFunction.initstate(targeters.motion_word_end));
+    // try maps.put(a, norm('b'), km.KeyFunction.initstate(targeters.motion_word_back));
+    // try maps.put(a, norm('B'), km.KeyFunction.initstate(targeters.TODO));
+
+    const f = try maps.then(a, modes, norm('f'));
+    try f.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
+    f.fallback = km.KeyFunction.initbuffer(targeters.jump_letter);
+    f.targeter = km.KeyFunction.initstate(actions.move);
+
+    const t = try maps.then(a, modes, norm('t'));
+    try t.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
+    t.fallback = km.KeyFunction.initbuffer(targeters.jump_letter_before);
+    t.targeter = km.KeyFunction.initstate(actions.move);
 
     //  @as(c_int, 37) buffer_next_brace(buffer);
 
@@ -839,6 +841,26 @@ pub fn initVisualKeys() !void {
 
 /// A collection of key targeters that can be applied in different contexts.
 const targeters = struct {
+    fn jump_letter_before(buffer: *Buffer, ctx: km.KeyFunctionDataValue) !void {
+        // TODO: count
+        try jump_letter(buffer, ctx);
+        if (buffer.target) |*target| {
+            target.end = buffer.moveLeft(target.end, 1);
+        }
+    }
+    fn jump_letter(buffer: *Buffer, ctx: km.KeyFunctionDataValue) !void {
+        const ch = ctx.character.character;
+
+        const start = buffer.position();
+        var end = start;
+
+        while (buffer.lines.items[end.row].items[end.col] != ch) {
+            end = buffer.moveRight(end, 1);
+        }
+
+        buffer.updateEnd(start, end);
+    }
+
     /// Selects `count` full lines starting from the current cursor position.
     fn full_line(state: *State, _: km.KeyFunctionDataValue) !void {
         const count = state.takeRepeating();
@@ -1019,6 +1041,15 @@ const targeters = struct {
     }
 };
 
+const insertsfn = struct {
+    fn append(s: *State, _: km.KeyFunctionDataValue) !void {
+        if (s.ch.modifiers.bits() == 0) {
+            const buf = s.getCurrentBuffer();
+            try buf.insertCharacter(s.ch.character);
+        }
+    }
+};
+
 /// A collection of functions that act on a target.
 const actions = struct {
     pub fn move(state: *State, ctx: km.KeyFunctionDataValue) !void {
@@ -1032,6 +1063,8 @@ const actions = struct {
         const buffer = state.getCurrentBuffer();
 
         if (buffer.target) |target| {
+            // std.debug.print("moveKeep: target: {any}\n", .{target});
+
             buffer.row = target.end.row;
             buffer.col = target.end.col;
 

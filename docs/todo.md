@@ -1,10 +1,9 @@
 # For 0.1.1
 - [ ] Targeters
-  - [x] w
-  - [ ] b
-  - [ ] e
-  - [ ] t
-  - [ ] f
+  - [ ] w/e
+  - [ ] b/B
+  - [x] t
+  - [x] f
   - [x] $
   - [x] 0
 - [x] Deletion (d/x)
@@ -19,9 +18,11 @@
 - [ ] Make an example plugin
 - [ ] More Motions ('a', 'i') "(){}[]"
 
+# Refactors
+- [ ] move repeat structure to buffer
+- [ ] make all command buffer local
+
 # Later
-- [x] Allow Keymaps to have State
-  - [x] Buffer local keymaps (only take `*Buffer` as argument)
 - [ ] Swap Files
 - [ ] Hardware Acceleration
   - [ ] Drop gtk backend

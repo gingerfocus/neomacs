@@ -40,12 +40,7 @@ pub fn run(self: KeyMaps, state: *State, ke: trm.KeyEvent) !void {
     if (self.keys.get(trm.keys.bits(ke))) |*function| {
         // if there is a custom handler then run it
         try function.run(state);
-
-        if (self.targeter) |targeter| try targeter.run(state);
-        return;
-    }
-
-    if (self.fallback) |fallback| {
+    } else if (self.fallback) |fallback| {
         // if there is no handler and its just a regular key then send it to
         // the buffer
         try fallback.run(state);
@@ -53,7 +48,10 @@ pub fn run(self: KeyMaps, state: *State, ke: trm.KeyEvent) !void {
         // cause states that forget to set and exit condition to exit on unknown input
         const buffer = state.getCurrentBuffer();
         buffer.curkeymap = null;
+        return;
     }
+
+    if (self.targeter) |targeter| try targeter.run(state);
 }
 
 pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: KeyFunction) !void {
