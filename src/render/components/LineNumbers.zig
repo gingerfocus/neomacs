@@ -8,6 +8,8 @@ const Color = Backend.Color;
 const View = @import("../Component.zig").View;
 
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
+    // TODO: clear each time
+
     _ = self;
     // TODO: this should have buffer as its self
     const buffer = state.getCurrentBuffer();

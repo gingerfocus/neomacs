@@ -53,6 +53,12 @@ pub fn initlua(L: ?*lua.State, index: LuaRef) !Self {
     };
 }
 
+pub fn initsetmod(mode: km.ModeId) Self {
+    return .{
+        .function = .{ .setmod = mode },
+    };
+}
+
 pub fn setdata(self: *Self, comptime T: type, alloc: std.mem.Allocator, value: T) !void {
     self.dataptr = try lib.types.TypeErased(T).init(alloc, value);
 }

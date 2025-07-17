@@ -61,7 +61,7 @@ pub fn create(
 
     // insert
     try initInsertKeys(a, insert);
-    try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initstate(actions.normal));
+    try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
 
     // normal
     try initToInsertKeys(a, normal);
@@ -72,10 +72,11 @@ pub fn create(
 
     // visual
     try initMotionKeys(a, visual, &modes);
-    try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initstate(actions.normal));
+    try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
     try visual.put(a, norm('d'), km.KeyFunction.initstate(actions.deletelines));
 
     // command
+    try normal.put(a, norm(':'), km.KeyFunction.initsetmod(km.ModeId.Command));
     try command.init(a, &modes);
     return modes;
 }
@@ -84,11 +85,11 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeTo
     // arrow keys?
     try maps.put(a, norm('j'), km.KeyFunction.initstate(motions.target_down));
     try maps.put(a, norm('k'), km.KeyFunction.initstate(motions.target_up));
-    try maps.put(a, norm('l'), km.KeyFunction.initstate(motions.right));
-    try maps.put(a, norm('h'), km.KeyFunction.initstate(motions.left));
+    try maps.put(a, norm('l'), km.KeyFunction.initstate(motions.target_right));
+    try maps.put(a, norm('h'), km.KeyFunction.initstate(motions.target_left));
 
-    try maps.put(a, norm('G'), km.KeyFunction.initstate(motions.targetbottom));
-    try maps.put(a, '$', km.KeyFunction.initstate(motions.motionend));
+    try maps.put(a, norm('G'), km.KeyFunction.initstate(motions.target_bottom));
+    try maps.put(a, '$', km.KeyFunction.initstate(motions.motion_end));
     try maps.put(a, '0', km.KeyFunction.initstate(motions.motionstart));
 
     // motion_e(state);
@@ -133,9 +134,8 @@ fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
 }
 
 fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
-    try normal.put(a, norm(':'), km.KeyFunction{
-        .function = .{ .setmod = km.ModeId.Command },
-    });
+    _ = a;
+    _ = normal;
 
     // if (tools.check_keymaps(buffer, state)) return;
 
@@ -906,7 +906,7 @@ const motions = struct {
         // buffer.updatePostionKeepRow();
     }
 
-    fn right(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn target_right(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
 
         const count = state.takeRepeating();
@@ -919,7 +919,7 @@ const motions = struct {
         }
     }
 
-    fn left(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn target_left(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
 
         const count = state.takeRepeating();
@@ -943,7 +943,7 @@ const motions = struct {
 
     }
 
-    fn targetbottom(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn target_bottom(state: *State, _: km.KeyFunctionDataValue) !void {
         _ = state.repeating.take();
         const buffer = state.getCurrentBuffer();
 
@@ -1010,7 +1010,7 @@ const motions = struct {
     //     }
     // }
 
-    pub fn motionend(state: *State, _: km.KeyFunctionDataValue) !void {
+    pub fn motion_end(state: *State, _: km.KeyFunctionDataValue) !void {
         const count = state.repeating.take();
         const buffer = state.getCurrentBuffer();
 
@@ -1076,34 +1076,6 @@ const actions = struct {
         }
         buffer.target = null;
         buffer.setMode(ModeId.Normal);
-    }
-
-    fn command(buffer: *Buffer, _: ?*km.KeyFunctionDataPtr) anyerror!void {
-        std.debug.print("command\n", .{});
-        buffer.setMode(Buffer.ModeId.Command);
-    }
-
-    fn normal(state: *State, _: km.KeyFunctionDataValue) anyerror!void {
-        const buffer = state.getCurrentBuffer();
-        buffer.setMode(ModeId.Normal);
-        buffer.target = null;
-
-        //     state.*.cur_undo.end = buffer.*.cursor;
-        //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-
-        //     while (true) {
-        //         var undo: Undo = Undo{
-        //             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-        //             .data = @import("std").mem.zeroes(Data),
-        //             .start = @import("std").mem.zeroes(usize),
-        //             .end = @import("std").mem.zeroes(usize),
-        //         };
-        //         _ = &undo;
-        //         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-        //         undo.start = buffer.*.cursor;
-        //         state.*.cur_undo = undo;
-        //         if (!false) break;
-        //     }
     }
 };
 
@@ -1182,6 +1154,7 @@ const inserts = struct {
     }
 };
 
+/// These are the visual mode shims that set a trivial target then move to visual mode
 const visuals = struct {
     fn setModeMeta(comptime mode: Buffer.VisualMode) (*const fn (*State, km.KeyFunctionDataValue) anyerror!void) {
         return struct {

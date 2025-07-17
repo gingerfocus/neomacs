@@ -6,6 +6,7 @@ const km = root.km;
 const State = root.State;
 
 pub fn init(a: std.mem.Allocator, modes: *km.ModeToKeys) !void {
+
     const res = try modes.getOrPut(a, km.ModeId.Command);
     if (!res.found_existing) {
         std.log.debug("creating new command map", .{});
@@ -46,7 +47,7 @@ pub fn init(a: std.mem.Allocator, modes: *km.ModeToKeys) !void {
 
 const commandline = struct {
     fn append(state: *State, _: km.KeyFunctionDataValue) !void {
-        std.debug.print("appending {d}\n", .{state.ch.character});
+        // std.debug.print("appending {d}\n", .{state.ch.character});
         if (state.ch.modifiers.bits() == 0)
             try state.commandbuffer.append(state.a, state.ch.character);
     }
