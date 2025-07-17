@@ -23,9 +23,7 @@ const targeters = struct {
         try moveKeep(state, ctx);
 
         const buffer = state.getCurrentBuffer();
-
         buffer.target = null; // reset the target
-        // buffer.curkeymap = null;
     }
 
     pub fn moveKeep(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -34,6 +32,9 @@ const targeters = struct {
         if (buffer.target) |target| {
             buffer.row = target.end.row;
             buffer.col = target.end.col;
+
+            // only go back if we expend something
+            buffer.curkeymap = null;
         }
     }
 
@@ -121,12 +122,12 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeTo
 
     const g = try maps.then(a, modes, norm('g'));
     g.targeter = km.KeyFunction.initstate(targeters.move);
-    g.fallback = km.KeyFunction.initbuffer(struct {
-        fn testting(buffer: *Buffer, _: km.KeyFunctionDataValue) anyerror!void {
-            buffer.curkeymap = null;
-            // std.log.debug("testting", .{});
-        }
-    }.testting);
+    // g.fallback = km.KeyFunction.initbuffer(struct {
+    //     fn testting(buffer: *Buffer, _: km.KeyFunctionDataValue) anyerror!void {
+    //         buffer.curkeymap = null;
+    //         // std.log.debug("testting", .{});
+    //     }
+    // }.testting);
 
     try g.put(a, norm('g'), km.KeyFunction.initstate(motions.top));
 
@@ -161,7 +162,9 @@ fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
 }
 
 fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
-    try normal.put(a, norm(':'), km.KeyFunction.initbuffer(actions.command));
+    try normal.put(a, norm(':'), km.KeyFunction{
+        .function = .{ .setmod = km.ModeId.Command },
+    });
 
     // if (tools.check_keymaps(buffer, state)) return;
 
@@ -1396,6 +1399,7 @@ const actions = struct {
     }
 
     fn command(buffer: *Buffer, _: ?*km.KeyFunctionDataPtr) anyerror!void {
+        std.debug.print("command\n", .{});
         buffer.setMode(Buffer.ModeId.Command);
     }
 

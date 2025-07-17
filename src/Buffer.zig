@@ -142,8 +142,8 @@ pub fn getKeymap(buffer: *Buffer) *km.KeyMaps {
 pub fn setMode(buffer: *Buffer, mode: Buffer.ModeId) void {
     // buffer.mode = mode;
     const keymap = buffer.keymaps.get(mode) orelse {
+        std.debug.print("no keymap for mode: {any}\n", .{mode});
         buffer.curkeymap = null;
-        // std.debug.print("no keymap for mode: {any}\n", .{mode});
         return;
     };
     // std.debug.print("set keymap for mode: {any}\n", .{mode});

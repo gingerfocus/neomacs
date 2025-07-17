@@ -80,9 +80,6 @@ pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
 pub fn run(self: Self, state: *State) anyerror!void {
     return switch (self.function) {
         .state => |fc| {
-            // const buffer = state.getCurrentBuffer();
-            // buffer.curkeymap = null;
-
             try fc(state, self.dataptr);
         },
         .LuaFnc => |id| {
@@ -94,21 +91,16 @@ pub fn run(self: Self, state: *State) anyerror!void {
                 // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
                 return error.ExecuteLuaCallback;
             }
-
-            // const buffer = state.getCurrentBuffer();
-            // buffer.curkeymap = null;
         },
         .buffer => |fc| {
             const buffer = state.getCurrentBuffer();
-            buffer.curkeymap = null;
             try fc(buffer, self.dataptr);
         },
-
         .setmod => |mode| {
             const buffer = state.getCurrentBuffer();
             buffer.setMode(mode);
 
-            // std.debug.print("set mode: {any}\n", .{mode});
+            std.debug.print("set mode: {any}\n", .{mode});
             // km.debuginner(buffer.curkeymap.?, 1);
 
             // std.log.debug("keys: {any}", .{buffer.curkeymap.?.keys.keys()});

@@ -41,16 +41,7 @@ pub fn run(self: KeyMaps, state: *State, ke: trm.KeyEvent) !void {
         // if there is a custom handler then run it
         try function.run(state);
 
-        if (self.targeter) |targeter| {
-            // if (targeter.function == .SubMap) {
-            //     std.log.debug("you cant set targeter as submap", .{});
-            //     return;
-            // }
-            try targeter.run(state);
-
-            const buffer = state.getCurrentBuffer();
-            buffer.curkeymap = null;
-        }
+        if (self.targeter) |targeter| try targeter.run(state);
         return;
     }
 

@@ -150,7 +150,9 @@ pub fn getCurrentBuffer(state: *State) *Buffer {
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
     // try state.loop.run(.no_wait);
 
-    try state.getKeyMaps().run(state, ke);
+    const keymap = state.getKeyMaps();
+    std.debug.print("mode: {d}, ke: {d}\n", .{ keymap.modeid._, trm.keys.bits(ke) });
+    try keymap.run(state, ke);
 }
 
 // TODO: make a const and mut version

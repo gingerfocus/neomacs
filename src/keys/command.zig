@@ -46,6 +46,7 @@ pub fn init(a: std.mem.Allocator, modes: *km.ModeToKeys) !void {
 
 const commandline = struct {
     fn append(state: *State, _: km.KeyFunctionDataValue) !void {
+        std.debug.print("appending {d}\n", .{state.ch.character});
         if (state.ch.modifiers.bits() == 0)
             try state.commandbuffer.append(state.a, state.ch.character);
     }
