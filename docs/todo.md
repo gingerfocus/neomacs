@@ -1,12 +1,12 @@
 # For 0.1.1
 - [ ] Targeters
-  - [ ] w
+  - [x] w
   - [ ] b
   - [ ] e
   - [ ] t
   - [ ] f
-  - [ ] $
-  - [ ] 0
+  - [x] $
+  - [x] 0
 - [x] Deletion (d/x)
 - [ ] Changing (c/r)
 - [ ] Visual Mode Targeting
@@ -20,8 +20,8 @@
 - [ ] More Motions ('a', 'i') "(){}[]"
 
 # Later
-- [ ] Allow Keymaps to have State
-  - [ ] Buffer local keymaps (only take `*Buffer` as argument)
+- [x] Allow Keymaps to have State
+  - [x] Buffer local keymaps (only take `*Buffer` as argument)
 - [ ] Swap Files
 - [ ] Batch Rendering Primitives
 - [ ] Better renering of text

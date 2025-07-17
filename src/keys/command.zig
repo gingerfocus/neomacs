@@ -62,7 +62,7 @@ const commandline = struct {
         buffer.setMode(km.ModeId.Normal);
     }
 
-    fn run(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn run(state: *State, ctx: km.KeyFunctionDataValue) !void {
         const cmd = try state.commandbuffer.toOwnedSliceSentinel(state.a, 0);
         defer state.a.free(cmd);
 
@@ -76,6 +76,6 @@ const commandline = struct {
 
         std.log.debug("running done: {s}", .{cmd});
 
-        try commandline.stop(state, null);
+        try commandline.stop(state, ctx);
     }
 };

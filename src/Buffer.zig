@@ -7,6 +7,8 @@ const State = root.State;
 
 const Buffer = @This();
 
+alloc: std.mem.Allocator,
+
 /// Unique id for this buffer, never changes once created
 id: usize,
 
@@ -123,14 +125,15 @@ pub fn init(
         .hasbackingfile = true,
         .lines = lines.moveToUnmanaged(),
         .keymaps = keymaps,
+        .alloc = a,
     };
 }
 
-pub fn deinit(buffer: *Buffer, a: std.mem.Allocator) void {
+pub fn deinit(buffer: *Buffer) void {
     for (buffer.lines.items) |*line| {
-        line.deinit(a);
+        line.deinit(buffer.alloc);
     }
-    buffer.lines.deinit(a);
+    buffer.lines.deinit(buffer.alloc);
 
     buffer.* = undefined;
 }
@@ -182,14 +185,14 @@ pub fn position(buffer: *Buffer) lib.Vec2 {
     };
 }
 
-pub fn insertCharacter(buffer: *Buffer, a: std.mem.Allocator, ch: u8) !void {
+pub fn insertCharacter(buffer: *Buffer, ch: u8) !void {
     if (ch == '\n') {
-        try buffer.newlineInsert(a);
+        try buffer.newlineInsert(buffer.alloc);
         return;
     }
 
     var line = &buffer.lines.items[buffer.row];
-    try line.insert(a, buffer.col, ch);
+    try line.insert(buffer.alloc, buffer.col, ch);
     // root.log(@src(), .debug, "inserted character {c} at row {d}, col {d}", .{ ch, buffer.row, buffer.col });
     buffer.col += 1;
 

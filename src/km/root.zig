@@ -3,6 +3,7 @@
 
 const root = @import("../root.zig");
 const std = root.std;
+const trm = root.trm;
 // const rc = @import("zigrc");
 
 pub const KeyFunction = @import("KeyFunction.zig");
@@ -11,13 +12,16 @@ pub const KeyMaps = @import("KeyMaps.zig");
 pub const ModeId = root.Buffer.ModeId;
 pub const ModeToKeys = std.AutoArrayHashMapUnmanaged(ModeId, *KeyMaps);
 
-pub const KeyFunctionDataPtr = KeyFunction.KeyDataPtr;
-pub const KeyFunctionDataValue = ?*KeyFunctionDataPtr;
+/// TODO: add the character to this structure
+pub const KeyFunctionDataValue = struct {
+    character: trm.KeyEvent,
+    dataptr: ?*KeyFunction.KeyDataPtr,
 
-pub fn getdata(self: KeyFunctionDataValue, comptime T: type) ?*T {
-    if (self) |ptr| return ptr.get(T);
-    return null;
-}
+    pub fn getdata(self: KeyFunctionDataValue, comptime T: type) ?*T {
+        if (self.dataptr) |ptr| return ptr.get(T);
+        return null;
+    }
+};
 
 pub fn debug(modes: *const ModeToKeys) void {
     var iter = modes.iterator();

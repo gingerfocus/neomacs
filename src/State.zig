@@ -70,6 +70,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
         .keymaps = maps,
         .id = Buffer.idgen.next(),
         .lines = .{},
+        .alloc = a,
     };
     // TODO: append welcome content to scratch buffer
     // try scratch.insertCharacter(a, 't');
@@ -112,11 +113,11 @@ pub fn deinit(state: *State) void {
     // The keymaps must be released before lua as they reference each other.
     state.scratchbuffer.keymaps.deinit(state.a);
     state.a.destroy(state.scratchbuffer.keymaps);
-    state.scratchbuffer.deinit(state.a);
+    state.scratchbuffer.deinit();
     state.a.destroy(state.scratchbuffer);
 
     for (state.buffers.items) |buffer| {
-        buffer.deinit(state.a);
+        buffer.deinit();
         state.a.destroy(buffer);
     }
     state.buffers.deinit(state.a);

@@ -27,13 +27,13 @@ function: FunctionAction,
 
 const Self = @This();
 
-pub fn initstate(func: *const fn (*State, ?*KeyDataPtr) anyerror!void) Self {
+pub fn initstate(func: *const fn (*State, km.KeyFunctionDataValue) anyerror!void) Self {
     return .{
         .function = .{ .state = func },
     };
 }
 
-pub fn initbuffer(func: *const fn (*Buffer, ?*KeyDataPtr) anyerror!void) Self {
+pub fn initbuffer(func: *const fn (*Buffer, km.KeyFunctionDataValue) anyerror!void) Self {
     return .{
         .function = .{ .buffer = func },
     };
@@ -49,7 +49,7 @@ pub fn initlua(L: ?*lua.State, index: LuaRef) !Self {
     if (ref <= 0) return error.CantMakeReference;
 
     return .{
-        .function = .{ .LuaFnc = ref },
+        .function = .{ .lua_function = ref },
     };
 }
 
@@ -76,7 +76,7 @@ pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
         //     map.deinit(L, a);
         //     a.destroy(map);
         // },
-        .LuaFnc => |id| {
+        .lua_function => |id| {
             lua.sys.luaL_unref(L, lua.sys.LUA_REGISTRYINDEX, id);
         },
         else => {},
@@ -86,9 +86,9 @@ pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
 pub fn run(self: Self, state: *State) anyerror!void {
     return switch (self.function) {
         .state => |fc| {
-            try fc(state, self.dataptr);
+            try fc(state, .{ .character = state.ch, .dataptr = self.dataptr });
         },
-        .LuaFnc => |id| {
+        .lua_function => |id| {
             std.debug.assert(id > 0);
 
             lua.sys.lua_rawgeti(state.L, lua.sys.LUA_REGISTRYINDEX, id);
@@ -98,25 +98,21 @@ pub fn run(self: Self, state: *State) anyerror!void {
                 return error.ExecuteLuaCallback;
             }
         },
+        // TODO: this can be run as a coroutine as it only takes buffer state
         .buffer => |fc| {
             const buffer = state.getCurrentBuffer();
-            try fc(buffer, self.dataptr);
+            try fc(buffer, .{ .character = state.ch, .dataptr = self.dataptr });
         },
         .setmod => |mode| {
             const buffer = state.getCurrentBuffer();
             buffer.setMode(mode);
-
-            // std.debug.print("set mode: {any}\n", .{mode});
-            // km.debuginner(buffer.curkeymap.?, 1);
-
-            // std.log.debug("keys: {any}", .{buffer.curkeymap.?.keys.keys()});
         },
     };
 }
 
 const FunctionAction = union(enum) {
-    LuaFnc: LuaRef,
+    lua_function: LuaRef,
     setmod: km.ModeId,
-    state: *const fn (*State, ?*KeyDataPtr) anyerror!void,
-    buffer: *const fn (*Buffer, ?*KeyDataPtr) anyerror!void,
+    state: *const fn (*State, km.KeyFunctionDataValue) anyerror!void,
+    buffer: *const fn (*Buffer, km.KeyFunctionDataValue) anyerror!void,
 };
