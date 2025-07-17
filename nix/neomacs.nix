@@ -11,7 +11,11 @@
   wayland-scanner,
   wayland-protocols,
   libxkbcommon,
-  # graphi,
+  gtk3,
+  cairo,
+  gobject-introspection,
+  freetype,
+  atk,
 }:
 stdenv.mkDerivation {
   pname = "neomacs";
@@ -20,26 +24,31 @@ stdenv.mkDerivation {
   src = ./..;
 
   buildInputs = [
-    luajit
-    (luajit.withPackages (ps: (with ps; [fennel])))
+    ## Basic Dependencies
+    luajit # we can statically build this, not strictly necessary
+    # (luajit.withPackages (ps: (with ps; [fennel])))
 
-    tree-sitter
-    tree-sitter-grammars.tree-sitter-zig
+    ## Gtk Dependencies
+    gtk3
+    cairo
+    gobject-introspection
 
+    ## Wayland Dependencies
     pkg-config
     wayland
     wayland-scanner
     wayland-protocols
     libxkbcommon
+    freetype
+    atk
 
-    # graphi
-
-    # libuv
+    # tree-sitter
+    # tree-sitter-grammars.tree-sitter-zig
   ];
 
-  # nativeBuildInputs = [zig.hook];
-  # zigBuildFlags = ["--system" "${callPackage ./neomacs-zig-zon.nix {}}"];
+  nativeBuildInputs = [zig.hook];
+  zigBuildFlags = ["--system" "${callPackage ./neomacs-zig-zon.nix {}}" "-Dstatic=false"];
 
-  nativeBuildInputs = [zig];
-  buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
+  # nativeBuildInputs = [zig];
+  # buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
 }

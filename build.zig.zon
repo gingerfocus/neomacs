@@ -30,6 +30,7 @@
         .libxev = .{
             .url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz",
             .hash = "libxev-0.0.0-86vtc4b1EgCl0Kvo2Ixmjfl5PgAaJmvCXRIn_n89nCaR",
+            .lazy = true,
         },
         // .mach = .{
         //     .url = "https://pkg.machengine.org/mach/af1cf9865bbd7e79e05c1a86560945afd2342891.tar.gz",

@@ -18,58 +18,46 @@
       pkgs = import nixpkgs {
         inherit system;
         overlays = [
-          # (final: prev: {graphi = graphi.packages.${system}.default;})
+          (final: prev: {
+            # zig = zig.packages."${system}".master;
+            # graphi = graphi.packages.${system}.default;
+          })
         ];
       };
       neon = self.packages."${system}";
     in {
       devShells.default = pkgs.mkShell {
-        # inputsFrom = with neon; [neomacs zss];
+        inputsFrom = with neon; [neomacs zss];
 
         packages = [
+          pkgs.pkg-config
           pkgs.zon2nix
 
-          pkgs.gtk3
-          pkgs.cairo
-          pkgs.gobject-introspection
-
+          ## Literate Programming Dependencies
           # pkgs.python3
           # pkgs.pyright
           # pkgs.bearssl
-
-          pkgs.luajit
-
-          pkgs.pkg-config
-          # pkgs.wayland
-          # pkgs.wayland-scanner
-          # pkgs.wayland-protocols
-          # pkgs.libxkbcommon
-          # pkgs.freetype
-          # pkgs.atk
 
           # Development
           pkgs.alejandra
           pkgs.stylua
           pkgs.lua-language-server
-
-          # zig.packages."${system}".master
-          pkgs.zig
         ];
 
-        # shellHook = ''
-        #   export ZIG_CACHE_DIR = "./.zig-cache";
-        #   export PATH="$PATH:${pkgs.zig}/bin"
-        #   export PATH="$PATH:${pkgs.luajit}/bin"
-        #   export PATH="$PATH:${pkgs.python3}/bin"
-        # '';
+        # HACK: Allow for local development despite presence of zig.hook
+        shellHook = ''
+          export ZIG_CACHE_DIR="$PWD/.zig-cache"
+          export ZIG_GLOBAL_CACHE_DIR="$HOME/.cache/zig"
+          export NEONRUNTIME="$PWD/runtime"
+        '';
       };
 
       formatter = pkgs.alejandra;
 
       packages = {
         default = neon.neomacs;
-        neomacs = pkgs.callPackage ./nix/neomacs.nix {};
-        zss = pkgs.callPackage ./nix/zss.nix {};
+        neomacs = pkgs.callPackage ./neomacs.nix {};
+        zss = pkgs.callPackage ./zss.nix {};
       };
     });
 }

@@ -13,6 +13,11 @@ cd neomacs
 zig build install --prefix ~/.local --release=safe
 ```
 
+Nixos users can use the following:
+```sh
+nix build github:gingerfocus/neomacs
+```
+
 ## Why
 Neovim is great but does too many things for vim compatability. I want to see
 how many features I can strip and still have a functional editor. I also kinda
