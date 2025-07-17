@@ -10,39 +10,20 @@ const keys = root.keys;
 const Buffer = root.Buffer;
 const Args = root.Args;
 
+const render = @import("render/root.zig");
 const Config = @import("Config.zig");
 const Component = @import("render/Component.zig");
-const render = @import("render/root.zig");
-
-pub const Backend = @import("backend/Backend.zig");
+const Backend = @import("backend/Backend.zig");
 
 const State = @This();
-
-const Mountable = struct {
-    view: Component.View,
-    comp: Component,
-};
 
 a: std.mem.Allocator,
 arena: std.heap.ArenaAllocator,
 backend: Backend,
 
-// undos: Undo_Stack,
-// redos: Undo_Stack,
-// undo: Undo,
-
 ch: trm.KeyEvent = @bitCast(@as(u16, 0)),
+/// TODO: move to the buffer structure
 repeating: Repeating = .{},
-
-/// Message to show in the status bar, remains until cleared
-/// must be arena allocated
-status_bar_msg: ?[]const u8 = null,
-
-// defaultKeyMap: [3]rc.RcUnmanaged(km.KeyMaps),
-
-// If null then do the normal key map look up, else use this as the key maps,
-// dont touch this as if you try to be clever it will just be set to null
-// currentKeyMap: ?*km.KeyMaps = null,
 
 L: *lua.State,
 
@@ -52,9 +33,7 @@ resized: bool = false,
 
 /// Also call zygot buffer sometimes
 scratchbuffer: *Buffer,
-
 buffers: std.ArrayListUnmanaged(*Buffer),
-
 /// null selects the scratch buffer
 bufferindex: ?usize,
 
@@ -70,9 +49,12 @@ commandbuffer: std.ArrayListUnmanaged(u8) = .{},
 // loop: xev.Loop,
 // inputcallback: ?struct { *xev.Completion, xev.Async } = null,
 
-pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State {
-    try checkfirstrun(a);
+pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
+    const backend = try Backend.init(a, args);
+    // TODO: based on the backend then create an appropriate logger to either
+    // stdout or a file
 
+    try checkfirstrun(a);
     const L = lua.init();
 
     var arena = std.heap.ArenaAllocator.init(a);
@@ -89,9 +71,11 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         .id = Buffer.idgen.next(),
         .lines = .{},
     };
+    // TODO: append welcome content to scratch buffer
+    // try scratch.insertCharacter(a, 't');
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
-    if (file) |f| {
+    for (args.files) |f| {
         const buffer = try a.create(Buffer);
         root.log(@src(), .debug, "opening file ({s})", .{f});
         buffer.* = Buffer.init(a, maps, f) catch |err| {
@@ -102,28 +86,16 @@ pub fn init(a: std.mem.Allocator, file: ?[]const u8, args: Args) anyerror!State 
         try buffers.append(a, buffer);
     }
 
-    // try scratch.insertCharacter(a, 't');
-    // scratch
-
-    // TODO: append welcome content to scratch buffer
-
     var state = State{
         .a = a,
         .arena = arena,
         .L = L,
 
-        // .term = t,
-        .backend = try Backend.init(a, args),
-
-        // .undo_stack = Undo_Stack.init,
-        // .redo_stack = Undo_Stack.init(a),
-        // .cur_undo = Undo{},
+        .backend = backend,
 
         .scratchbuffer = scratch,
         .buffers = buffers,
-        .bufferindex = 0,
-
-        // .loop = try xev.Loop.init(.{}),
+        .bufferindex = if (args.files.len > 0) 0 else null,
     };
 
     try render.init(&state);
@@ -135,12 +107,6 @@ pub fn deinit(state: *State) void {
     std.log.debug("deiniting state", .{});
 
     state.commandbuffer.deinit(state.a);
-
-    // state.cur_undo.data.deinit(state.a);
-    // state.undo_stack.deinit();
-    // state.redo_stack.deinit();
-
-    // state.a.free(state.status_bar_msg);
 
     // The scratchbuffer owns the keymaps.
     // The keymaps must be released before lua as they reference each other.
@@ -172,6 +138,7 @@ pub fn deinit(state: *State) void {
 
 pub fn getCurrentBuffer(state: *State) *Buffer {
     const idx = state.bufferindex orelse return state.scratchbuffer;
+    if (state.buffers.items.len == 0) return state.scratchbuffer;
 
     std.debug.assert(state.buffers.items.len >= 1);
     // TODO: this might be better as a runtime check
@@ -203,13 +170,18 @@ pub const Repeating = struct {
         self.is = false;
         self.count = 0;
     }
+
+    pub inline fn take(self: *Repeating) usize {
+        const count = if (self.is) self.count else 1;
+        self.count = 0;
+        self.is = false;
+        return count;
+    }
 };
 
+/// DEPRECATED: use `state.repeating.take()` instead.
 pub fn takeRepeating(state: *State) usize {
-    const count = if (state.repeating.is) state.repeating.count else 1;
-    state.repeating.count = 0;
-    state.repeating.is = false;
-    return count;
+    return state.repeating.take();
 }
 
 fn checkfirstrun(a: std.mem.Allocator) !void {
@@ -241,6 +213,7 @@ pub fn bufferNext(state: *State) void {
 
     state.bufferindex = if (idx == state.buffers.items.len - 1) 0 else idx + 1;
 }
+
 pub fn bufferPrev(state: *State) void {
     if (state.buffers.items.len < 2) return;
 
@@ -250,3 +223,8 @@ pub fn bufferPrev(state: *State) void {
     };
     state.bufferindex = if (idx == 0) state.buffers.items.len - 1 else idx - 1;
 }
+
+const Mountable = struct {
+    view: Component.View,
+    comp: Component,
+};

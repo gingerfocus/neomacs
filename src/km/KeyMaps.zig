@@ -12,11 +12,14 @@ const KeyMaps = @This();
 
 keys: KeyToFunction = .{},
 
-fallback: ?KeyFunction = null,
-targeter: ?KeyFunction = null,
+fallback: ?KeyFunction,
+targeter: ?KeyFunction,
 
 /// used as a name to self identify
 modeid: ModeId = ModeId.Null,
+
+/// Causes the keymap to not be set to null at the end of the run
+pending: bool = false,
 
 // Note: you can statically init this but just be sure to use the same
 // allocator for everything
@@ -44,6 +47,9 @@ pub fn run(self: KeyMaps, state: *State, ke: trm.KeyEvent) !void {
             //     return;
             // }
             try targeter.run(state);
+
+            const buffer = state.getCurrentBuffer();
+            buffer.curkeymap = null;
         }
         return;
     }
@@ -64,6 +70,7 @@ pub inline fn put(self: *KeyMaps, a: std.mem.Allocator, character: u16, value: K
 }
 
 /// Gets the next submap
+/// TODO: this function is so bad and will be my downfall
 pub fn then(
     self: *KeyMaps,
     a: std.mem.Allocator,
@@ -74,28 +81,25 @@ pub fn then(
     // 1. create a new id
     const newid = self.modeid.chain(character);
 
-    std.log.debug("new id: {any}", .{newid});
+    // std.log.debug("new id: {any}", .{newid});
 
     // 2. create a new map in the mode maps
     const res = try maps.getOrPut(a, newid);
     if (res.found_existing) return res.value_ptr.*;
     res.value_ptr.* = try a.create(KeyMaps);
-    res.value_ptr.*.* = KeyMaps{ .modeid = newid };
+    res.value_ptr.*.* = KeyMaps{
+        .modeid = newid,
+        // TODO: find a way to move this to the callers responsibility
+        .targeter = null,
+        .fallback = null,
+    };
 
     // 3. add a key function to switch to that map
     const kf = KeyFunction{ .function = .{ .setmod = newid } };
-    // try kf.setdata(ModeId, a, newid);
     try self.put(a, character, kf);
 
     // 4. return the map
     return res.value_ptr.*;
 }
-
-// fn actionthen(state: *State, ctx: km.KeyFunctionDataValue) !void {
-//     const mode = km.getdata(ctx, ModeId) orelse {
-//         return error.NoModeId;
-//     };
-//     state.getCurrentBuffer().setMode(mode.*);
-// }
 
 pub const KeyToFunction = std.AutoArrayHashMapUnmanaged(u16, KeyFunction);

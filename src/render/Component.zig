@@ -5,7 +5,7 @@ const std = root.std;
 const lib = root.lib;
 
 const State = root.State;
-const Backend = State.Backend;
+const Backend = root.Backend;
 
 pub const View = lib.Vec4;
 

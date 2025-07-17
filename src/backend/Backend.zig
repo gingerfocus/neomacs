@@ -13,56 +13,44 @@ const BackendFile = @import("BackendFile.zig");
 const BackendHeadless = @import("BackendHeadless.zig");
 
 // arena: std.heap.ArenaAllocator,
-vtable: *const VTable,
 dataptr: *anyopaque,
+vtable: *const VTable,
 
 const Self = @This();
-const Args = root.Args;
 
-pub fn init(a: std.mem.Allocator, args: Args) !Self {
-    if (args.dosnapshot) |path| {
-        // this path must always converge
-        const file = try BackendFile.init(a, path);
-        return file.backend();
-    }
-
-    if (args.terminal) {
-        if (BackendTerminal.init(a)) |term| {
+pub fn init(a: std.mem.Allocator, args: root.Args) !Self {
+    switch (args.backend) {
+        .Snapshot => |path| {
+            const file = try BackendFile.init(a, path);
+            return file.backend();
+        },
+        .Terminal => {
+            const term = try BackendTerminal.init(a);
             return term.backend();
-        } else |err| {
-            std.log.err("could not open terminal backend: {any}", .{err});
-        }
-    }
-
-    if (args.gtk) {
-        if (options.usegtk) {
-            if (BackendGtk.init(a)) |window| {
-                return window.backend();
-            } else |err| {
-                root.log(@src(), .warn, "could not open gtk backend: {any}", .{err});
+        },
+        .GTK => {
+            if (!options.usegtk) {
+                std.log.err("gtk backend is disabled", .{});
+                return error.GTKBackendDisabled;
             }
-        } else {
-            std.log.err("gtk backend is disabled", .{});
-        }
-    }
-
-    if (args.wayland) {
-        if (options.usewayland) {
-            if (BackendWayland.init(a)) |window| {
-                return window.backend();
-            } else |err| {
-                root.log(@src(), .warn, "could not open wayland backend: {any}", .{err});
+            const window = try BackendGtk.init(a);
+            return window.backend();
+        },
+        .Wayland => {
+            if (!options.usewayland) {
+                std.log.err("wayland backend is disabled", .{});
+                return error.WaylandBackendDisabled;
             }
-        } else {
-            std.log.err("wayland backend is disabled", .{});
-        }
+            const window = try BackendWayland.init(a);
+            return window.backend();
+        },
+        // TODO: make the state able to have a list of backends and headless is
+        // just and empty list
+        .Headless => {
+            const headless = try BackendHeadless.init(a);
+            return headless.backend();
+        },
     }
-
-    std.log.err("could not open any backend, falling back to headless backend", .{});
-    std.log.err("close with TODO", .{});
-
-    const headless = try BackendHeadless.init(a);
-    return headless.backend();
 }
 
 pub inline fn deinit(self: Self) void {

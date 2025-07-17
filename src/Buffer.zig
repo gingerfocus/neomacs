@@ -26,6 +26,10 @@ lines: std.ArrayListUnmanaged(Line),
 row: usize = 0,
 col: usize = 0,
 
+// undos: Undo_Stack,
+// redos: Undo_Stack,
+// undo: Undo,
+
 /// Row and Col in buffer
 // cursor: lib.Vec2 = .{ .row = 0, .col = 0 },
 // desired: lib.Vec2 = .{ .row = 0, .col = 0 },

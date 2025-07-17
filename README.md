@@ -37,7 +37,7 @@ zig build --release=small
 
 
 ## All features
-You can also build a fully capable editor by saying what you can informing what
+You can also build a fully capable editor by informing the build system of what
 you can link to.
 ```bash
 zig build -Dgtk=true -Dstatic-lua=false --release=safe

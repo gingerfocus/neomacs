@@ -5,36 +5,46 @@ const lua = root.lua;
 const km = root.km;
 const State = root.State;
 
-// command.fallback = .{ .Native = command.insert };
-pub fn init(a: std.mem.Allocator, maps: *km.KeyMaps) !void {
-    maps.fallback = km.KeyFunction.initstate(thunk.append);
+pub fn init(a: std.mem.Allocator, modes: *km.ModeToKeys) !void {
+    const res = try modes.getOrPut(a, km.ModeId.Command);
+    if (!res.found_existing) {
+        std.log.debug("creating new command map", .{});
+        res.value_ptr.* = try a.create(km.KeyMaps);
+    }
 
-    try maps.put(
+    const map = res.value_ptr.*;
+    map.* = km.KeyMaps{
+        .modeid = km.ModeId.Command,
+        .fallback = km.KeyFunction.initstate(commandline.append),
+        .targeter = null,
+    };
+
+    try map.put(
         a,
         trm.keys.norm(trm.KeySymbol.Backspace.toBits()),
-        km.KeyFunction.initstate(thunk.delete),
+        km.KeyFunction.initstate(commandline.delete),
     );
 
-    try maps.put(
+    try map.put(
         a,
         trm.keys.norm(trm.KeySymbol.Esc.toBits()),
-        km.KeyFunction.initstate(thunk.stop),
+        km.KeyFunction.initstate(commandline.stop),
     );
 
-    try maps.put(
+    try map.put(
         a,
         trm.keys.ctrl('c'),
-        km.KeyFunction.initstate(thunk.stop),
+        km.KeyFunction.initstate(commandline.stop),
     );
 
-    try maps.put(
+    try map.put(
         a,
         trm.keys.norm('\n'),
-        km.KeyFunction.initstate(thunk.run),
+        km.KeyFunction.initstate(commandline.run),
     );
 }
 
-const thunk = struct {
+const commandline = struct {
     fn append(state: *State, _: km.KeyFunctionDataValue) !void {
         if (state.ch.modifiers.bits() == 0)
             try state.commandbuffer.append(state.a, state.ch.character);
@@ -64,6 +74,6 @@ const thunk = struct {
 
         std.log.debug("running done: {s}", .{cmd});
 
-        try thunk.stop(state, null);
+        try commandline.stop(state, null);
     }
 };

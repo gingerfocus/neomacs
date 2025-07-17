@@ -3,7 +3,7 @@ const root = @import("../../root.zig");
 const lib = root.lib;
 
 const State = root.State;
-const Backend = State.Backend;
+const Backend = root.Backend;
 const Color = Backend.Color;
 const View = @import("../Component.zig").View;
 

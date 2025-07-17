@@ -3,7 +3,7 @@ const std = root.std;
 const lib = root.lib;
 
 const State = root.State;
-const Backend = State.Backend;
+const Backend = root.Backend;
 const Color = Backend.Color;
 const View = @import("../Component.zig").View;
 
@@ -26,19 +26,19 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
 
     const buffer = state.getCurrentBuffer();
 
-    if (state.status_bar_msg) |print_msg| {
-        for (print_msg, 0..) |ch, i| {
-            writer.draw(
-                .{ .col = view.x + i, .row = view.y + 1 },
-                .{
-                    .background = Color.Black,
-                    .foreground = Color.White,
-                    .content = .{ .Text = ch },
-                },
-            );
-        }
-        state.status_bar_msg = null;
-    }
+    // if (state.status_bar_msg) |print_msg| {
+    //     for (print_msg, 0..) |ch, i| {
+    //         writer.draw(
+    //             .{ .col = view.x + i, .row = view.y + 1 },
+    //             .{
+    //                 .background = Color.Black,
+    //                 .foreground = Color.White,
+    //                 .content = .{ .Text = ch },
+    //             },
+    //         );
+    //     }
+    //     state.status_bar_msg = null;
+    // }
 
     {
         const position = std.fmt.allocPrint(state.a, "{}:{}", .{ buffer.row + 1, buffer.col + 1 }) catch return;

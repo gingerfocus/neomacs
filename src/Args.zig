@@ -1,36 +1,59 @@
 const std = @import("std");
-const Args = @This();
 const mem = std.mem;
 const options = @import("options");
 
-progname: [*:0]const u8,
-positionals: []const []const u8 = &.{},
-help: ?[]const u8 = null,
-dosnapshot: ?[]const u8 = null,
+const Args = @This();
 
-/// Run only the pager, no other functionality
-pager: bool = false,
+operation: Operation,
+backend: BackendType,
+files: []const []const u8,
 
-/// Run in the terminal, dont open a new window
-terminal: bool = !options.usegtk,
+pub const BackendType = union(enum) {
+    Wayland,
+    GTK,
+    Terminal,
+    Snapshot: []const u8,
+    Headless,
+};
+pub const Operation = enum { None, Page, Terminal };
 
-/// Run with the GTK backend
-gtk: bool = options.usegtk,
+const InputArgs = struct {
+    // progname: [*:0]const u8,
+    help: ?[]const u8 = null,
+    dosnapshot: ?[]const u8 = null,
 
-/// Run with the Wayland backend
-wayland: bool = false,
+    /// Run only the pager, no other functionality
+    pager: bool = false,
 
-/// The config file to load
-config: ?[]const u8 = null,
+    /// Run in the terminal, dont open a new window
+    terminal: bool = !options.usegtk,
 
-/// TODO: std.process.args()
-pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
+    /// Run with the GTK backend
+    gtk: bool = options.usegtk,
+
+    /// Run with the Wayland backend
+    wayland: bool = false,
+
+    /// The config file to load
+    config: ?[]const u8 = null,
+};
+
+pub fn parse(a: std.mem.Allocator) !Args {
+    // TODO: std.process.args()
+    // const args = try std.process.argsAlloc(a);
+    // defer std.process.argsFree(a, args);
+
+    const args = std.os.argv;
+
     var i: usize = 0;
 
-    var opts = Args{ .progname = args[i] };
+    var inputs = InputArgs{
+        // .progname = args[i],
+    };
     i += 1;
 
-    var positionals = std.ArrayList([]const u8).init(a);
+    var files = std.ArrayList([]const u8).init(a);
+    defer files.deinit();
 
     while (i < args.len) {
         const arg = mem.span(args[i]);
@@ -39,68 +62,102 @@ pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
         if (arg.len == 0) continue;
 
         if (mem.eql(u8, arg, "-h")) {
-            opts.help = try getHelpPage(a, "tutor");
+            inputs.help = try getHelpPage(a, "tutor");
             continue;
         }
 
         if (mem.eql(u8, arg, "--help")) {
             if (i >= args.len) {
-                opts.help = try getHelpPage(a, "tutor");
+                inputs.help = try getHelpPage(a, "tutor");
                 continue;
             }
-            opts.help = try getHelpPage(a, args[i]);
+            inputs.help = try getHelpPage(a, args[i]);
             i += 1;
             continue;
         }
 
         if (mem.eql(u8, arg, "-c") or mem.eql(u8, arg, "--config")) {
             if (i >= args.len) continue;
-            opts.config = try a.dupe(u8, std.mem.span(args[i]));
+            inputs.config = try a.dupe(u8, std.mem.span(args[i]));
             i += 1;
             continue;
         }
 
         if (mem.eql(u8, arg, "-P") or mem.eql(u8, arg, "--pager")) {
-            opts.pager = true;
+            inputs.pager = true;
             continue;
         }
 
         if (mem.eql(u8, arg, "-T") or mem.eql(u8, arg, "--terminal")) {
-            opts.terminal = true;
+            inputs.terminal = true;
             continue;
         }
 
         if (mem.eql(u8, arg, "-G") or mem.eql(u8, arg, "--gtk")) {
-            opts.gtk = true;
+            inputs.gtk = true;
             continue;
         }
 
         if (mem.eql(u8, arg, "-W") or mem.eql(u8, arg, "--wayland")) {
-            opts.wayland = true;
+            inputs.wayland = true;
             continue;
         }
 
         if (mem.eql(u8, arg, "-R") or mem.eql(u8, arg, "--render-to-file")) {
             if (i >= args.len) continue;
-            opts.dosnapshot = try a.dupe(u8, std.mem.span(args[i]));
+            inputs.dosnapshot = try a.dupe(u8, std.mem.span(args[i]));
             i += 1;
             continue;
         }
 
+        const narg = try a.dupe(u8, arg);
         // if it doesnt match an argument try to use it as a file
-        try positionals.append(arg);
+        try files.append(narg);
     }
-    opts.positionals = try positionals.toOwnedSlice();
 
-    return opts;
+    // -- Now Convert it to our output Args ----------------------------------
+
+    var operation: Operation = .Terminal;
+    var backend: BackendType = .Terminal;
+
+    if (inputs.config) |filename| a.free(filename);
+
+    if (inputs.terminal) {
+        backend = .Terminal;
+    }
+    if (options.usewayland and inputs.wayland) {
+        backend = .Wayland;
+    }
+    if (options.usegtk and inputs.gtk) {
+        backend = .GTK;
+    }
+    if (inputs.pager) {
+        operation = .Page;
+    }
+    // do this last so it doesnt get overwritten and we lose the reference
+    if (inputs.dosnapshot) |filename| {
+        backend = .{ .Snapshot = filename };
+    }
+
+    if (inputs.help) |filename| {
+        try files.append(filename);
+    }
+
+    return Args{
+        .operation = operation,
+        .backend = backend,
+        .files = try files.toOwnedSlice(),
+    };
 }
 
 pub fn deinit(self: Args, a: std.mem.Allocator) void {
-    if (self.help) |filename| a.free(filename);
-    if (self.dosnapshot) |filename| a.free(filename);
-    if (self.config) |filename| a.free(filename);
+    switch (self.backend) {
+        .Snapshot => |path| a.free(path),
+        else => {},
+    }
 
-    a.free(self.positionals);
+    for (self.files) |file| a.free(file);
+    a.free(self.files);
 }
 
 fn getHelpPage(a: std.mem.Allocator, page: [*:0]const u8) ![]const u8 {
@@ -165,77 +222,3 @@ test "parse unknown option stops at first positional" {
     try std.testing.expectEqualStrings("--unknown", args.positionals[0]);
     try std.testing.expectEqualStrings("foo", args.positionals[1]);
 }
-
-// const options = .{
-//     .pager = .{
-//         .short = "-P",
-//         .long = "--pager",
-//         .type = bool,
-//         .default = false,
-//         .description = "Run as a pager, no other functionality, less replacement",
-//     },
-//     .help = .{
-//         .short = "-h",
-//         .long = "--help",
-//         .type = []const u8,
-//         .default = "tutor",
-//         .description = "Show given help page in editor or the default",
-//     },
-//     .terminal = .{
-//         .short = "-T",
-//         .long = "--terminal",
-//         .type = bool,
-//         .default = false,
-//         .description = "Run in the terminal, dont open a new window",
-//     },
-// };
-
-// const emptyargs: []const []const u8 = &.{};
-
-// pub fn ArgsFromOptions(comptime Options: anytype) type {
-//     const OptionFields = @TypeOf(Options);
-//     const fields = @typeInfo(OptionFields).@"struct".fields;
-
-//     var field_list: []const std.builtin.Type.StructField = &.{
-//         std.builtin.Type.StructField{
-//             .name = "progname",
-//             .type = [*:0]const u8,
-//             .default_value_ptr = null,
-//             .is_comptime = false,
-//             .alignment = @alignOf([*:0]const u8),
-//         },
-//         .{
-//             .name = "positionals",
-//             .type = []const []const u8,
-//             .default_value_ptr = @ptrCast(&emptyargs),
-//             // .default_value_ptr = null,
-//             .is_comptime = false,
-//             .alignment = @alignOf([]const []const u8),
-//         },
-//     };
-
-//     // Add option fields
-//     comptime var i: usize = 0;
-//     inline for (fields) |f| {
-//         const field = @field(Options, f.name);
-//         field_list = field_list ++ &[1]std.builtin.Type.StructField{
-//             .{
-//                 .name = f.name,
-//                 .type = f.type,
-//                 .default_value_ptr = if (@hasDecl(@TypeOf(field), "default")) &field.default else null,
-//                 // .default_value_ptr = null,
-//                 .is_comptime = false,
-//                 .alignment = @alignOf(f.type),
-//             },
-//         };
-//         i += 1;
-//     }
-
-//     return @Type(std.builtin.Type{ .@"struct" = std.builtin.Type.Struct{
-//         .layout = .auto,
-//         .fields = field_list,
-//         .decls = &.{},
-//         .is_tuple = false,
-//     } });
-// }
-// // var opts = ArgsFromOptions(options){ .progname = args[i] };

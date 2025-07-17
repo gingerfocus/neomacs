@@ -18,7 +18,7 @@ pub const command = @import("command.zig");
 
 const Ks = trm.KeySymbol;
 
-const action = struct {
+const targeters = struct {
     pub fn move(state: *State, ctx: km.KeyFunctionDataValue) !void {
         try moveKeep(state, ctx);
 
@@ -40,50 +40,50 @@ const action = struct {
     pub fn none(_: *State) !void {}
 };
 
-// const MAPIDS = struct {
-//     const INSERT = 0;
-//     const NORMAL = 1;
-//     const VISUAL = 2;
-// };
+const insertsfn = struct {
+    fn append(s: *State, _: km.KeyFunctionDataValue) !void {
+        if (s.ch.modifiers.bits() == 0) {
+            const buf = s.getCurrentBuffer();
+            try buf.insertCharacter(s.a, s.ch.character);
+        }
+    }
+};
 
 pub fn create(
     alloc: std.mem.Allocator,
     arena: *std.heap.ArenaAllocator,
 ) !km.ModeToKeys {
-    const fallback = struct {
-        fn bufInsert(s: *State, _: km.KeyFunctionDataValue) !void {
-            if (s.ch.modifiers.bits() == 0) {
-                const buf = s.getCurrentBuffer();
-                try buf.insertCharacter(s.a, s.ch.character);
-            }
-        }
-    };
-
     const a = arena.allocator();
 
     var modes = km.ModeToKeys{};
 
     const normal = try a.create(km.KeyMaps);
-    normal.* = km.KeyMaps{ .modeid = ModeId.Normal };
+    normal.* = km.KeyMaps{
+        .modeid = ModeId.Normal,
+        .targeter = km.KeyFunction.initstate(targeters.move),
+        .fallback = null,
+    };
     try modes.put(alloc, ModeId.Normal, normal);
 
     const insert = try a.create(km.KeyMaps);
-    insert.* = km.KeyMaps{ .modeid = ModeId.Insert };
+    insert.* = km.KeyMaps{
+        .modeid = ModeId.Insert,
+        .targeter = km.KeyFunction.initstate(targeters.move),
+        .fallback = km.KeyFunction.initstate(insertsfn.append),
+    };
     try modes.put(alloc, ModeId.Insert, insert);
 
     const visual = try a.create(km.KeyMaps);
-    visual.* = km.KeyMaps{ .modeid = ModeId.Visual };
+    visual.* = km.KeyMaps{
+        .modeid = ModeId.Visual,
+        .targeter = km.KeyFunction.initstate(targeters.moveKeep),
+        .fallback = null,
+    };
     try modes.put(alloc, ModeId.Visual, visual);
-
-    const commandmode = try a.create(km.KeyMaps);
-    commandmode.* = km.KeyMaps{ .modeid = ModeId.Command };
-    try modes.put(alloc, ModeId.Command, commandmode);
 
     // insert
     try initInsertKeys(a, insert);
     try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initstate(actions.normal));
-    insert.targeter = km.KeyFunction.initstate(action.move);
-    insert.fallback = km.KeyFunction.initstate(fallback.bufInsert);
 
     // normal
     try initToInsertKeys(a, normal);
@@ -91,29 +91,27 @@ pub fn create(
     try initMotionKeys(a, normal, &modes);
     try initNormalKeys(a, normal);
     try initModifyingKeys(a, normal, &modes);
-    normal.targeter = km.KeyFunction.initstate(action.move);
 
     // visual
     try initMotionKeys(a, visual, &modes);
     try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initstate(actions.normal));
     try visual.put(a, norm('d'), km.KeyFunction.initstate(actions.delete));
-    visual.targeter = km.KeyFunction.initstate(action.moveKeep);
 
     // command
-    try command.init(a, commandmode);
+    try command.init(a, &modes);
     return modes;
 }
 
 pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeToKeys) !void {
     // arrow keys?
-    try maps.put(a, norm('j'), km.KeyFunction.initstate(targeter.motionDown));
-    try maps.put(a, norm('k'), km.KeyFunction.initstate(targeter.motionUp));
-    try maps.put(a, norm('l'), km.KeyFunction.initstate(targeter.right));
-    try maps.put(a, norm('h'), km.KeyFunction.initstate(targeter.left));
+    try maps.put(a, norm('j'), km.KeyFunction.initstate(motions.motionDown));
+    try maps.put(a, norm('k'), km.KeyFunction.initstate(motions.motionUp));
+    try maps.put(a, norm('l'), km.KeyFunction.initstate(motions.right));
+    try maps.put(a, norm('h'), km.KeyFunction.initstate(motions.left));
 
-    try maps.put(a, norm('G'), km.KeyFunction.initstate(targeter.bot));
-    try maps.put(a, '$', km.KeyFunction.initstate(targeter.motionEnd));
-    try maps.put(a, '0', km.KeyFunction.initstate(targeter.motionBegin));
+    try maps.put(a, norm('G'), km.KeyFunction.initstate(motions.bot));
+    try maps.put(a, '$', km.KeyFunction.initstate(motions.motionEnd));
+    try maps.put(a, '0', km.KeyFunction.initstate(motions.motionBegin));
 
     // motion_e(state);
     // motion_b(state);
@@ -122,13 +120,15 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeTo
     //  @as(c_int, 37) buffer_next_brace(buffer);
 
     const g = try maps.then(a, modes, norm('g'));
-    try g.put(a, norm('g'), km.KeyFunction.initstate(targeter.top));
+    g.targeter = km.KeyFunction.initstate(targeters.move);
     g.fallback = km.KeyFunction.initbuffer(struct {
         fn testting(buffer: *Buffer, _: km.KeyFunctionDataValue) anyerror!void {
             buffer.curkeymap = null;
             // std.log.debug("testting", .{});
         }
     }.testting);
+
+    try g.put(a, norm('g'), km.KeyFunction.initstate(motions.top));
 
     // const gq = try g.then(a, 'q');
     // _ = gq; // autofix
@@ -140,7 +140,7 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.Mod
     // c - buffer_replace_ch(buffer, state);
 
     const d = try maps.then(a, modes, norm('d'));
-    try d.put(a, norm('d'), km.KeyFunction.initstate(targeter.line));
+    try d.put(a, norm('d'), km.KeyFunction.initstate(motions.line));
     try initMotionKeys(a, d, modes);
     d.targeter = km.KeyFunction.initstate(actions.delete);
 }
@@ -1121,7 +1121,7 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *km.KeyMaps) !void {
 // }
 
 /// A collection of key targeters that can be applied in different contexts.
-const targeter = struct {
+const motions = struct {
     /// Selects `count` full lines starting from the current cursor position.
     fn line(state: *State, _: km.KeyFunctionDataValue) !void {
         root.log(@src(), .debug, "targeter line", .{});
@@ -1194,8 +1194,13 @@ const targeter = struct {
         const count = state.takeRepeating();
 
         std.log.debug("motionTop: target = {}", .{count});
-        buffer.row = count - 1;
+        buffer.target = .{
+            .mode = .Line,
+            .start = buffer.position(),
+            .end = .{ .row = count - 1, .col = 0 },
+        };
         // buffer.updatePostionKeepRow();
+
     }
 
     fn bot(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -1351,6 +1356,23 @@ const targeter = struct {
     //     buffer_delete_selection(buffer, state, start, end -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))));
     //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
     // }
+
+    fn movestart(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+
+        const begin = buffer.position();
+        var end = begin;
+        end.col = 0;
+
+        const count = state.repeating.take();
+        end.row = std.math.sub(usize, begin.row, count - 1) catch 0;
+
+        buffer.target = .{
+            .mode = .Line,
+            .start = begin,
+            .end = end,
+        };
+    }
 };
 
 /// A collection of functions that act on a target.
@@ -1407,6 +1429,9 @@ const inserts = struct {
     fn before(state: *State, _: km.KeyFunctionDataValue) !void {
         root.log(@src(), .debug, "inserts before", .{});
         const buffer = state.getCurrentBuffer();
+
+        // TODO: repeating this repeart the text you insert, i dont want to
+        // make that
         state.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
@@ -1425,13 +1450,14 @@ const inserts = struct {
     }
 
     fn start(state: *State, _: km.KeyFunctionDataValue) !void {
+        // TODO: move this to an external function that both call, for exmaple
+        //
+        // const target = motions.movestart(buffer, count);
+        // buffer.moveto(target.end);
+        // buffer.setMode(ModeId.Insert);
+
+        try motions.movestart(state, null);
         const buffer = state.getCurrentBuffer();
-        // const row = buffer.rows.items[buffer.row];
-        //
-        // buffer.cursor = row.start;
-        // buffer.col = 0;
-        //
-        // state.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
 
@@ -1489,83 +1515,3 @@ const visuals = struct {
     const block = setModeMeta(.Block);
     const range = setModeMeta(.Range);
 };
-
-// const root = @import("root.zig");
-// const std = root.std;
-// const trm = root.trm;
-// const lua = root.lua;
-// const km = root.km;
-// const State = root.State;
-// const Buffer = root.Buffer;
-//
-// const Command = @This();
-//
-// is: bool = false,
-// buffer: std.ArrayListUnmanaged(u8) = .{},
-// maps: km.KeyMaps,
-//
-// const thunk = struct {
-//     fn append(state: *State) !void {
-//         if (state.ch.modifiers.bits() == 0)
-//             try state.command.buffer.append(state.a, state.ch.character);
-//     }
-//
-//     fn delete(state: *State) !void {
-//         _ = state.command.buffer.pop();
-//     }
-//
-//     fn gotoNormal(state: *State) !void {
-//         state.command.buffer.clearRetainingCapacity();
-//         state.command.is = false;
-//     }
-//
-//     // TODO: have a colon commandline and a semicolon command line
-//     // the colon is the same as vim and the semi is a direct lua function
-//     fn run(state: *State) !void {
-//         const cmd = try state.command.buffer.toOwnedSliceSentinel(state.a, 0);
-//         defer state.a.free(cmd);
-//
-//         std.log.debug("running command: {s}", .{cmd});
-//
-//         // if (state.inputcallback) |h| {
-//         //     try h[1].notify();
-//         //     try state.loop.run(.once);
-//         //     std.log.debug("finish: {any}", .{h[0]});
-//         // }
-//
-//         lua.run(state.L, cmd) catch |err| {
-//             root.log(@src(), .err, "lua command line error: {}", .{err});
-//         };
-//
-//         state.command.is = false;
-//
-//         const buffer = state.getCurrentBuffer() orelse return;
-//         buffer.setMode(Buffer.ModeId.Normal);
-//     }
-// };
-//
-// pub fn init(a: std.mem.Allocator) !Command {
-//     var maps = km.KeyMaps{
-//         .keys = .{},
-//         .fallback = .{ .Native = thunk.append },
-//         .targeter = .{ .Native = km.action.none },
-//     };
-//
-//     try maps.put(a, trm.keys.norm(trm.KeySymbol.Backspace.toBits()), .{ .Native = thunk.delete });
-//
-//     try maps.put(a, trm.keys.norm(trm.KeySymbol.Esc.toBits()), .{
-//         .Native = thunk.gotoNormal,
-//     });
-//     try maps.put(a, trm.keys.ctrl('c'), .{
-//         .Native = thunk.gotoNormal,
-//     });
-//
-//     try maps.put(a, trm.keys.norm('\n'), .{ .Native = thunk.run });
-//
-//     return Command{ .maps = maps };
-// }
-//
-// pub fn deinit(self: *Command, L: ?*lua.State, a: std.mem.Allocator) void {
-//     self.buffer.deinit(a);
-//     self.maps.deinit(L, a);
-// }

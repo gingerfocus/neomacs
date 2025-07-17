@@ -40,44 +40,42 @@ pub fn main() u8 {
 fn neomacs() !void {
     const a = root.alloc.allocator();
 
-    root.log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
+    // root.log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
 
-    const args = try root.Args.parse(a, std.os.argv);
+    const args = try root.Args.parse(a);
     defer args.deinit(a);
 
-    const filename: ?[]const u8 = if (args.positionals.len > 0) args.positionals[0] else null;
-    const file: ?[]const u8 = args.help orelse filename;
-
     // run just the terminal pager when comfigured to do so
-    if (args.pager) {
-        if (file) |pagerfile| {
-            const f = std.fs.File{ .handle = try std.posix.open(pagerfile, .{}, 0) };
-            defer f.close();
-            try root.zss.page(f);
-        }
+    if (args.operation == .Page) {
+        if (args.files.len != 1) return;
+
+        const f = std.fs.File{ .handle = try std.posix.open(args.files[0], .{}, 0) };
+        defer f.close();
+        try root.zss.page(f);
         return;
     }
 
-    root.setstate(try a.create(root.State));
-    const s = root.state();
-    defer a.destroy(s);
-    s.* = try root.State.init(a, file, args);
-    defer s.deinit();
+    const state = try a.create(root.State);
+    defer a.destroy(state);
+    root.setstate(state);
 
-    while (!s.config.QUIT) {
-        try root.render.draw(s);
+    state.* = try root.State.init(a, args);
+    defer state.deinit();
 
-        const ev = s.backend.pollEvent(10000);
+    while (!state.config.QUIT) {
+        try root.render.draw(state);
+
+        const ev = state.backend.pollEvent(10000);
 
         switch (ev) {
             .Key => |ke| {
                 if (root.trm.keys.bits(ke) == root.trm.keys.ctrl('q')) break;
-                s.ch = ke; // used by bad events that reference state directly
+                state.ch = ke; // used by bad events that reference state directly
                 // std.debug.print("key: {any}\n", .{ke});
-                try s.press(ke);
+                try state.press(ke);
             },
-            .End => s.config.QUIT = true,
-            .Resize => s.resized = true,
+            .End => state.config.QUIT = true,
+            .Resize => state.resized = true,
             // .Error => |fatal| { if (fatal) break; },
             else => {},
         }

@@ -1,5 +1,5 @@
 # For 0.1.1
-- [ ] Targeters 
+- [ ] Targeters
   - [ ] w
   - [ ] b
   - [ ] e
@@ -17,6 +17,7 @@
 - [ ] Lua API
 - [ ] Undo
 - [ ] Make an example plugin
+- [ ] More Motions ('a', 'i') "(){}[]"
 
 # Later
 - [ ] Allow Keymaps to have State
@@ -32,6 +33,9 @@
 - [ ] swaping the start and end position visual selection
 - [ ] Oil/Netrw/Dired/Neotree alternative
 - [ ] Multi Backend
+- [ ] Total runtime configuration to make paging truely zero cost
+  - [ ] rework state object to handle allow resources
+  - [ ] remove zss.zig file, should just be a consequence of the above
 
 # Much Later
 - [ ] Inline Image preview
