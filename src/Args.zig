@@ -32,7 +32,7 @@ const InputArgs = struct {
     gtk: bool = options.usegtk,
 
     /// Run with the Wayland backend
-    wayland: bool = false,
+    wayland: bool = options.usewayland,
 
     /// The config file to load
     config: ?[]const u8 = null,

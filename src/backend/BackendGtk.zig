@@ -8,13 +8,13 @@ const desktop = @import("desktop.zig");
 
 const Self = @This();
 
+
 const gtk = @cImport({
     @cDefine("GDK_DISABLE_DEPRECATED", "1");
     @cDefine("GTK_DISABLE_DEPRECATED", "1");
     @cInclude("gtk/gtk.h");
     @cInclude("gdk/gdk.h");
     @cInclude("gdk/gdkkeysyms.h");
-    @cInclude("cairo/cairo.h"); // Make sure cairo is included for cairo functions
 });
 
 // shim for c.g_signal_connect as translate-c is broken for this macro
@@ -34,11 +34,7 @@ a: std.mem.Allocator,
 
 mainwin: *gtk.GtkWidget,
 drawarea: *gtk.GtkWidget,
-cr: ?*gtk.cairo_t = null,
-
-const FONT_SIZE: f64 = 36.0;
-const CHAR_WIDTH: f64 = FONT_SIZE / 2;
-const CHAR_HEIGHT: f64 = FONT_SIZE;
+cr: ?*desktop.cairo.cairo_t = null,
 
 pub fn init(a: std.mem.Allocator) !*Self {
     const self = try a.create(Self);
@@ -85,12 +81,12 @@ fn eventConfigure(widget: *gtk.GtkWidget, event: *gtk.GdkEventConfigure, self: *
     return gtk.FALSE;
 }
 
-fn eventDraw(widget: *gtk.GtkWidget, cr: *gtk.cairo_t, self: *Self) callconv(.C) gtk.gboolean {
+fn eventDraw(widget: *gtk.GtkWidget, cr: *desktop.cairo.cairo_t, self: *Self) callconv(.C) gtk.gboolean {
     _ = widget;
 
     // Clear the drawing area with the background color
-    gtk.cairo_set_source_rgba(cr, 0.18, 0.18, 0.18, 0.9); // #282828
-    gtk.cairo_paint(cr);
+    desktop.cairo.cairo_set_source_rgba(cr, 0.18, 0.18, 0.18, 0.9); // #282828
+    desktop.cairo.cairo_paint(cr);
 
     // The actual rendering will happen when the Backend calls thunk.draw for each node.
     // This draw_event just prepares the cairo context.
@@ -142,49 +138,7 @@ const thunk = struct {
 
         const cr = window.cr orelse return;
 
-        // Convert the logical position (row, col) to pixel coordinates
-        const x = @as(f64, @floatFromInt(pos.col)) * CHAR_WIDTH;
-        const y = @as(f64, @floatFromInt(pos.row)) * CHAR_HEIGHT;
-
-        switch (node.content) {
-            .Text => |ch| {
-                // Set background color for the character cell
-                if (node.background) |bg| {
-                    const rbg = bg.toRgb();
-                    const bg_r = @as(f64, @floatFromInt(rbg[0])) / 255.0;
-                    const bg_g = @as(f64, @floatFromInt(rbg[1])) / 255.0;
-                    const bg_b = @as(f64, @floatFromInt(rbg[2])) / 255.0;
-                    gtk.cairo_set_source_rgb(cr, bg_r, bg_g, bg_b);
-                }
-
-                gtk.cairo_rectangle(cr, x, y, CHAR_WIDTH, CHAR_HEIGHT);
-                gtk.cairo_fill(cr);
-
-                // Set foreground color for the text
-                if (node.foreground) |fg| {
-                    const rgb = fg.toRgb();
-                    const fg_r = @as(f64, @floatFromInt(rgb[0])) / 255.0;
-                    const fg_g = @as(f64, @floatFromInt(rgb[1])) / 255.0;
-                    const fg_b = @as(f64, @floatFromInt(rgb[2])) / 255.0;
-                    gtk.cairo_set_source_rgb(cr, fg_r, fg_g, fg_b);
-                }
-
-                // Set font and font size
-                gtk.cairo_select_font_face(cr, "Monospace", gtk.CAIRO_FONT_SLANT_NORMAL, gtk.CAIRO_FONT_WEIGHT_NORMAL);
-                gtk.cairo_set_font_size(cr, FONT_SIZE);
-
-                // Position the text within the cell (adjust for font metrics if needed)
-                gtk.cairo_move_to(cr, x, y + FONT_SIZE); // Y position is typically the baseline
-
-                // Convert character to a Zig slice for cairo_show_text
-                var buf = [1:0]u8{ch};
-                gtk.cairo_show_text(cr, &buf);
-            },
-            else => {
-                // Handle unsupported node types or log a warning
-                std.log.warn("Unsupported Backend.Node type for rendering", .{});
-            },
-        }
+        desktop.cairodraw(cr, pos, node);
     }
 
     fn poll(ptr: *anyopaque, timeout: i32) Backend.Event {
@@ -211,8 +165,8 @@ const thunk = struct {
     fn getSize(ptr: *anyopaque) lib.Vec2 {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
         return .{
-            .row = @as(usize, @intCast(window.height)) / @as(usize, @intFromFloat(CHAR_HEIGHT)) / 3,
-            .col = @as(usize, @intCast(window.width)) / @as(usize, @intFromFloat(CHAR_WIDTH)) / 3,
+            .row = @as(usize, @intCast(window.height)) / @as(usize, @intFromFloat(desktop.CHAR_HEIGHT)) / 3,
+            .col = @as(usize, @intCast(window.width)) / @as(usize, @intFromFloat(desktop.CHAR_WIDTH)) / 3,
         };
     }
 
@@ -241,12 +195,12 @@ const thunk = struct {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
         const cr = window.cr orelse return;
 
-        const x = @as(f64, @floatFromInt(pos.col)) * CHAR_WIDTH;
-        const y = @as(f64, @floatFromInt(pos.row)) * CHAR_HEIGHT;
+        const x = @as(f64, @floatFromInt(pos.col)) * desktop.CHAR_WIDTH;
+        const y = @as(f64, @floatFromInt(pos.row)) * desktop.CHAR_HEIGHT;
 
-        gtk.cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); // White cursor
-        gtk.cairo_rectangle(cr, x, y, CHAR_WIDTH, CHAR_HEIGHT);
-        gtk.cairo_fill(cr);
+        desktop.cairo.cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); // White cursor
+        desktop.cairo.cairo_rectangle(cr, x, y, desktop.CHAR_WIDTH, desktop.CHAR_HEIGHT);
+        desktop.cairo.cairo_fill(cr);
     }
 };
 

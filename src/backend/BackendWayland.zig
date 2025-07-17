@@ -2,7 +2,6 @@ const root = @import("../root.zig");
 const std = root.std;
 const lib = root.lib;
 const mem = std.mem;
-const xev = root.xev;
 const trm = root.trm;
 
 const Backend = @import("Backend.zig");
@@ -29,23 +28,26 @@ const wl = @cImport({
     @cInclude("xdg-shell-protocol.h");
 });
 
-const WaylandEvent = struct {
-    pressed: bool,
-    ty: union(enum) {
-        key: u32,
-    },
-};
+// const WaylandEvent = struct {
+//     pressed: bool,
+//     ty: union(enum) {
+//         key: u32,
+//     },
+// };
+
+const cairo = @cImport({
+    @cInclude("cairo.h");
+});
 
 const FrameBuffer = struct {
     width: i32,
     height: i32,
-    // TODO: get 4096
-    data: []align(64) u8,
+    data: []align(4096) u8,
 
     pub fn init(a: std.mem.Allocator, width: i32, height: i32) !FrameBuffer {
         const amount = @as(usize, @intCast(width * height * 4));
         // I need 4096 alligned data
-        const data = try a.alignedAlloc(u8, .@"64", amount);
+        const data = try a.alignedAlloc(u8, 4096, amount);
         return FrameBuffer{
             .width = width,
             .height = height,
@@ -58,13 +60,16 @@ const FrameBuffer = struct {
     }
 };
 
-events: std.ArrayListUnmanaged(WaylandEvent) = .{},
+events: std.ArrayListUnmanaged(Backend.Event) = .{},
 modifiers: trm.KeyModifiers = .{},
 
 closed: bool = false,
 
 /// Current buffer that is submitted to render
 buffer: FrameBuffer,
+
+cr: ?*desktop.cairo.cairo_t = null,
+frame: ?*desktop.cairo.cairo_surface_t = null,
 
 display: *wl.wl_display,
 registry: *wl.wl_registry,
@@ -252,6 +257,7 @@ const thunk = struct {
 
             const rgb = bg.toRgb();
             const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
+
             graphi.draw_rect(
                 @ptrCast(window.buffer.data),
                 width,
@@ -329,15 +335,8 @@ const thunk = struct {
         // if (events < 0) return Backend.Event{ .Error = true };
         // if (events == 0) return Backend.Event.Timeout;
 
-        while (window.events.items.len > 0) {
-            const event = window.events.orderedRemove(0);
-
-            // convert event
-            switch (event.ty) {
-                .key => |sym| {
-                    return desktop.parseKey(sym, event.pressed, &window.modifiers) orelse continue;
-                },
-            }
+        if (window.events.items.len > 0) {
+            return window.events.orderedRemove(0);
         }
         return Backend.Event.Timeout;
     }
@@ -367,6 +366,19 @@ const thunk = struct {
 
         switch (mode) {
             .begin => {
+                // const surface = cairo.cairo_image_surface_create(cairo.CAIRO_FORMAT_ARGB32, width, height);
+                // const ctx = cairo.cairo_create(surface);
+
+                // desktop.cairo.cairo_surface_destroy(window.frame);
+                // desktop.cairo.cairo_destroy(window.cr);
+                //
+                // window.frame = desktop.cairo.cairo_surface_create(
+                //     window.buffer.data,
+                //     cairo.CAIRO_CONTENT_COLOR_ALPHA,
+                //     @intCast(window.width),
+                //     @intCast(window.height),
+                // );
+
                 if (window.width != window.buffer.width or window.height != window.buffer.height) {
                     root.log(@src(), .debug, "resizing buffer from {d}x{d} to {d}x{d}", .{
                         window.buffer.width,
@@ -599,10 +611,9 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
     // escape_utf8(buf);
     // std.debug.print(SPACER ++ "utf8: '{s}'\n", .{buf[0..12]});
 
-    window.events.append(window.a, .{
-        .pressed = pressed,
-        .ty = .{ .key = sym },
-    }) catch {};
+    if (desktop.parseKey(sym, pressed, &window.modifiers)) |event| {
+        window.events.append(window.a, event) catch {};
+    }
 }
 
 // static void print_modifiers(struct Window *state, uint32_t mods) {

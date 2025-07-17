@@ -1,11 +1,12 @@
 local rt = require("runtime")
 
+_G.vim = vim
+_G.neon = neon
+
 if neon then
     print("neon loaded")
     rt.compat()
 end
-
-_G.vim = vim
 
 print("hello neomacs")
 
