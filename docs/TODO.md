@@ -23,6 +23,7 @@
 - [ ] make all command buffer local
 - [ ] make log better (use builtin stacktrace and dynamically choose backend)
 - [ ] event loop
+- [ ] remove command line??
 
 # Later
 - [ ] Swap Files

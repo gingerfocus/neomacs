@@ -75,7 +75,7 @@ pub fn build(b: *std.Build) !void {
         neomacs.linkSystemLibrary("wayland-client", .{});
         neomacs.linkSystemLibrary("xkbcommon", .{});
 
-        neomacs.linkSystemLibrary("freetype2", .{});
+        // neomacs.linkSystemLibrary("freetype2", .{});
 
         neomacs.linkSystemLibrary("cairo", .{});
 

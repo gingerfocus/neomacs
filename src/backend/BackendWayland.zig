@@ -13,12 +13,6 @@ const desktop = @import("desktop.zig");
 const graphi = @cImport({
     @cInclude("graphi.h");
 });
-const font = @cImport({
-    @cInclude("ft2build.h");
-    @cInclude("freetype/freetype.h");
-    @cInclude("freetype/ftmodapi.h");
-    @cInclude("freetype/ftglyph.h");
-});
 const wl = @cImport({
     @cInclude("wayland-client-core.h");
     @cInclude("wayland-client-protocol.h");
@@ -28,8 +22,8 @@ const wl = @cImport({
     @cInclude("xdg-shell-protocol.h");
 });
 
-const Renderer = GraphiRenderer;
-// const Renderer = CairoRenderer;
+// const Renderer = GraphiRenderer;
+const Renderer = CairoRenderer;
 
 events: std.ArrayListUnmanaged(Backend.Event) = .{},
 modifiers: trm.KeyModifiers = .{},
@@ -93,62 +87,23 @@ pub fn init(
     // var c = try a.create(xev.Completion)l
     // stream.poll(loop,c, .read, void, null)
 
-    // font.FT_Alloc_Func
-
-    // var library: font.FT_Library = undefined;
-    // var err = font.FT_Init_FreeType(&library);
-    // if (err != 0) {
-    //     // ... an error occurred during library initialization ...
-    // }
-    //
-    // var face: font.FT_Face = undefined;
-    // err = font.FT_New_Face(
-    //     library,
-    //     "/nix/store/fmnrhnlw687farbwmfr5yq9is4z8wxa6-nerdfonts-3.2.1/share/fonts/truetype/NerdFonts/HackNerdFontMono-Regular.ttf",
-    //     0,
-    //     &face,
-    // );
-    // // defer font.FT_Done_Face() // mayber?
-    //
-    // err = font.FT_Set_Char_Size(face, // handle to face object
-    //     0, // char_width in 1/64 of points
-    //     16 * 64, // char_height in 1/64 of points
-    //     300, // horizontal device resolution
-    //     300); // vertical device resolution
-    //
-    // const glyph_index = font.FT_Get_Char_Index(face, 'A');
-    //
-    // err = font.FT_Load_Glyph(face, // handle to face object */
-    //     glyph_index, // glyph index           */
-    //     0); // load flags, see below */
-    //
-    // err = font.FT_Render_Glyph(face.*.glyph, // glyph slot  */
-    //     font.FT_RENDER_MODE_NORMAL); // render mode */
-    //
-    // const bm = face.*.glyph.*.bitmap;
-    // const bitmap = Bitmap{
-    //     .width = bm.width,
-    //     .height = bm.rows,
-    //     .buffer = try a.dupe(u8, bm.buffer[0 .. bm.width * bm.rows]),
-    // };
-
     state.* = .{
         // .bitmap = bitmap,
 
         // .closed = false,
-        //
+
         .registry = registry,
         .display = display,
         .buffer = FrameBuffer{ .width = 0, .height = 0, .data = &.{} },
-        //
+
         // .surface = null,
         // .xdg_surface = null,
         // .xdg_toplevel = null,
-        //
+
         // .xkb_state = null,
         .xkb_context = wl.xkb_context_new(wl.XKB_CONTEXT_NO_FLAGS) orelse return error.NoKeyboard,
         // .xkb_keymap = null,
-        //
+
         // .selection = null,
         // .dnd = null,
         .a = a,
@@ -209,8 +164,7 @@ const thunk = struct {
     fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
-        GraphiRenderer.draw(window, pos, node);
-        CairoRenderer.draw(window, pos, node);
+        Renderer.draw(window, pos, node);
 
         return;
     }
@@ -218,116 +172,13 @@ const thunk = struct {
     fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
-        switch (mode) {
-            .begin => {
-                const width = @as(c_int, @intCast(window.width));
-                const height = @as(c_int, @intCast(window.height));
-
-                if (window.cr != null) {
-                    desktop.cairo.cairo_destroy(window.cr);
-                    window.cr = null;
-                }
-                if (window.frame != null) {
-                    desktop.cairo.cairo_surface_destroy(window.frame);
-                    window.frame = null;
-                }
-                const surface = desktop.cairo.cairo_image_surface_create(desktop.cairo.CAIRO_FORMAT_ARGB32, width, height);
-                const ctx = desktop.cairo.cairo_create(surface);
-                window.cr = ctx;
-                window.frame = surface;
-
-                // window.frame = desktop.cairo.cairo_surface_create(
-                //     window.buffer.data,
-                //     cairo.CAIRO_CONTENT_COLOR_ALPHA,
-                //     @intCast(window.width),
-                //     @intCast(window.height),
-                // );
-
-                if (window.width != window.buffer.width or window.height != window.buffer.height) {
-                    root.log(@src(), .debug, "resizing buffer from {d}x{d} to {d}x{d}", .{
-                        window.buffer.width,
-                        window.buffer.height,
-                        window.width,
-                        window.height,
-                    });
-
-                    const buffer = FrameBuffer.init(
-                        window.a,
-                        window.width,
-                        window.height,
-                    ) catch {
-                        std.debug.print("Failed to create swap buffer\n", .{});
-                        return;
-                    };
-
-                    // const old = window.buffer;
-
-                    // // Copy overlapping region from old buffer to new buffer
-                    // const min_width: usize = @intCast(@min(old.width, window.width));
-                    // const min_height: usize = @intCast(@min(old.height, window.height));
-
-                    // // // Copy row by row to handle stride
-                    // var y: i32 = 0;
-                    // while (y < min_height) : (y += 1) {
-                    //     const old_row = window.buffer.data[@as(usize, @intCast(y * old.width * 4))..][0 .. min_width * 4];
-                    //     const new_row = buffer.data[@as(usize, @intCast(y * window.width * 4))..][0 .. min_width * 4];
-                    //     @memcpy(new_row, old_row);
-                    // }
-
-                    window.buffer.deinit(window.a);
-                    window.buffer = buffer;
-                } else {
-                    @memset(window.buffer.data, 44);
-                }
-            },
-            .end => {
-                // defaultRender(&window.buffer);
-
-                if (window.cr == null or window.frame == null) {
-                    const buffer = createBuffer(window, window.buffer) catch |err| {
-                        std.debug.print("Failed to create buffer: {any}\n", .{err});
-                        return;
-                    };
-                    wl.wl_surface_attach(window.surface, buffer, 0, 0);
-                    wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-                    wl.wl_surface_commit(window.surface);
-                } else {
-                    const c = desktop.cairo;
-                    const surface = window.frame orelse return;
-                    const data = c.cairo_image_surface_get_data(surface);
-                    const width = c.cairo_image_surface_get_width(surface);
-                    const height = c.cairo_image_surface_get_height(surface);
-                    // const stride = c.cairo_image_surface_get_stride(surface);
-
-                    const fbuffer = FrameBuffer.init(window.a, width, height) catch return;
-                    defer fbuffer.deinit(window.a);
-
-                    @memcpy(fbuffer.data, data[0 .. @as(usize, @intCast(width)) * @as(usize, @intCast(height)) * 4]);
-                    const buffer = createBuffer(window, fbuffer) catch |err| {
-                        std.debug.print("Failed to create buffer: {any}\n", .{err});
-                        return;
-                    };
-                    wl.wl_surface_attach(window.surface, buffer, 0, 0);
-                    wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-                    wl.wl_surface_commit(window.surface);
-                }
-            },
-        }
+        Renderer.render(window, mode);
     }
 
     fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
-        graphi.draw_rect(
-            @ptrCast(window.buffer.data),
-            @intCast(window.buffer.width),
-            @intCast(window.buffer.height),
-            @intCast(pos.col * FONTWIDTH * FONTSIZE),
-            @intCast(pos.row * FONTHEIGHT * FONTSIZE),
-            FONTWIDTH * FONTSIZE,
-            FONTHEIGHT * FONTSIZE,
-            graphi.LILAC,
-        );
+        Renderer.setCursor(window, pos);
     }
 
     fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
@@ -589,40 +440,41 @@ const wl_keyboard_listener = wl.wl_keyboard_listener{
     }.repeat_info),
 };
 
-fn wlSeatCapabilities(data: ?*anyopaque, wl_seat: ?*wl.wl_seat, capabilities: u32) callconv(.C) void {
-    //     struct Window *state = data;
-    //     int n = proxy_log(state, (struct wl_proxy *)wl_seat, "capabilities", "");
-    //     if (capabilities == 0 && n != 0) {
-    //         printf(" none");
-    //     }
-
-    //     if ((capabilities & WL_SEAT_CAPABILITY_POINTER)) {
-    //         if (n != 0) {
-    //             printf("pointer ");
-    //         }
-    //         struct wl_pointer *pointer = wl_seat_get_pointer(wl_seat);
-    //         wl_pointer_add_listener(pointer, &wl_pointer_listener, data);
-    //     }
-
-    if (capabilities & wl.WL_SEAT_CAPABILITY_KEYBOARD != 0) {
-        std.debug.print("keyboard ", .{});
-        const keyboard: ?*wl.wl_keyboard = wl.wl_seat_get_keyboard(wl_seat);
-        _ = wl.wl_keyboard_add_listener(keyboard, &wl_keyboard_listener, data);
-    }
-
-    //     if ((capabilities & WL_SEAT_CAPABILITY_TOUCH)) {
-    //         if (n != 0) {
-    //             printf("touch ");
-    //         }
-    //         struct wl_touch *touch = wl_seat_get_touch(wl_seat);
-    //         wl_touch_add_listener(touch, &wl_touch_listener, data);
-    //     }
-
-    std.debug.print("\n", .{});
-}
-
 const wl_seat_listener = wl.wl_seat_listener{
-    .capabilities = wlSeatCapabilities,
+    .capabilities = (struct {
+        fn wl_seat_capbilities(data: ?*anyopaque, wl_seat: ?*wl.wl_seat, capabilities: u32) callconv(.C) void {
+            //     struct Window *state = data;
+            //     int n = proxy_log(state, (struct wl_proxy *)wl_seat, "capabilities", "");
+            //     if (capabilities == 0 && n != 0) {
+            //         printf(" none");
+            //     }
+
+            //     if ((capabilities & WL_SEAT_CAPABILITY_POINTER)) {
+            //         if (n != 0) {
+            //             printf("pointer ");
+            //         }
+            //         struct wl_pointer *pointer = wl_seat_get_pointer(wl_seat);
+            //         wl_pointer_add_listener(pointer, &wl_pointer_listener, data);
+            //     }
+
+            if (capabilities & wl.WL_SEAT_CAPABILITY_KEYBOARD != 0) {
+                std.debug.print("keyboard ", .{});
+                const keyboard: ?*wl.wl_keyboard = wl.wl_seat_get_keyboard(wl_seat);
+                _ = wl.wl_keyboard_add_listener(keyboard, &wl_keyboard_listener, data);
+            }
+
+            //     if ((capabilities & WL_SEAT_CAPABILITY_TOUCH)) {
+            //         if (n != 0) {
+            //             printf("touch ");
+            //         }
+            //         struct wl_touch *touch = wl_seat_get_touch(wl_seat);
+            //         wl_touch_add_listener(touch, &wl_touch_listener, data);
+            //     }
+
+            std.debug.print("\n", .{});
+        }
+    }.wl_seat_capbilities),
+
     .name = (struct {
         fn wl_seat_name(data: ?*anyopaque, seat: ?*wl.wl_seat, name: [*c]const u8) callconv(.C) void {
             _ = data;
@@ -635,82 +487,35 @@ const wl_seat_listener = wl.wl_seat_listener{
 };
 
 const wl_buffer_listener = wl.wl_buffer_listener{
-    // .release = wlBufferRelease,
     .release = (struct {
-        fn release(data: ?*anyopaque, wl_buffer: ?*wl.wl_buffer) callconv(.C) void {
-            _ = data;
+        fn release(_: ?*anyopaque, wl_buffer: ?*wl.wl_buffer) callconv(.C) void {
             // data is already unmapped
             wl.wl_buffer_destroy(wl_buffer);
         }
     }.release),
 };
 
-fn xdg_toplevel_configure(data: ?*anyopaque, xdg_toplevel: ?*wl.xdg_toplevel, width: i32, height: i32, states: ?*wl.wl_array) callconv(.C) void {
-    _ = xdg_toplevel; // autofix
-    const state: *Window = @alignCast(@ptrCast(data));
-    state.width = width;
-    state.height = height;
-    if (state.width == 0 or state.height == 0) {
-        state.width = DEFAULT_WIDTH;
-        state.height = DEFAULT_HEIGHT;
-    }
-
-    std.log.info("[xdg_toplevel]: configure: width: {}; height: {}", .{ width, height });
-    //     int n = proxy_log(state, (struct wl_proxy *)xdg_toplevel, "configure",
-    //             "width: %d; height: %d", width, height);
-
-    const statesZ: []const u32 = blk: {
-        const ptr: [*]const u32 = @alignCast(@ptrCast(states.?));
-        break :blk ptr[0..states.?.size];
-    };
-
-    if (statesZ.len > 0) {
-        std.debug.print(SPACER, .{});
-    }
-    for (statesZ) |s| {
-        switch (s) {
-            wl.XDG_TOPLEVEL_STATE_MAXIMIZED => {
-                std.debug.print("maximized ", .{});
-            },
-            wl.XDG_TOPLEVEL_STATE_FULLSCREEN => {
-                std.debug.print("fullscreen ", .{});
-            },
-            wl.XDG_TOPLEVEL_STATE_RESIZING => {
-                std.debug.print("resizing ", .{});
-            },
-            wl.XDG_TOPLEVEL_STATE_ACTIVATED => {
-                std.debug.print("activated ", .{});
-            },
-            wl.XDG_TOPLEVEL_STATE_TILED_LEFT => {
-                std.debug.print("tiled-left ", .{});
-            },
-            wl.XDG_TOPLEVEL_STATE_TILED_RIGHT => {
-                std.debug.print("tiled-right ", .{});
-            },
-            wl.XDG_TOPLEVEL_STATE_TILED_TOP => {
-                std.debug.print("tiled-top ", .{});
-            },
-            wl.XDG_TOPLEVEL_STATE_TILED_BOTTOM => {
-                std.debug.print("tiled-bottom ", .{});
-            },
-            else => {},
-        }
-    }
-    if (statesZ.len > 0) {
-        std.debug.print("\n", .{});
-    }
-}
-
-fn xdg_toplevel_close(data: ?*anyopaque, xdg_toplevel: ?*wl.xdg_toplevel) callconv(.C) void {
-    const state: *Window = @alignCast(@ptrCast(data));
-    state.closed = true;
-    _ = xdg_toplevel; // autofix
-    // proxy_log(state, (struct wl_proxy *)xdg_toplevel, "close", "\n");
-}
-
 const xdg_toplevel_listener = wl.xdg_toplevel_listener{
-    .configure = xdg_toplevel_configure,
-    .close = xdg_toplevel_close,
+    .configure = (struct {
+        fn xdg_toplevel_configure(data: ?*anyopaque, _: ?*wl.xdg_toplevel, width: i32, height: i32, _: ?*wl.wl_array) callconv(.C) void {
+            const state: *Window = @alignCast(@ptrCast(data));
+            state.width = width;
+            state.height = height;
+            if (state.width == 0 or state.height == 0) {
+                state.width = DEFAULT_WIDTH;
+                state.height = DEFAULT_HEIGHT;
+            }
+        }
+    }.xdg_toplevel_configure),
+    .close = (struct {
+        fn xdg_toplevel_close(data: ?*anyopaque, _: ?*wl.xdg_toplevel) callconv(.C) void {
+            const state: *Window = @alignCast(@ptrCast(data));
+            state.closed = true;
+            // wl.xdg_toplevel_destroy(xdg_toplevel);
+        }
+    }.xdg_toplevel_close),
+    .configure_bounds = null,
+    .wm_capabilities = null,
 };
 
 const xdg_surface_listener = wl.xdg_surface_listener{
@@ -723,19 +528,17 @@ const xdg_surface_listener = wl.xdg_surface_listener{
 
             wl.xdg_surface_ack_configure(xdg_surface, serial);
 
-            // const buffer: ?*wl.wl_buffer = create_buffer(state);
-            // wl.wl_surface_attach(state.surface, buffer, 0, 0);
-            // wl.wl_surface_damage_buffer(state.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-            // wl.wl_surface_commit(state.surface);
+            // TODO: we can now draw after this so if might be valuable to do
+            // something so the window is not blank
+            // `wl_surface_commit` typa beat
         }
     }.xdg_surface_configure),
 };
 
 const xdg_wm_base_listener = wl.xdg_wm_base_listener{
     .ping = (struct {
-        fn wm_base_ping(data: ?*anyopaque, wm_base: ?*wl.xdg_wm_base, serial: u32) callconv(.C) void {
-            _ = data;
-            // std.debug.print("[xdg_wm_base]: ping serial: {}\n", .{serial});
+        fn wm_base_ping(_: ?*anyopaque, wm_base: ?*wl.xdg_wm_base, serial: u32) callconv(.C) void {
+            // TODO: if window is closed then dont respond
             wl.xdg_wm_base_pong(wm_base, serial);
         }
     }.wm_base_ping),
@@ -746,7 +549,7 @@ const wl_registry_listener = wl.wl_registry_listener{
         fn registry_global(
             data: ?*anyopaque,
             wl_registry: ?*wl.wl_registry,
-            name: u32,
+            id: u32,
             interface: [*c]const u8,
             version: u32,
         ) callconv(.C) void {
@@ -768,7 +571,7 @@ const wl_registry_listener = wl.wl_registry_listener{
                 if (std.mem.orderZ(u8, interface, handle.interface.name) == .eq) {
                     std.debug.print("connection to {s} (v{}) at verison {}\n", .{ std.mem.span(interface), version, handle.version });
                     // std.debug.assert(version >= handle.version);
-                    handle.ptr.* = wl.wl_registry_bind(wl_registry, name, handle.interface, handle.version);
+                    handle.ptr.* = wl.wl_registry_bind(wl_registry, id, handle.interface, handle.version);
                 }
             }
 
@@ -871,6 +674,74 @@ const GraphiRenderer = struct {
             .None => {},
         }
     }
+
+    fn render(window: *Window, mode: Backend.VTable.RenderMode) void {
+        switch (mode) {
+            .begin => {
+                if (window.width != window.buffer.width or window.height != window.buffer.height) {
+                    root.log(@src(), .debug, "resizing buffer from {d}x{d} to {d}x{d}", .{
+                        window.buffer.width,
+                        window.buffer.height,
+                        window.width,
+                        window.height,
+                    });
+
+                    const buffer = FrameBuffer.init(
+                        window.a,
+                        window.width,
+                        window.height,
+                    ) catch {
+                        std.debug.print("Failed to create swap buffer\n", .{});
+                        return;
+                    };
+
+                    // const old = window.buffer;
+
+                    // // Copy overlapping region from old buffer to new buffer
+                    // const min_width: usize = @intCast(@min(old.width, window.width));
+                    // const min_height: usize = @intCast(@min(old.height, window.height));
+
+                    // // // Copy row by row to handle stride
+                    // var y: i32 = 0;
+                    // while (y < min_height) : (y += 1) {
+                    //     const old_row = window.buffer.data[@as(usize, @intCast(y * old.width * 4))..][0 .. min_width * 4];
+                    //     const new_row = buffer.data[@as(usize, @intCast(y * window.width * 4))..][0 .. min_width * 4];
+                    //     @memcpy(new_row, old_row);
+                    // }
+
+                    window.buffer.deinit(window.a);
+                    window.buffer = buffer;
+                } else {
+                    @memset(window.buffer.data, 44);
+                }
+            },
+            .end => {
+                // defaultRender(&window.buffer);
+                const buffer = createBuffer(window, window.buffer) catch |err| {
+                    std.debug.print("Failed to create buffer: {any}\n", .{err});
+                    return;
+                };
+                wl.wl_surface_attach(window.surface, buffer, 0, 0);
+                wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+                wl.wl_surface_commit(window.surface);
+            },
+        }
+    }
+
+    fn setCursor(window: *Window, pos: lib.Vec2) void {
+        // _ = wl.wl_pointer_set_cursor(window.pointer, 0, window.surface, pos.col, pos.row);
+
+        graphi.draw_rect(
+            @ptrCast(window.buffer.data),
+            @intCast(window.buffer.width),
+            @intCast(window.buffer.height),
+            @intCast(pos.col * FONTWIDTH * FONTSIZE),
+            @intCast(pos.row * FONTHEIGHT * FONTSIZE),
+            FONTWIDTH * FONTSIZE,
+            FONTHEIGHT * FONTSIZE,
+            graphi.LILAC,
+        );
+    }
 };
 
 const CairoRenderer = struct {
@@ -883,5 +754,56 @@ const CairoRenderer = struct {
         };
 
         desktop.cairodraw(ctx, pos, node);
+    }
+
+    fn render(window: *Window, mode: Backend.VTable.RenderMode) void {
+        switch (mode) {
+            .begin => {
+                const width = @as(c_int, @intCast(window.width));
+                const height = @as(c_int, @intCast(window.height));
+
+                if (window.cr != null) {
+                    cairo.cairo_destroy(window.cr);
+                    window.cr = null;
+                }
+                if (window.frame != null) {
+                    cairo.cairo_surface_destroy(window.frame);
+                    window.frame = null;
+                }
+                const surface = cairo.cairo_image_surface_create(cairo.CAIRO_FORMAT_ARGB32, width, height);
+                const ctx = cairo.cairo_create(surface);
+
+                window.frame = surface;
+                window.cr = ctx;
+            },
+            .end => {
+                const surface = window.frame orelse return;
+                const data = cairo.cairo_image_surface_get_data(surface);
+                const width = cairo.cairo_image_surface_get_width(surface);
+                const height = cairo.cairo_image_surface_get_height(surface);
+                // const stride = c.cairo_image_surface_get_stride(surface);
+
+                const fbuffer = FrameBuffer.init(window.a, width, height) catch return;
+                defer fbuffer.deinit(window.a);
+
+                @memcpy(fbuffer.data, data[0 .. @as(usize, @intCast(width)) * @as(usize, @intCast(height)) * 4]); // stride=4
+                const buffer = createBuffer(window, fbuffer) catch |err| {
+                    std.debug.print("Failed to create buffer: {any}\n", .{err});
+                    return;
+                };
+                wl.wl_surface_attach(window.surface, buffer, 0, 0);
+                wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+                wl.wl_surface_commit(window.surface);
+            },
+        }
+    }
+
+    fn setCursor(window: *Window, pos: lib.Vec2) void {
+        // TODO: set cursor line, no! that should be dont by the renderer
+
+        // TODO: hes just a little guy, he just wants to chill
+        cairo.cairo_set_source_rgb(window.cr, 1, 0, 0);
+        cairo.cairo_rectangle(window.cr, @floatFromInt(pos.col), @floatFromInt(pos.row), FONTWIDTH, FONTHEIGHT);
+        cairo.cairo_fill(window.cr);
     }
 };

@@ -42,7 +42,7 @@ fn neomacs() !void {
 
     // root.log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
 
-    const args = try root.Args.parse(a);
+    const args = try root.Args.parse(a, std.os.argv);
     defer args.deinit(a);
 
     // run just the terminal pager when comfigured to do so
