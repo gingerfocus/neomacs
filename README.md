@@ -48,3 +48,6 @@ you can link to.
 zig build -Dgtk=true -Dstatic-lua=false --release=safe
 ```
 
+
+## Progress
+see [TODO.md](./docs/TODO.md) for random ideas I have.

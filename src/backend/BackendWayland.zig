@@ -28,37 +28,8 @@ const wl = @cImport({
     @cInclude("xdg-shell-protocol.h");
 });
 
-// const WaylandEvent = struct {
-//     pressed: bool,
-//     ty: union(enum) {
-//         key: u32,
-//     },
-// };
-
-const cairo = @cImport({
-    @cInclude("cairo.h");
-});
-
-const FrameBuffer = struct {
-    width: i32,
-    height: i32,
-    data: []align(4096) u8,
-
-    pub fn init(a: std.mem.Allocator, width: i32, height: i32) !FrameBuffer {
-        const amount = @as(usize, @intCast(width * height * 4));
-        // I need 4096 alligned data
-        const data = try a.alignedAlloc(u8, 4096, amount);
-        return FrameBuffer{
-            .width = width,
-            .height = height,
-            .data = data,
-        };
-    }
-
-    pub fn deinit(self: FrameBuffer, a: std.mem.Allocator) void {
-        a.free(self.data);
-    }
-};
+const Renderer = GraphiRenderer;
+// const Renderer = CairoRenderer;
 
 events: std.ArrayListUnmanaged(Backend.Event) = .{},
 modifiers: trm.KeyModifiers = .{},
@@ -96,15 +67,6 @@ dnd: ?*wl.wl_data_offer = null,
 a: std.mem.Allocator,
 repeat: struct { rate: i32, delay: i32 } = .{ .rate = 100, .delay = 300 },
 
-// TODO: just do it
-bitmap: Bitmap,
-
-const Bitmap = struct {
-    width: u32,
-    height: u32,
-    buffer: []u8,
-};
-
 const DEFAULT_WIDTH = 1020;
 const DEFAULT_HEIGHT = 840;
 
@@ -133,45 +95,45 @@ pub fn init(
 
     // font.FT_Alloc_Func
 
-    var library: font.FT_Library = undefined;
-    var err = font.FT_Init_FreeType(&library);
-    if (err != 0) {
-        // ... an error occurred during library initialization ...
-    }
-
-    var face: font.FT_Face = undefined;
-    err = font.FT_New_Face(
-        library,
-        "/nix/store/fmnrhnlw687farbwmfr5yq9is4z8wxa6-nerdfonts-3.2.1/share/fonts/truetype/NerdFonts/HackNerdFontMono-Regular.ttf",
-        0,
-        &face,
-    );
-    // defer font.FT_Done_Face() // mayber?
-
-    err = font.FT_Set_Char_Size(face, // handle to face object
-        0, // char_width in 1/64 of points
-        16 * 64, // char_height in 1/64 of points
-        300, // horizontal device resolution
-        300); // vertical device resolution
-
-    const glyph_index = font.FT_Get_Char_Index(face, 'A');
-
-    err = font.FT_Load_Glyph(face, // handle to face object */
-        glyph_index, // glyph index           */
-        0); // load flags, see below */
-
-    err = font.FT_Render_Glyph(face.*.glyph, // glyph slot  */
-        font.FT_RENDER_MODE_NORMAL); // render mode */
-
-    const bm = face.*.glyph.*.bitmap;
-    const bitmap = Bitmap{
-        .width = bm.width,
-        .height = bm.rows,
-        .buffer = try a.dupe(u8, bm.buffer[0 .. bm.width * bm.rows]),
-    };
+    // var library: font.FT_Library = undefined;
+    // var err = font.FT_Init_FreeType(&library);
+    // if (err != 0) {
+    //     // ... an error occurred during library initialization ...
+    // }
+    //
+    // var face: font.FT_Face = undefined;
+    // err = font.FT_New_Face(
+    //     library,
+    //     "/nix/store/fmnrhnlw687farbwmfr5yq9is4z8wxa6-nerdfonts-3.2.1/share/fonts/truetype/NerdFonts/HackNerdFontMono-Regular.ttf",
+    //     0,
+    //     &face,
+    // );
+    // // defer font.FT_Done_Face() // mayber?
+    //
+    // err = font.FT_Set_Char_Size(face, // handle to face object
+    //     0, // char_width in 1/64 of points
+    //     16 * 64, // char_height in 1/64 of points
+    //     300, // horizontal device resolution
+    //     300); // vertical device resolution
+    //
+    // const glyph_index = font.FT_Get_Char_Index(face, 'A');
+    //
+    // err = font.FT_Load_Glyph(face, // handle to face object */
+    //     glyph_index, // glyph index           */
+    //     0); // load flags, see below */
+    //
+    // err = font.FT_Render_Glyph(face.*.glyph, // glyph slot  */
+    //     font.FT_RENDER_MODE_NORMAL); // render mode */
+    //
+    // const bm = face.*.glyph.*.bitmap;
+    // const bitmap = Bitmap{
+    //     .width = bm.width,
+    //     .height = bm.rows,
+    //     .buffer = try a.dupe(u8, bm.buffer[0 .. bm.width * bm.rows]),
+    // };
 
     state.* = .{
-        .bitmap = bitmap,
+        // .bitmap = bitmap,
 
         // .closed = false,
         //
@@ -189,7 +151,6 @@ pub fn init(
         //
         // .selection = null,
         // .dnd = null,
-
         .a = a,
     };
 
@@ -234,126 +195,10 @@ pub fn init(
 }
 
 const thunk = struct {
-    const FONTWIDTH = 5;
-    const FONTHEIGHT = 7;
-    const FONTSIZE = 4;
-
-    fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
-
-        const width = @as(usize, @intCast(window.width));
-        const height = @as(usize, @intCast(window.height));
-
-        // // Use graphi to render text into the window buffer.
-        // // Example: draw "Hello, wind!" at position (pos.x, pos.y)
-        // var text_buf: [32]u8 = undefined;
-        // const text = "Hello, wind!";
-        // @memcpy(text_buf[0..text.len], text);
-        // text_buf[text.len] = 0;
-
-        if (node.background) |bg| {
-            const rs: c_int = @intCast(pos.row * FONTHEIGHT * FONTSIZE);
-            const cs: c_int = @intCast(pos.col * FONTWIDTH * FONTSIZE);
-
-            const rgb = bg.toRgb();
-            const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
-
-            graphi.draw_rect(
-                @ptrCast(window.buffer.data),
-                width,
-                height,
-                cs,
-                rs,
-                FONTWIDTH * FONTSIZE,
-                FONTHEIGHT * FONTSIZE,
-                color,
-            );
-        }
-
-        switch (node.content) {
-            .Text => |ch| {
-                const rendercolor = node.foreground orelse .Black;
-                const rgb = rendercolor.toRgb();
-                // std.mem.writeInt()
-                const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
-
-                var text_buf: [2]u8 = .{ ch, 0 };
-                // std.debug.print("ch: {c}\n", .{ch});
-
-                graphi.graphi_draw_text(
-                    @ptrCast(@alignCast(window.buffer.data.ptr)),
-                    width,
-                    height,
-                    &text_buf,
-                    @as(c_int, @intCast(pos.col * FONTWIDTH * FONTSIZE)),
-                    @as(c_int, @intCast(pos.row * FONTHEIGHT * FONTSIZE)),
-                    FONTSIZE,
-                    0,
-                    color, // graphi.BLACK,
-                );
-
-                for (0..window.bitmap.height) |row| {
-                    @memcpy(
-                        window.buffer.data[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
-                        window.bitmap.buffer[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
-                    );
-                }
-            },
-            .Image => |_| {},
-            .None => {},
-        }
-
-        return;
-    }
-
-    fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
-
-        if (window.closed) {
-            _ = wl.wl_display_dispatch(window.display);
-            return Backend.Event.End;
-        }
-
-        _ = wl.wl_display_dispatch_pending(window.display); // do client stuff
-        _ = wl.wl_display_flush(window.display); // send everything to server
-
-        if (window.events.items.len == 0) {
-            const fd = wl.wl_display_get_fd(window.display);
-            // std.debug.print("fd: {d}\n", .{fd});
-            var fds = [1]std.posix.pollfd{std.posix.pollfd{
-                .fd = fd,
-                .events = std.posix.POLL.IN,
-                .revents = 0,
-            }};
-            const count = std.posix.poll(&fds, timeout) catch unreachable;
-
-            if (count == 0)
-                return Backend.Event.Timeout;
-        }
-
-        _ = wl.wl_display_dispatch(window.display);
-        // if (events < 0) return Backend.Event{ .Error = true };
-        // if (events == 0) return Backend.Event.Timeout;
-
-        if (window.events.items.len > 0) {
-            return window.events.orderedRemove(0);
-        }
-        return Backend.Event.Timeout;
-    }
-
-    fn getSize(ptr: *anyopaque) lib.Vec2 {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
-
-        return .{
-            .row = @as(usize, @intCast(window.height)) / FONTHEIGHT / FONTSIZE / 2,
-            .col = @as(usize, @intCast(window.width)) / FONTWIDTH / FONTSIZE / 2,
-        };
-    }
-
     fn deinit(ptr: *anyopaque) void {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
-        window.a.free(window.bitmap.buffer);
+        // window.a.free(window.bitmap.buffer);
         window.buffer.deinit(window.a);
         window.events.deinit(window.a);
 
@@ -361,17 +206,36 @@ const thunk = struct {
         window.a.destroy(window);
     }
 
+    fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+
+        GraphiRenderer.draw(window, pos, node);
+        CairoRenderer.draw(window, pos, node);
+
+        return;
+    }
+
     fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
         const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
         switch (mode) {
             .begin => {
-                // const surface = cairo.cairo_image_surface_create(cairo.CAIRO_FORMAT_ARGB32, width, height);
-                // const ctx = cairo.cairo_create(surface);
+                const width = @as(c_int, @intCast(window.width));
+                const height = @as(c_int, @intCast(window.height));
 
-                // desktop.cairo.cairo_surface_destroy(window.frame);
-                // desktop.cairo.cairo_destroy(window.cr);
-                //
+                if (window.cr != null) {
+                    desktop.cairo.cairo_destroy(window.cr);
+                    window.cr = null;
+                }
+                if (window.frame != null) {
+                    desktop.cairo.cairo_surface_destroy(window.frame);
+                    window.frame = null;
+                }
+                const surface = desktop.cairo.cairo_image_surface_create(desktop.cairo.CAIRO_FORMAT_ARGB32, width, height);
+                const ctx = desktop.cairo.cairo_create(surface);
+                window.cr = ctx;
+                window.frame = surface;
+
                 // window.frame = desktop.cairo.cairo_surface_create(
                 //     window.buffer.data,
                 //     cairo.CAIRO_CONTENT_COLOR_ALPHA,
@@ -419,13 +283,34 @@ const thunk = struct {
             .end => {
                 // defaultRender(&window.buffer);
 
-                const buffer = createBuffer(window, window.buffer) catch |err| {
-                    std.debug.print("Failed to create buffer: {any}\n", .{err});
-                    return;
-                };
-                wl.wl_surface_attach(window.surface, buffer, 0, 0);
-                wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-                wl.wl_surface_commit(window.surface);
+                if (window.cr == null or window.frame == null) {
+                    const buffer = createBuffer(window, window.buffer) catch |err| {
+                        std.debug.print("Failed to create buffer: {any}\n", .{err});
+                        return;
+                    };
+                    wl.wl_surface_attach(window.surface, buffer, 0, 0);
+                    wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+                    wl.wl_surface_commit(window.surface);
+                } else {
+                    const c = desktop.cairo;
+                    const surface = window.frame orelse return;
+                    const data = c.cairo_image_surface_get_data(surface);
+                    const width = c.cairo_image_surface_get_width(surface);
+                    const height = c.cairo_image_surface_get_height(surface);
+                    // const stride = c.cairo_image_surface_get_stride(surface);
+
+                    const fbuffer = FrameBuffer.init(window.a, width, height) catch return;
+                    defer fbuffer.deinit(window.a);
+
+                    @memcpy(fbuffer.data, data[0 .. @as(usize, @intCast(width)) * @as(usize, @intCast(height)) * 4]);
+                    const buffer = createBuffer(window, fbuffer) catch |err| {
+                        std.debug.print("Failed to create buffer: {any}\n", .{err});
+                        return;
+                    };
+                    wl.wl_surface_attach(window.surface, buffer, 0, 0);
+                    wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+                    wl.wl_surface_commit(window.surface);
+                }
             },
         }
     }
@@ -443,6 +328,50 @@ const thunk = struct {
             FONTHEIGHT * FONTSIZE,
             graphi.LILAC,
         );
+    }
+
+    fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+
+        if (window.closed) {
+            _ = wl.wl_display_dispatch(window.display);
+            return Backend.Event.End;
+        }
+
+        _ = wl.wl_display_dispatch_pending(window.display); // do client stuff
+        _ = wl.wl_display_flush(window.display); // send everything to server
+
+        if (window.events.items.len == 0) {
+            const fd = wl.wl_display_get_fd(window.display);
+            // std.debug.print("fd: {d}\n", .{fd});
+            var fds = [1]std.posix.pollfd{std.posix.pollfd{
+                .fd = fd,
+                .events = std.posix.POLL.IN,
+                .revents = 0,
+            }};
+            const count = std.posix.poll(&fds, timeout) catch unreachable;
+
+            if (count == 0)
+                return Backend.Event.Timeout;
+        }
+
+        _ = wl.wl_display_dispatch(window.display);
+        // if (events < 0) return Backend.Event{ .Error = true };
+        // if (events == 0) return Backend.Event.Timeout;
+
+        if (window.events.items.len > 0) {
+            return window.events.orderedRemove(0);
+        }
+        return Backend.Event.Timeout;
+    }
+
+    fn getSize(ptr: *anyopaque) lib.Vec2 {
+        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+
+        return .{
+            .row = @as(usize, @intCast(window.height)) / FONTHEIGHT / FONTSIZE / 2,
+            .col = @as(usize, @intCast(window.width)) / FONTWIDTH / FONTSIZE / 2,
+        };
     }
 };
 
@@ -856,4 +785,103 @@ const wl_registry_listener = wl.wl_registry_listener{
             std.debug.print("Got a registry losing event for {}\n", .{id});
         }
     }.global_remove),
+};
+
+const FrameBuffer = struct {
+    width: i32 = 0,
+    height: i32 = 0,
+    data: []align(4096) u8 = &[_]u8{},
+
+    pub fn init(a: std.mem.Allocator, width: i32, height: i32) !FrameBuffer {
+        const amount = @as(usize, @intCast(width * height * 4));
+        // I need 4096 alligned data
+        const data = try a.alignedAlloc(u8, 4096, amount);
+        return FrameBuffer{
+            .width = width,
+            .height = height,
+            .data = data,
+        };
+    }
+
+    pub fn deinit(self: FrameBuffer, a: std.mem.Allocator) void {
+        a.free(self.data);
+    }
+};
+
+const FONTWIDTH = 5;
+const FONTHEIGHT = 7;
+const FONTSIZE = 4;
+
+const GraphiRenderer = struct {
+    const State = void;
+
+    fn draw(window: *Window, pos: lib.Vec2, node: Backend.Node) void {
+        const width = @as(usize, @intCast(window.width));
+        const height = @as(usize, @intCast(window.height));
+
+        if (node.background) |bg| {
+            const rs: c_int = @intCast(pos.row * FONTHEIGHT * FONTSIZE);
+            const cs: c_int = @intCast(pos.col * FONTWIDTH * FONTSIZE);
+
+            const rgb = bg.toRgb();
+            const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
+
+            graphi.draw_rect(
+                @ptrCast(window.buffer.data),
+                width,
+                height,
+                cs,
+                rs,
+                FONTWIDTH * FONTSIZE,
+                FONTHEIGHT * FONTSIZE,
+                color,
+            );
+        }
+
+        switch (node.content) {
+            .Text => |ch| {
+                const rendercolor = node.foreground orelse .Black;
+                const rgb = rendercolor.toRgb();
+                // std.mem.writeInt()
+                const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
+
+                var text_buf: [2]u8 = .{ ch, 0 };
+                // std.debug.print("ch: {c}\n", .{ch});
+
+                graphi.graphi_draw_text(
+                    @ptrCast(@alignCast(window.buffer.data.ptr)),
+                    width,
+                    height,
+                    &text_buf,
+                    @as(c_int, @intCast(pos.col * FONTWIDTH * FONTSIZE)),
+                    @as(c_int, @intCast(pos.row * FONTHEIGHT * FONTSIZE)),
+                    FONTSIZE,
+                    0,
+                    color, // graphi.BLACK,
+                );
+
+                // for (0..window.bitmap.height) |row| {
+                //     @memcpy(
+                //         window.buffer.data[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
+                //         window.bitmap.buffer[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
+                //     );
+                // }
+            },
+            .Image => |_| {},
+            .None => {},
+        }
+    }
+};
+
+const CairoRenderer = struct {
+    const cairo = desktop.cairo;
+
+    fn draw(window: *Window, pos: lib.Vec2, node: Backend.Node) void {
+        const ctx = window.cr orelse {
+            std.debug.print("Failed to create cairo context\n", .{});
+            return;
+        };
+
+        desktop.cairodraw(ctx, pos, node);
+    }
 };

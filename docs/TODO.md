@@ -21,6 +21,8 @@
 # Refactors
 - [ ] move repeat structure to buffer
 - [ ] make all command buffer local
+- [ ] make log better (use builtin stacktrace and dynamically choose backend)
+- [ ] event loop
 
 # Later
 - [ ] Swap Files
@@ -40,7 +42,7 @@
 - [ ] Rope Buffers
 - [ ] Multi Backend
 - [ ] Total runtime configuration to make paging truely zero cost
-  - [ ] rework state object to handle allow resources
+  - [ ] rework state object to handle missing/unconfigured resources
   - [ ] remove zss.zig file, should just be a consequence of the above
 
 # Much Later
@@ -53,4 +55,5 @@
 - [ ] C/Wasi Api
 - [ ] Literate Programming
 - [ ] TigerStyle type fuzzing
+- [ ] file co-operation
 
