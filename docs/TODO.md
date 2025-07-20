@@ -26,6 +26,7 @@
 - [ ] remove command line??
 
 # Later
+- [ ] Lsp
 - [ ] Swap Files
 - [ ] Hardware Acceleration
   - [ ] Drop gtk backend
@@ -40,7 +41,7 @@
 - [ ] Component events (subscriptions)
 - [ ] swaping the start and end position visual selection
 - [ ] Oil/Netrw/Dired/Neotree alternative
-- [ ] Rope Buffers
+- [ ] Rope Buffers / CRDT / VSR
 - [ ] Multi Backend
 - [ ] Total runtime configuration to make paging truely zero cost
   - [ ] rework state object to handle missing/unconfigured resources

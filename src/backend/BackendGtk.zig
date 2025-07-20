@@ -8,7 +8,6 @@ const desktop = @import("desktop.zig");
 
 const Self = @This();
 
-
 const gtk = @cImport({
     @cDefine("GDK_DISABLE_DEPRECATED", "1");
     @cDefine("GTK_DISABLE_DEPRECATED", "1");

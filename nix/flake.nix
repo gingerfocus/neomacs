@@ -36,7 +36,9 @@
           ## Literate Programming Dependencies
           # pkgs.python3
           # pkgs.pyright
-          # pkgs.bearssl
+
+          ## Networking Dependencies
+          pkgs.bearssl
 
           # Development
           pkgs.alejandra

@@ -1,5 +1,6 @@
-const std = @import("std");
-// const ts = @import("root").ts;
+const root = @import("root.zig");
+const std = root.std;
+// const ts = root.ts;
 
 const static = struct {
     var alloc: std.heap.GeneralPurposeAllocator(.{}) = .{};

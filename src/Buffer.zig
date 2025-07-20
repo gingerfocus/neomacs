@@ -47,22 +47,6 @@ curkeymap: ?*km.KeyMaps = null,
 
 const Line = std.ArrayListUnmanaged(u8);
 
-// pub const Mode = enum {
-//     normal,
-//     insert,
-//     visual,
-//
-//     pub const COUNT = @typeInfo(Mode).@"enum".fields.len;
-//
-//     pub fn toString(self: Mode) []const u8 {
-//         return switch (self) {
-//             .normal => "NORMAL",
-//             .insert => "INSERT",
-//             .visual => "VISUAL",
-//         };
-//     }
-// };
-
 pub const Visual = struct {
     mode: VisualMode = .Range,
     start: lib.Vec2,
@@ -73,28 +57,6 @@ pub const VisualMode = enum {
     Line,
     Block,
 };
-
-// keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
-
-// pub fn edit(a: std.mem.Allocator, file: []const u8) !Buffer {
-//     return .{
-//         .id = id.next(),
-//         .data = .{ .Edit = try Buffer.init(a, file) },
-//         .mode = .normal,
-//     };
-// }
-
-pub fn initEmpty(
-    keymaps: *km.ModeToKeys,
-) Buffer {
-    return Buffer{
-        .id = idgen.next(),
-        .filename = "",
-        .lines = .{},
-        .keymaps = keymaps,
-        // .keymap = state,
-    };
-}
 
 pub fn init(
     a: std.mem.Allocator,
@@ -153,36 +115,24 @@ pub fn setMode(buffer: *Buffer, mode: Buffer.ModeId) void {
     buffer.curkeymap = keymap;
 }
 
-pub fn updateEnd(buffer: *Buffer, start: lib.Vec2, end: lib.Vec2) void {
+pub fn updateTarget(buffer: *Buffer, mode: Buffer.VisualMode, start: lib.Vec2, end: lib.Vec2) void {
     if (buffer.target) |*t| {
-        // TODO: what do I do with start here?
+        if (t.start.cmp(start) == .lt) t.start = start;
         t.end = end;
+        t.mode = mode;
     } else {
         buffer.target = .{
-            .mode = .Range,
+            .mode = mode,
             .start = start,
             .end = end,
         };
     }
 }
 
-// keyMaps: [Buffer.Mode.COUNT]km.KeyMaps,
-
-// pub fn edit(a: std.mem.Allocator, file: []const u8) !Buffer {
-//     return .{
-//         .id = id.next(),
-//         .data = .{ .Edit = try Buffer.init(a, file) },
-//         .mode = .normal,
-//     };
-// }
-
 pub fn position(buffer: *Buffer) lib.Vec2 {
     if (buffer.target) |t| return t.end;
 
-    return .{
-        .row = buffer.row,
-        .col = buffer.col,
-    };
+    return .{ .row = buffer.row, .col = buffer.col };
 }
 
 pub fn insertCharacter(buffer: *Buffer, ch: u8) !void {
@@ -241,218 +191,10 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
 // }
 
-// pub fn buffer_replace_ch(arg_buffer: *Buffer, arg_state: *State) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     while (true) {
-//         var undo: Undo = Undo{
-//             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//             .data = @import("std").mem.zeroes(Data),
-//             .start = @import("std").mem.zeroes(usize),
-//             .end = @import("std").mem.zeroes(usize),
-//         };
-//         _ = &undo;
-//         undo.type = @as(c_uint, @bitCast(REPLACE_CHAR));
-//         undo.start = buffer.*.cursor;
-//         state.*.cur_undo = undo;
-//         if (!false) break;
-//     }
-//     while (true) {
-//         if ((&state.*.cur_undo.data).*.count >= (&state.*.cur_undo.data).*.capacity) {
-//             (&state.*.cur_undo.data).*.capacity = if ((&state.*.cur_undo.data).*.capacity == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) @as(usize, @bitCast(@as(c_long, @as(c_int, 1024)))) else (&state.*.cur_undo.data).*.capacity *% @as(usize, @bitCast(@as(c_long, @as(c_int, 2))));
-//             var new: ?*anyopaque = calloc((&state.*.cur_undo.data).*.capacity +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))), @sizeOf(u8));
-//             _ = &new;
-//             while (true) {
-//                 if (!(new != null)) {
-//                     frontend_end();
-//                     _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 82));
-//                     _ = fprintf(stderr, "outta ram");
-//                     _ = fprintf(stderr, "\n");
-//                     exit(@as(c_int, 1));
-//                 }
-//                 if (!false) break;
-//             }
-//             _ = memcpy(new, @as(?*const anyopaque, @ptrCast((&state.*.cur_undo.data).*.data)), (&state.*.cur_undo.data).*.count);
-//             free(@as(?*anyopaque, @ptrCast((&state.*.cur_undo.data).*.data)));
-//             (&state.*.cur_undo.data).*.data = @as(*u8, @ptrCast(@alignCast(new)));
-//         }
-//         (&state.*.cur_undo.data).*.data[
-//             blk: {
-//                 const ref = &(&state.*.cur_undo.data).*.count;
-//                 const tmp = ref.*;
-//                 ref.* +%= 1;
-//                 break :blk tmp;
-//             }
-//         ] = buffer.*.data.data[buffer.*.cursor];
-//         if (!false) break;
-//     }
+// pub fn buffer_replace_ch(state: *State) void {
 //     state.*.ch = frontend_getch(state.*.main_win);
 //     buffer.*.data.data[buffer.*.cursor] = @as(u8, @bitCast(@as(i8, @truncate(state.*.ch))));
 //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-// }
-//
-// pub fn buffer_delete_row(arg_buffer: *Buffer, arg_state: *State) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     var repeat: usize = state.*.repeating.repeating_count;
-//     _ = &repeat;
-//     if (repeat == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-//         repeat = 1;
-//     }
-//     if (repeat > (buffer.*.rows.count -% bufferGetRow(buffer))) {
-//         repeat = buffer.*.rows.count -% bufferGetRow(buffer);
-//     }
-//     {
-//         var i: usize = 0;
-//         _ = &i;
-//         while (i < repeat) : (i +%= 1) {
-//             reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-//             buffer_yank_line(buffer, state, @as(usize, @bitCast(@as(c_long, @as(c_int, 0)))));
-//             var row: usize = bufferGetRow(buffer);
-//             _ = &row;
-//             var cur: Row = buffer.*.rows.data[row];
-//             _ = &cur;
-//             var offset: usize = buffer.*.cursor -% cur.start;
-//             _ = &offset;
-//             while (true) {
-//                 var undo: Undo = Undo{
-//                     .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-//                     .data = @import("std").mem.zeroes(Data),
-//                     .start = @import("std").mem.zeroes(usize),
-//                     .end = @import("std").mem.zeroes(usize),
-//                 };
-//                 _ = &undo;
-//                 undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
-//                 undo.start = cur.start;
-//                 state.*.cur_undo = undo;
-//                 if (!false) break;
-//             }
-//             if (row == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-//                 var end: usize = if (buffer.*.rows.count > @as(usize, @bitCast(@as(c_long, @as(c_int, 1))))) cur.end +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))) else cur.end;
-//                 _ = &end;
-//                 buffer_delete_selection(buffer, state, cur.start, end);
-//             } else {
-//                 state.*.cur_undo.start -%= @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
-//                 buffer_delete_selection(buffer, state, cur.start -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1)))), cur.end);
-//             }
-//             undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-//             buffer_calculate_rows(buffer);
-//             if (row >= buffer.*.rows.count) {
-//                 row = buffer.*.rows.count -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
-//             }
-//             cur = buffer.*.rows.data[row];
-//             var pos: usize = cur.start +% offset;
-//             _ = &pos;
-//             if (pos > cur.end) {
-//                 pos = cur.end;
-//             }
-//             buffer.*.cursor = pos;
-//         }
-//     }
-//     state.*.repeating.repeating_count = 0;
-// }
-
-// pub fn bufferGetRow(buffer: *const Buffer) usize {
-//     // std.debug.assert(buffer.cursor <= buffer.data.items.len);
-//
-//     // there must be at least one line
-//     std.debug.assert(buffer.rows.items.len >= 1);
-//
-//     for (buffer.rows.items, 0..) |row, i| {
-//         if (row.start <= buffer.cursor and buffer.cursor <= row.end) {
-//             return i;
-//         }
-//     }
-//
-//     return 0;
-// }
-
-// pub fn buffer_yank_line(arg_buffer: *Buffer, arg_state: *State, arg_offset: usize) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     var offset = arg_offset;
-//     _ = &offset;
-//     var row: usize = bufferGetRow(buffer);
-//     _ = &row;
-//     if (offset > index_get_row(buffer, buffer.*.data.count)) return;
-//     var cur: Row = buffer.*.rows.data[row +% offset];
-//     _ = &cur;
-//     var line_offset: c_int = 0;
-//     _ = &line_offset;
-//     var initial_s: usize = state.*.clipboard.len;
-//     _ = &initial_s;
-//     state.*.clipboard.len = (cur.end -% cur.start) +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
-//     state.*.clipboard.str = @as(*u8, @ptrCast(@alignCast(realloc(@as(?*anyopaque, @ptrCast(state.*.clipboard.str)), initial_s +% (state.*.clipboard.len *% @sizeOf(u8))))));
-//     if (row > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-//         line_offset = -@as(c_int, 1);
-//     } else {
-//         state.*.clipboard.len -%= 1;
-//         initial_s +%= 1;
-//         state.*.clipboard.str[@as(c_uint, @intCast(@as(c_int, 0)))] = '\n';
-//     }
-//     while (true) {
-//         if (!(state.*.clipboard.str != @as(*u8, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0)))))))) {
-//             frontend_end();
-//             _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 129));
-//             _ = fprintf(stderr, "clipboard was null");
-//             _ = fprintf(stderr, "\n");
-//             exit(@as(c_int, 1));
-//         }
-//         if (!false) break;
-//     }
-//     _ = strncpy(state.*.clipboard.str + initial_s, (buffer.*.data.data + cur.start) + @as(usize, @bitCast(@as(isize, @intCast(line_offset)))), state.*.clipboard.len);
-//     state.*.clipboard.len +%= initial_s;
-// }
-
-// pub fn buffer_yank_char(arg_buffer: *Buffer, arg_state: *State) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-//     state.*.clipboard.len = 2;
-//     state.*.clipboard.str = @as(*u8, @ptrCast(@alignCast(realloc(@as(?*anyopaque, @ptrCast(state.*.clipboard.str)), state.*.clipboard.len *% @sizeOf(u8)))));
-//     while (true) {
-//         if (!(state.*.clipboard.str != @as(*u8, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0)))))))) {
-//             frontend_end();
-//             _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 140));
-//             _ = fprintf(stderr, "clipboard was null");
-//             _ = fprintf(stderr, "\n");
-//             exit(@as(c_int, 1));
-//         }
-//         if (!false) break;
-//     }
-//     _ = strncpy(state.*.clipboard.str, buffer.*.data.data + buffer.*.cursor, state.*.clipboard.len);
-// }
-
-// pub fn buffer_yank_selection(arg_buffer: *Buffer, arg_state: *State, arg_start: usize, arg_end: usize) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     var start = arg_start;
-//     _ = &start;
-//     var end = arg_end;
-//     _ = &end;
-//     state.*.clipboard.len = (end -% start) +% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
-//     state.*.clipboard.str = @as(*u8, @ptrCast(@alignCast(realloc(@as(?*anyopaque, @ptrCast(state.*.clipboard.str)), (state.*.clipboard.len *% @sizeOf(u8)) +% @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 1))))))));
-//     while (true) {
-//         if (!(state.*.clipboard.str != @as(*u8, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0)))))))) {
-//             frontend_end();
-//             _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 148));
-//             _ = fprintf(stderr, "clipboard was null %zu", state.*.clipboard.len);
-//             _ = fprintf(stderr, "\n");
-//             exit(@as(c_int, 1));
-//         }
-//         if (!false) break;
-//     }
-//     _ = strncpy(state.*.clipboard.str, buffer.*.data.data + start, state.*.clipboard.len);
 // }
 
 // pub fn bufferDeleteSelection(buffer: *EditBuffer, selection: Tar) !void {
@@ -568,97 +310,6 @@ pub fn moveLeft(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
 
     return end;
 }
-
-// pub fn skip_to_char(buffer: *EditBuffer, target: u8, right: bool, count: usize) c_int {
-//     _ = right; // autofix
-//     _ = buffer; // autofix
-//     _ = target; // autofix
-//     _ = count; // autofix
-//     // if (@as(c_int, @bitCast(@as(c_uint, (blk: {
-//     //     const tmp = cur_pos;
-//     //     if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//     // }).*))) == @as(c_int, @bitCast(@as(c_uint, c)))) {
-//     //     cur_pos += direction;
-//     //     while (((cur_pos > @as(c_int, 0)) and (cur_pos <= @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) and (@as(c_int, @bitCast(@as(c_uint, (blk: {
-//     //         const tmp = cur_pos;
-//     //         if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//     //     }).*))) != @as(c_int, @bitCast(@as(c_uint, c))))) {
-//     //         if (((cur_pos > @as(c_int, 1)) and (cur_pos < @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) and (@as(c_int, @bitCast(@as(c_uint, (blk: {
-//     //             const tmp = cur_pos;
-//     //             if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//     //         }).*))) == @as(c_int, '\\'))) {
-//     //             cur_pos += direction;
-//     //         }
-//     //         cur_pos += direction;
-//     //     }
-//     // }
-//     // return cur_pos;
-// }
-
-// pub fn buffer_next_brace(arg_buffer: *Buffer) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var cur_pos: c_int = @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.cursor))));
-//     _ = &cur_pos;
-//     var initial_brace: Brace = find_opposite_brace((blk: {
-//         const tmp = cur_pos;
-//         if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//     }).*);
-//     _ = &initial_brace;
-//     var brace_stack: usize = 0;
-//     _ = &brace_stack;
-//     if (@as(c_int, @bitCast(@as(c_uint, initial_brace.brace))) == @as(c_int, '0')) return;
-//     var direction: c_int = if (initial_brace.closing != 0) -@as(c_int, 1) else @as(c_int, 1);
-//     _ = &direction;
-//     while ((cur_pos >= @as(c_int, 0)) and (cur_pos <= @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) {
-//         cur_pos += direction;
-//         cur_pos = skip_to_char(buffer, cur_pos, direction, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '"'))))));
-//         cur_pos = skip_to_char(buffer, cur_pos, direction, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '\''))))));
-//         var cur_brace: Brace = find_opposite_brace((blk: {
-//             const tmp = cur_pos;
-//             if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
-//         }).*);
-//         _ = &cur_brace;
-//         if (@as(c_int, @bitCast(@as(c_uint, cur_brace.brace))) == @as(c_int, '0')) continue;
-//         if (((cur_brace.closing != 0) and (direction == -@as(c_int, 1))) or (!(cur_brace.closing != 0) and (direction == @as(c_int, 1)))) {
-//             brace_stack +%= 1;
-//         } else {
-//             if (((blk: {
-//                 const ref = &brace_stack;
-//                 const tmp = ref.*;
-//                 ref.* -%= 1;
-//                 break :blk tmp;
-//             }) == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, cur_brace.brace))) == @as(c_int, @bitCast(@as(c_uint, find_opposite_brace(initial_brace.brace).brace))))) {
-//                 buffer.*.cursor = @as(usize, @bitCast(@as(c_long, cur_pos)));
-//                 break;
-//             }
-//         }
-//     }
-// }
-
-// pub fn buffer_create_indent(arg_buffer: *Buffer, arg_state: *State) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var state = arg_state;
-//     _ = &state;
-//     if (state.*.config.indent > @as(c_int, 0)) {
-//         {
-//             var i: usize = 0;
-//             _ = &i;
-//             while (i < (@as(usize, @bitCast(@as(c_long, state.*.config.indent))) *% state.*.num_of_braces)) : (i +%= 1) {
-//                 buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, ' '))))));
-//             }
-//         }
-//     } else {
-//         {
-//             var i: usize = 0;
-//             _ = &i;
-//             while (i < state.*.num_of_braces) : (i +%= 1) {
-//                 buffer_insert_char(state, buffer, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '\t'))))));
-//             }
-//         }
-//     }
-// }
 
 pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
     var line = &buffer.lines.items[buffer.row];

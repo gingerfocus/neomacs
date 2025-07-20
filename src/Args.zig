@@ -18,7 +18,7 @@ pub const BackendType = union(enum) {
 pub const Operation = enum { None, Page, Terminal };
 
 const InputArgs = struct {
-    // progname: [*:0]const u8,
+    progname: [*:0]const u8,
     help: ?[]const u8 = null,
     dosnapshot: ?[]const u8 = null,
 
@@ -45,9 +45,7 @@ pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
 
     var i: usize = 0;
 
-    var inputs = InputArgs{
-        // .progname = args[i],
-    };
+    var inputs = InputArgs{ .progname = args[i] };
     i += 1;
 
     var files = std.ArrayList([]const u8).init(a);
@@ -115,6 +113,17 @@ pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
 
     // -- Now Convert it to our output Args ----------------------------------
 
+    // Arg 0 is used as presets for sets of flags
+    // const args = arg0: {
+    //     // TODO: login shell preset
+    //     // if (inputs.progname[0] == '-') {}
+    //
+    //     if (mem.eql(u8, inputs.progname, "zss")) {
+    //     }
+    //
+    //     break :arg0 Args
+    //
+    // };
     var operation: Operation = .Terminal;
     var backend: BackendType = .Terminal;
 

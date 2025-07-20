@@ -1,5 +1,3 @@
-
-
 // pub const UndoType = enum {
 //     NONE,
 //     INSERT_CHARS,

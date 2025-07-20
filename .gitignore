@@ -4,8 +4,5 @@
 /.direnv
 /result
 
-# not ready
-/sub/microui
-
 # logs
 /neomacs.log

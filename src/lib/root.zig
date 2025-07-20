@@ -8,6 +8,14 @@ const mem = std.mem;
 pub const Vec2 = struct {
     row: usize = 0,
     col: usize = 0,
+
+    pub fn cmp(a: Vec2, b: Vec2) std.math.Order {
+        if (a.row < b.row) return .lt;
+        if (a.row > b.row) return .gt;
+        if (a.col < b.col) return .lt;
+        if (a.col > b.col) return .gt;
+        return .eq;
+    }
 };
 
 pub const Vec4 = struct {

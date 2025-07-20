@@ -10,7 +10,7 @@ const View = @import("../Component.zig").View;
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
     _ = self;
 
-    // state.getCurrentBuffer().
+    // const buffer = state.getCurrentBuffer();
 
     if (state.getKeyMaps().modeid._ == root.Buffer.ModeId.Command._) {
         const command = std.fmt.allocPrint(state.a, ":{s}", .{state.commandbuffer.items}) catch return;

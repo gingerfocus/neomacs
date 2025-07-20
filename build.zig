@@ -20,6 +20,9 @@ pub fn build(b: *std.Build) !void {
 
     // std.debug.print("using options: \n{any}\n", .{.{ .gtk = usegtk, .wayland = usewayland, .static = static }});
 
+    const install_step = b.getInstallStep();
+    const run_step = b.step("run", "run neomacs");
+
     // ---------
 
     var query = std.Build.StandardTargetOptionsArgs{};
@@ -81,10 +84,13 @@ pub fn build(b: *std.Build) !void {
 
         // ---------
 
+        // neomacs.linkSystemLibrary("graphi", .{});
+
         const graphi = b.dependency("graphi", .{
             .target = target,
             .optimize = optimize,
         });
+
         neomacs.linkLibrary(graphi.artifact("graphi"));
         neomacs.addIncludePath(graphi.namedLazyPath("include"));
     }
@@ -96,10 +102,6 @@ pub fn build(b: *std.Build) !void {
         neomacs.linkSystemLibrary("cairo", .{});
         neomacs.linkSystemLibrary("gobject-2.0", .{});
     }
-
-    // ---------
-
-    // neomacs.linkSystemLibrary("graphi", .{});
 
     // ---------
 
@@ -121,24 +123,20 @@ pub fn build(b: *std.Build) !void {
     // ---------
 
     const neomacsExe = b.addExecutable(.{
-        .root_source_file = b.path("src/bin/neomacs.zig"),
         .name = "neomacs",
-        .target = target,
-        .optimize = optimize,
+        .root_module = neomacs,
         .linkage = if (static) .static else .dynamic,
     });
-    neomacsExe.root_module.addImport("neomacs", neomacs);
 
     // install neomacs as default
     b.installArtifact(neomacsExe);
 
-    const neomacsRun = b.addRunArtifact(neomacsExe);
-    if (b.args) |args| neomacsRun.addArgs(args) else {
+    const neomacs_exe_run = b.addRunArtifact(neomacsExe);
+    if (b.args) |args| neomacs_exe_run.addArgs(args) else {
         // open a demo file
-        neomacsRun.addArg("etc/demo.md");
+        neomacs_exe_run.addArg("etc/demo.md");
     }
-    const run = b.step("run", "run neomacs");
-    run.dependOn(&neomacsRun.step);
+    run_step.dependOn(&neomacs_exe_run.step);
 
     // -------------------------------------------------------------------------
 
@@ -167,10 +165,11 @@ pub fn build(b: *std.Build) !void {
         .install_subdir = "neon",
         .source_dir = b.path("runtime"),
     });
-    b.getInstallStep().dependOn(&runtime.step);
+
+    install_step.dependOn(&runtime.step);
 
     // TODO: make this be the output runtime dir not input
-    try neomacsRun.getEnvMap().put("NEONRUNTIME", runtime.options.source_dir.getPath(b));
+    try neomacs_exe_run.getEnvMap().put("NEONRUNTIME", runtime.options.source_dir.getPath(b));
 
     // -------------------------------------------------------------------------
 

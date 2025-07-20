@@ -151,7 +151,7 @@ pub fn optNewIndex(L: ?*lua.State) callconv(.C) c_int {
     const ptr = sys.lua_tolstring(L, KEY, &len);
     const key = ptr[0..len];
 
-    inline for (@typeInfo(root.Config).@"struct".fields) |field| {
+    inline for (@typeInfo(root.State.Config).@"struct".fields) |field| {
         if (std.mem.eql(u8, field.name, key)) {
             const val = lua.check(L, VAL, field.type) orelse return 0;
 
@@ -192,7 +192,7 @@ pub fn optIndex(L: ?*lua.State) callconv(.C) c_int {
 
     root.log(@src(), .debug, "get(\"{s}\")", .{key});
 
-    inline for (@typeInfo(root.Config).@"struct".fields) |field| {
+    inline for (@typeInfo(root.State.Config).@"struct".fields) |field| {
         if (std.mem.eql(u8, field.name, key)) {
             const val = @field(root.state().config, field.name);
             lua.push(L.?, val);

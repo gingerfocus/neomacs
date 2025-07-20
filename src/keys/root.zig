@@ -10,6 +10,7 @@ const State = root.State;
 const Buffer = root.Buffer;
 
 const ModeId = km.ModeId;
+const VisualMode = Buffer.VisualMode;
 
 const norm = trm.keys.norm;
 const ctrl = trm.keys.ctrl;
@@ -75,8 +76,8 @@ pub fn create(
 
 pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeToKeys) !void {
     // arrow keys?
-    try maps.put(a, norm('j'), km.KeyFunction.initstate(targeters.target_down));
-    try maps.put(a, norm('k'), km.KeyFunction.initstate(targeters.target_up));
+    try maps.put(a, norm('j'), km.KeyFunction.initstate(targeters.target_down_linewise));
+    try maps.put(a, norm('k'), km.KeyFunction.initstate(targeters.target_up_linewise));
     try maps.put(a, norm('l'), km.KeyFunction.initstate(targeters.target_right));
     try maps.put(a, norm('h'), km.KeyFunction.initstate(targeters.target_left));
 
@@ -117,7 +118,7 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.Mod
 
     const d = try maps.then(a, modes, norm('d'));
     d.targeter = km.KeyFunction.initstate(actions.deletelines);
-    try d.put(a, norm('d'), km.KeyFunction.initstate(targeters.full_line));
+    try d.put(a, norm('d'), km.KeyFunction.initstate(targeters.full_linewise));
     // TODO: this is not correct, some motions select different areas in this
     // mode
     try initMotionKeys(a, d, modes);
@@ -858,11 +859,11 @@ const targeters = struct {
             end = buffer.moveRight(end, 1);
         }
 
-        buffer.updateEnd(start, end);
+        buffer.updateTarget(VisualMode.Range, start, end);
     }
 
     /// Selects `count` full lines starting from the current cursor position.
-    fn full_line(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn full_linewise(state: *State, _: km.KeyFunctionDataValue) !void {
         const count = state.takeRepeating();
         const buffer = state.getCurrentBuffer();
 
@@ -880,7 +881,7 @@ const targeters = struct {
         };
     }
 
-    fn target_down(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn target_down_linewise(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
         const count = state.takeRepeating();
 
@@ -889,10 +890,11 @@ const targeters = struct {
         end.row = @min(start.row + count, buffer.lines.items.len - 1);
         end.col = @min(end.col, buffer.lines.items[end.row].items.len);
 
-        buffer.updateEnd(start, end);
+        buffer.updateTarget(VisualMode.Range, start, end);
+        buffer.target.?.mode = .Line;
     }
 
-    fn target_up(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn target_up_linewise(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
 
         const count = state.takeRepeating();
@@ -948,7 +950,7 @@ const targeters = struct {
         var end = start;
         end.row = buffer.lines.items.len - 1;
 
-        buffer.updateEnd(start, end);
+        buffer.updateTarget(VisualMode.Range, start, end);
     }
 
     fn motion_word_end(state: *State, ctx: km.KeyFunctionDataValue) !void {
@@ -956,6 +958,7 @@ const targeters = struct {
         _ = ctx;
 
         root.log(@src(), .debug, "motion_word_end: unimplemented", .{});
+
         // try motion_word_start(state, ctx);
         //
         // const buffer = state.getCurrentBuffer();
@@ -1011,7 +1014,7 @@ const targeters = struct {
             // TODO: this can infinitly loop
         }
 
-        buffer.updateEnd(start, end);
+        buffer.updateTarget(VisualMode.Range, start, end);
     }
 
     pub fn motion_end(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -1024,7 +1027,7 @@ const targeters = struct {
         end.row = @min(begin.row - (count - 1), buffer.lines.items.len - 1);
         end.col = buffer.lines.items[buffer.row].items.len;
 
-        buffer.updateEnd(begin, end);
+        buffer.updateTarget(VisualMode.Range, begin, end);
     }
 
     fn motionstart(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -1037,8 +1040,49 @@ const targeters = struct {
         end.row = std.math.sub(usize, begin.row, count - 1) catch 0;
         end.col = 0;
 
-        buffer.updateEnd(begin, end);
+        buffer.updateTarget(VisualMode.Range, begin, end);
     }
+
+    // pub fn buffer_next_brace(arg_buffer: *Buffer) void {
+    //     var buffer = arg_buffer;
+    //     _ = &buffer;
+    //     var cur_pos: c_int = @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.cursor))));
+    //     _ = &cur_pos;
+    //     var initial_brace: Brace = find_opposite_brace((blk: {
+    //         const tmp = cur_pos;
+    //         if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
+    //     }).*);
+    //     _ = &initial_brace;
+    //     var brace_stack: usize = 0;
+    //     _ = &brace_stack;
+    //     if (@as(c_int, @bitCast(@as(c_uint, initial_brace.brace))) == @as(c_int, '0')) return;
+    //     var direction: c_int = if (initial_brace.closing != 0) -@as(c_int, 1) else @as(c_int, 1);
+    //     _ = &direction;
+    //     while ((cur_pos >= @as(c_int, 0)) and (cur_pos <= @as(c_int, @bitCast(@as(c_uint, @truncate(buffer.*.data.count)))))) {
+    //         cur_pos += direction;
+    //         cur_pos = skip_to_char(buffer, cur_pos, direction, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '"'))))));
+    //         cur_pos = skip_to_char(buffer, cur_pos, direction, @as(u8, @bitCast(@as(i8, @truncate(@as(c_int, '\''))))));
+    //         var cur_brace: Brace = find_opposite_brace((blk: {
+    //             const tmp = cur_pos;
+    //             if (tmp >= 0) break :blk buffer.*.data.data + @as(usize, @intCast(tmp)) else break :blk buffer.*.data.data - ~@as(usize, @bitCast(@as(isize, @intCast(tmp)) +% -1));
+    //         }).*);
+    //         _ = &cur_brace;
+    //         if (@as(c_int, @bitCast(@as(c_uint, cur_brace.brace))) == @as(c_int, '0')) continue;
+    //         if (((cur_brace.closing != 0) and (direction == -@as(c_int, 1))) or (!(cur_brace.closing != 0) and (direction == @as(c_int, 1)))) {
+    //             brace_stack +%= 1;
+    //         } else {
+    //             if (((blk: {
+    //                 const ref = &brace_stack;
+    //                 const tmp = ref.*;
+    //                 ref.* -%= 1;
+    //                 break :blk tmp;
+    //             }) == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, cur_brace.brace))) == @as(c_int, @bitCast(@as(c_uint, find_opposite_brace(initial_brace.brace).brace))))) {
+    //                 buffer.*.cursor = @as(usize, @bitCast(@as(c_long, cur_pos)));
+    //                 break;
+    //             }
+    //         }
+    //     }
+    // }
 };
 
 const insertsfn = struct {
@@ -1052,6 +1096,13 @@ const insertsfn = struct {
 
 /// A collection of functions that act on a target.
 const actions = struct {
+    fn yeank(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
+        if (buffer.target) |target| {
+            _ = target;
+            // TODO: implement
+        }
+    }
+
     pub fn move(state: *State, ctx: km.KeyFunctionDataValue) !void {
         try moveKeep(state, ctx);
 

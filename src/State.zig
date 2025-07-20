@@ -2,16 +2,15 @@ const root = @import("root.zig");
 const std = root.std;
 const scu = root.scu;
 const trm = root.trm;
-// const xev = root.xev;
 const lua = root.lua;
 const km = root.km;
 const keys = root.keys;
+// const xev = root.xev;
 
 const Buffer = root.Buffer;
 const Args = root.Args;
 
 const render = @import("render/root.zig");
-const Config = @import("Config.zig");
 const Component = @import("render/Component.zig");
 const Backend = @import("backend/Backend.zig");
 
@@ -230,4 +229,20 @@ pub fn bufferPrev(state: *State) void {
 const Mountable = struct {
     view: Component.View,
     comp: Component,
+};
+
+pub const Config = struct {
+    QUIT: bool = false,
+
+    relativenumber: bool = false,
+    autoindent: bool = true,
+    scrolloff: u16 = 8,
+
+    runtime: []const u8 = "",
+
+    // syntax: c_int = 1,
+    // indent: c_int = 0,
+    // undo_size: c_int = 16,
+    // lang: []const u8 = "",
+    // background_color: c_int = -1,
 };

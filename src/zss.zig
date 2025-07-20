@@ -111,22 +111,6 @@ fn clearSearch(state: *State) void {
     }
 }
 
-// fn norm(comptime c: thr.KeyCharacter) u16 {
-//     const keyev = thr.KeyEvent{
-//         .character = c,
-//         .modifiers = .{},
-//     };
-//     return @bitCast(keyev);
-// }
-//
-// fn ctrl(comptime c: thr.KeyCharacter) u16 {
-//     const keyev = thr.KeyEvent{
-//         .character = c,
-//         .modifiers = .{ .ctrl = true },
-//     };
-//     return @bitCast(keyev);
-// }
-
 const norm = thr.keys.norm;
 const ctrl = thr.keys.ctrl;
 
@@ -217,7 +201,6 @@ fn searchRoutine(state: *State) !bool {
         var c: [1]u8 = undefined;
         if (try state.tty.f.read(&c) == 0) return error.EEOF;
         if (c[0] == '\r') break; // newline
-        //
 
         if (c[0] == '\x7F') {
             if (termbuilder.items.len != 0) {

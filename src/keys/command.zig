@@ -6,7 +6,6 @@ const km = root.km;
 const State = root.State;
 
 pub fn init(a: std.mem.Allocator, modes: *km.ModeToKeys) !void {
-
     const res = try modes.getOrPut(a, km.ModeId.Command);
     if (!res.found_existing) {
         std.log.debug("creating new command map", .{});
