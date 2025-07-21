@@ -16,8 +16,6 @@ const thunk = struct {
     }
 };
 
-// TODO: move to lua file
-pub const LuaRef = c_int;
 
 pub const KeyDataPtr = lib.types.TypeErasedData;
 // pub const KeyDataPtr = anyopaque;
@@ -39,7 +37,7 @@ pub fn initbuffer(func: *const fn (*Buffer, km.KeyFunctionDataValue) anyerror!vo
     };
 }
 
-pub fn initlua(L: ?*lua.State, index: LuaRef) !Self {
+pub fn initlua(L: ?*lua.State, index: lua.LuaRef) !Self {
     if (lua.sys.lua_type(L, index) != lua.sys.LUA_TFUNCTION) {
         return error.NotALuaFunction;
     }
@@ -81,6 +79,8 @@ pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
         },
         else => {},
     }
+
+    self.* = undefined;
 }
 
 pub fn run(self: Self, state: *State) anyerror!void {
@@ -111,7 +111,7 @@ pub fn run(self: Self, state: *State) anyerror!void {
 }
 
 const FunctionAction = union(enum) {
-    lua_function: LuaRef,
+    lua_function: lua.LuaRef,
     setmod: km.ModeId,
     state: *const fn (*State, km.KeyFunctionDataValue) anyerror!void,
     buffer: *const fn (*Buffer, km.KeyFunctionDataValue) anyerror!void,

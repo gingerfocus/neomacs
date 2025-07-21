@@ -20,7 +20,10 @@ pub fn write(_: ?*lua.State) callconv(.C) c_int {
 pub fn open(L: ?*lua.State) callconv(.C) c_int {
     const state = root.state();
 
+    root.log(@src(), .err, "opne", .{});
+
     const file = lua.check(L, 1, []const u8) orelse {
+        root.log(@src(), .err, "no file provided", .{});
         // TODO: make a prompt thing that requests it from the user
         return 0;
     };
@@ -37,6 +40,7 @@ pub fn open(L: ?*lua.State) callconv(.C) c_int {
     state.buffers.append(state.a, nbuf) catch return 0;
     // select our new buffer
     state.bufferindex = state.buffers.items.len - 1;
+    root.log(@src(), .debug, "opened file {s}", .{file});
 
     return 0;
 }

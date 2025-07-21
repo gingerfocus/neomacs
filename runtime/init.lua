@@ -56,5 +56,7 @@ vim.cmd.e = function(file)
                 edit(file)
             end,
         })
+    else 
+        edit(file)
     end
 end
