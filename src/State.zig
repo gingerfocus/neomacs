@@ -43,11 +43,15 @@ components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 
 commandbuffer: std.ArrayListUnmanaged(u8) = .{},
 
+autocommands: Autocommands,
+
 // TreeSitter Parsers
 // tsmap: std.ArrayListUnmanaged(void) = .{},
 
 // loop: xev.Loop,
 // inputcallback: ?struct { *xev.Completion, xev.Async } = null,
+
+pub const Autocommands = std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(km.KeyFunction));
 
 pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
     const backend = try Backend.init(a, args);
@@ -100,6 +104,8 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
         .buffers = buffers,
         .bufferindex = if (args.files.len > 0) 0 else null,
         .global_keymap = keysmap,
+        .autocommands = .{},
+
     };
 }
 
@@ -109,10 +115,20 @@ pub fn setup(state: *State) !void {
     try render.init(state);
 }
 
+
 pub fn deinit(state: *State) void {
     std.log.debug("deiniting state", .{});
 
     state.commandbuffer.deinit(state.a);
+
+
+    for (state.autocommands.values()) |list| for (list.items) |*kf| kf.deinit(state.L, state.a);
+    state.autocommands.deinit(state.a);
+
+    // The scratchbuffer owns the keymaps.
+    // The keymaps must be released before lua as they reference each other.
+    state.scratchbuffer.keymaps.deinit(state.a);
+    state.a.destroy(state.scratchbuffer.keymaps);
 
     state.scratchbuffer.deinit();
     state.a.destroy(state.scratchbuffer);
@@ -136,6 +152,17 @@ pub fn deinit(state: *State) void {
     // state.loop.deinit();
     state.arena.deinit();
 }
+
+
+pub fn triggerAutocommands(state: *State, name: []const u8) !void {
+    if (state.autocommands.get(name)) |list| {
+        for (list.items) |*kf| try kf.run(state);
+    }
+}
+
+// pub fn getBuffer(state: *const State) *Buffer {
+//     return state.buffers.items[state.bufferindex];
+// }
 
 pub fn getCurrentBuffer(state: *State) *Buffer {
     const idx = state.bufferindex orelse return state.scratchbuffer;

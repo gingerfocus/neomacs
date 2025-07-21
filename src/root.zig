@@ -113,7 +113,7 @@ fn neomacs() !void {
 
     // root.log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
 
-    const args = try root.Args.parse(a, std.os.argv);
+    const args = try Args.parse(a, std.os.argv);
     defer args.deinit(a);
 
     // run just the terminal pager when comfigured to do so
@@ -122,34 +122,34 @@ fn neomacs() !void {
 
         const f = std.fs.File{ .handle = try std.posix.open(args.files[0], .{}, 0) };
         defer f.close();
-        try root.zss.page(f);
+        try zss.page(f);
         return;
     }
 
-    const s = try a.create(root.State);
+    const s = try a.create(State);
     defer a.destroy(s);
-    root.setstate(s);
+    setstate(s);
 
-    s.* = try root.State.init(a, args);
+    s.* = try State.init(a, args);
     defer s.deinit();
 
     try s.setup();
 
     while (!s.config.QUIT) {
-        try root.render.draw(s);
+        try render.draw(s);
 
         const ev = s.backend.pollEvent(10000);
 
         switch (ev) {
-            .Key => |ke| {
-                if (root.trm.keys.bits(ke) == root.trm.keys.ctrl('q')) break;
+            Backend.Event.Key => |ke| {
+                if (trm.keys.bits(ke) == trm.keys.ctrl('q')) break;
                 s.ch = ke; // used by bad events that reference state directly
                 // std.debug.print("key: {any}\n", .{ke});
                 try s.press(ke);
             },
             .End => s.config.QUIT = true,
             .Resize => s.resized = true,
-            // .Error => |fatal| { if (fatal) break; },
+            .Error => |fatal| s.config.QUIT = fatal,
             else => {},
         }
     }

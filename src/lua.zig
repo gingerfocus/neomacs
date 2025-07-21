@@ -20,6 +20,9 @@ const SYSINIT =
     \\require("rt").startup()
 ;
 
+// TODO: move to lua file
+pub const LuaRef = c_int;
+
 // TODO: make this an opaque struct with associated methods
 pub const State = sys.lua_State;
 
@@ -239,102 +242,77 @@ pub fn push(L: ?*State, value: anytype) void {
     }
 }
 
-pub fn is(L: ?*State, idx: c_int, comptime T: type) bool {
-    switch (@typeInfo(T)) {
-        .void => return sys.lua_isnil(L, idx),
-        .bool => return sys.lua_isboolean(L, idx),
-        .int, .float => return sys.lua_isnumber(L, idx) != 0,
-        .array => return sys.lua_istable(L, idx),
-        .pointer => |ptrdata| {
-            if (T == []const u8) {
-                return sys.lua_isstring(L, idx) != 0;
-            }
-
-            _ = ptrdata;
-            // if (T == *anyopaque) {
-            //     return sys.lua_topointer(L, idx);
-            // }
-
-            @compileError("NYI");
-        },
-        .optional => |N| {
-            if (sys.lua_isnoneornil(L, idx)) return true;
-            return is(L, idx, N.child);
-        },
-        else => @compileError("unable to coerce to type: " ++ @typeName(T)),
-    }
-}
-
 /// Gets idx as a type T, if you are not sure will match then use ?T
 pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
-    if (!is(L, idx, T)) {
-        return null;
-        // _ = sys.luaL_argerror(L, idx, "expected " ++ @typeName(T));
-        // unreachable;
-    }
+    const luat = sys.lua_type(L, idx);
 
     switch (@typeInfo(T)) {
-        .void => return {},
-        .bool => return sys.lua_toboolean(L, idx) != 0,
-        .int => return @intCast(sys.lua_tointeger(L, idx)),
-        .float => return @floatCast(sys.lua_tonumber(L, idx)),
+        .void => {
+            if (luat == sys.LUA_TNIL) return void{} else return null;
+        },
+        .bool => {
+            if (!sys.lua_isboolean(L, idx)) return null;
+            return sys.lua_toboolean(L, idx) != 0;
+        },
+        .int => {
+            if (sys.lua_isnumber(L, idx) == 0) return null;
+            return @intCast(sys.lua_tointeger(L, idx));
+        },
+        .float => {
+            if (sys.lua_isnumber(L, idx) == 0) return null;
+            return @floatCast(sys.lua_tonumber(L, idx));
+        },
+        //         .array => return sys.lua_istable(L, idx),
         .array => |arr| {
             // assume it is a table
             var A: T = undefined;
             for (&A, 0..) |*p, i| {
                 _ = sys.lua_geti(L, idx, @intCast(i + 1));
-                p.* = check(L, -1, arr.child);
-                sys.lua_pop(L, 1);
+                defer sys.lua_pop(L, 1);
+                p.* = check(L, -1, arr.child) orelse return null;
             }
             return A;
         },
-        .pointer => |_| {
-            if (T == *anyopaque) {
+        //         .pointer => |ptrdata| {
+        //             if (T == []const u8) {
+        //                 return sys.lua_isstring(L, idx) != 0;
+        //             }
+        //
+        //             _ = ptrdata;
+        //             // if (T == *anyopaque) {
+        //             //     return sys.lua_topointer(L, idx);
+        //             // }
+        //
+        //             @compileError("NYI");
+        //         },
+        .pointer => |_| switch (T) {
+            *anyopaque => {
                 return sys.lua_topointer(L, idx);
-            }
-
-            if (T == []const u8) {
+            },
+            []const u8 => {
                 var len: usize = undefined;
                 const ptr = sys.lua_tolstring(L, idx, &len);
                 return ptr[0..len];
-            }
-
-            // const t = sys.lua_type(L, idx);
-            // if (t != sys.LUA_TUSERDATA) {
-            //     _ = sys.luaL_argerror(L, idx, "expected userdata");
-            //     unreachable;
-            // }
-
-            // if (sys.lua_getmetatable(L, idx) == 0) {
-            //     _ = sys.luaL_argerror(L, idx, "unexpected userdata metatable");
-            //     unreachable;
-            // }
-
-            // TODO: check if metatable is valid for Pointer type
-            @panic("unable to coerce to type: " ++ @typeName(T));
-
-            // sys.lua_pop(L, 1);
-            // const ptr = sys.lua_touserdata(L, idx);
-            // return @as(T, @alignCast(@ptrCast(ptr)));
+            },
+            else => {
+                const ptr = sys.lua_touserdata(L, idx);
+                return @as(T, @alignCast(@ptrCast(ptr)));
+            },
         },
+        //         .optional => |N| {
+        //             if (sys.lua_isnoneornil(L, idx)) return true;
+        //             return is(L, idx, N.child);
+        //         },
         .optional => |N| {
             if (sys.lua_isnoneornil(L, idx)) {
                 return null;
             }
             return check(L, idx, N.child);
         },
+        .@"struct" => @compileError("NYI"),
         else => @compileError("unable to coerce to type: " ++ @typeName(T)),
     }
 }
-
-// pub const FunctionReference = struct {
-//     _: c_int,
-//
-//     pub fn init(L: *State, id: c_int) !FunctionReference {
-//     }
-//     pub fn deinit(self: FunctionReference, L: *State) void {
-//     }
-// };
 
 /// Wraps an arbitrary function in a Lua C-API using version
 pub fn wrap(comptime func: fn (L: *State) anyerror!c_int) sys.lua_CFunction {
@@ -368,3 +346,4 @@ pub fn wrap(comptime func: fn (L: *State) anyerror!c_int) sys.lua_CFunction {
         }
     }.thunk;
 }
+

@@ -65,3 +65,6 @@ No, I dont think so. But maybe.
 I dont want to go all in on xev only for the new zig IO model to come out and
 be stuck.
 
+# Autocommands
+Autocommands can just be the same as key functions so different ui components
+can just subscribe to them. To different events to get data.
