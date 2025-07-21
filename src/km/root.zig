@@ -1,16 +1,58 @@
-//! TODO: Fully modular system for keymaps
-//! Dont have the nuance of reference counting escape this file
-
 const root = @import("../root.zig");
 const std = root.std;
 const trm = root.trm;
-// const rc = @import("zigrc");
 
 pub const KeyFunction = @import("KeyFunction.zig");
-pub const KeyMaps = @import("KeyMaps.zig");
+pub const Keymap = @import("Keymap.zig");
+pub const KeySequence = @import("KeySequence.zig");
 
-pub const ModeId = root.Buffer.ModeId;
-pub const ModeToKeys = std.AutoArrayHashMapUnmanaged(ModeId, *KeyMaps);
+pub const ModeId = struct {
+    _: u16,
+
+    pub const Null = ModeId{ ._ = 0 };
+    pub const Normal = ModeId{ ._ = 'n' };
+    pub const Insert = ModeId{ ._ = 'i' };
+    pub const Visual = ModeId{ ._ = 'v' };
+    pub const Command = ModeId{ ._ = 'c' };
+
+    pub fn toString(self: ModeId) []const u8 {
+        return switch (self._) {
+            'n' => "NORMAL",
+            'i' => "INSERT",
+            'v' => "VISUAL",
+            'c' => "COMMAND",
+            else => "UNKNOWN",
+        };
+    }
+
+    pub fn eql(self: ModeId, other: ModeId) bool {
+        return self._ == other._;
+    }
+
+    pub fn from(str: []const u8) ModeId {
+        var mode: ModeId = std.mem.zeroes(ModeId);
+        const mem = str[0..@min(str.len, 2)];
+        @memcpy(std.mem.asBytes(&mode._)[0..mem.len], mem);
+        return mode;
+    }
+
+    test "ModeId.from" {
+        try std.testing.expectEqual(ModeId.Null, ModeId.from(""));
+        try std.testing.expectEqual(ModeId.Normal, ModeId.from("n"));
+        try std.testing.expectEqual(ModeId.Insert, ModeId.from("i"));
+        try std.testing.expectEqual(ModeId.Visual, ModeId.from("v"));
+        try std.testing.expectEqual(ModeId.Command, ModeId.from("c"));
+    }
+
+    // // MUST always be one greater than the last one above
+    // var static: u16 = 4;
+    //
+    // pub fn next() ModeId {
+    //     const mode = ModeId{ ._ = static };
+    //     static += 1;
+    //     return mode;
+    // }
+};
 
 /// TODO: add the character to this structure
 pub const KeyFunctionDataValue = struct {
@@ -22,41 +64,3 @@ pub const KeyFunctionDataValue = struct {
         return null;
     }
 };
-
-pub fn debug(modes: *const ModeToKeys) void {
-    var iter = modes.iterator();
-    while (iter.next()) |key| {
-        debugmodeid(key.key_ptr.*._);
-        std.debug.print("\n", .{});
-
-        debuginner(key.value_ptr.*, 1);
-    }
-}
-
-pub fn debuginner(modes: *const KeyMaps, indent: usize) void {
-    var iter = modes.keys.iterator();
-    while (iter.next()) |key| {
-        std.io.getStdOut().writer().writeByteNTimes(' ', indent * 4) catch unreachable;
-
-        debugmodeid(key.key_ptr.*);
-
-        std.debug.print(" {s}", .{@tagName(key.value_ptr.function)});
-        switch (key.value_ptr.function) {
-            .LuaFnc => |id| std.debug.print(" ({d})", .{id}),
-            // .state => |fc| std.debug.print(" ({*})", .{fc}),
-            // .buffer => |fc| std.debug.print(" ({*})", .{fc}),
-            .setmod => |mode| std.debug.print(" (-> {d})", .{mode._}),
-            else => {},
-        }
-
-        std.debug.print("\n", .{});
-    }
-}
-
-pub fn debugmodeid(modeid: usize) void {
-    // if (modeid < 128) {
-    //     std.debug.print("{c:3}:", .{@as(u8, @intCast(modeid))});
-    // } else {
-    std.debug.print("{d:3}:", .{modeid});
-    // }
-}

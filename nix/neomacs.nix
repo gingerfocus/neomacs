@@ -25,7 +25,7 @@ stdenv.mkDerivation {
 
   buildInputs = [
     ## Basic Dependencies
-    luajit # we can statically build this, not strictly necessary
+    luajit # we can statically build this, not strictly necessary, the headers are nice
     # (luajit.withPackages (ps: (with ps; [fennel])))
 
     ## Gtk Dependencies
@@ -48,7 +48,4 @@ stdenv.mkDerivation {
 
   nativeBuildInputs = [zig.hook];
   zigBuildFlags = ["--system" "${callPackage ./neomacs-zig-zon.nix {}}" "-Dstatic=false"];
-
-  # nativeBuildInputs = [zig];
-  # buildPhase = "${zig}/bin/zig build --prefix $out --cache-dir /build/zig-cache --global-cache-dir /build/global-cache -Doptimize=ReleaseSafe";
 }

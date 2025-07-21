@@ -5,7 +5,6 @@ const trm = root.trm;
 const lua = root.lua;
 const km = root.km;
 const keys = root.keys;
-// const xev = root.xev;
 
 const Buffer = root.Buffer;
 const Args = root.Args;
@@ -36,6 +35,8 @@ buffers: std.ArrayListUnmanaged(*Buffer),
 /// null selects the scratch buffer
 bufferindex: ?usize,
 
+global_keymap: *km.Keymap,
+
 // resized: bool = true,
 
 components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
@@ -57,32 +58,34 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
     // TODO: based on the backend then create an appropriate logger to either
     // stdout or a file
 
-    try checkfirstrun(a);
-    const L = lua.init();
+    if (backend.stdout) {
+        const logFile = std.fs.cwd().createFile("neomacs.log", .{}) catch null;
+        scu.log.file = logFile;
 
-    var arena = std.heap.ArenaAllocator.init(a);
-    const maps = try a.create(km.ModeToKeys);
-    maps.* = try keys.create(a, &arena);
+        root.log(@src(), .info, "using stdout backend", .{});
+    }
+
+    const keysmap = try a.create(km.Keymap);
+    keysmap.* = km.Keymap{
+        .targeters = .{},
+        .bindings = .{},
+        .fallbacks = .{},
+        .alloc = a,
+    };
 
     // ---------
 
     const scratch: *Buffer = try a.create(Buffer);
-    scratch.* = Buffer{
-        .filename = "*scratch*",
-        .hasbackingfile = false,
-        .keymaps = maps,
-        .id = Buffer.idgen.next(),
-        .lines = .{},
-        .alloc = a,
+    scratch.* = Buffer.init(a, keysmap, "*scratch*") catch |err| {
+        root.log(@src(), .err, "Could not create scratch buffer", .{});
+        return err;
     };
-    // TODO: append welcome content to scratch buffer
-    // try scratch.insertCharacter(a, 't');
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
     for (args.files) |f| {
         const buffer = try a.create(Buffer);
         root.log(@src(), .debug, "opening file ({s})", .{f});
-        buffer.* = Buffer.init(a, maps, f) catch |err| {
+        buffer.* = Buffer.init(a, keysmap, f) catch |err| {
             root.log(@src(), .err, "File Not Found: {s}", .{f});
             a.destroy(buffer);
             return err;
@@ -90,22 +93,26 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
         try buffers.append(a, buffer);
     }
 
-    var state = State{
+    return State{
         .a = a,
-        .arena = arena,
-        .L = L,
+        .arena = std.heap.ArenaAllocator.init(a),
+        .L = lua.init(),
 
         .backend = backend,
 
         .scratchbuffer = scratch,
         .buffers = buffers,
         .bufferindex = if (args.files.len > 0) 0 else null,
+        .global_keymap = keysmap,
         .autocommands = .{},
+
     };
+}
 
-    try render.init(&state);
-
-    return state;
+pub fn setup(state: *State) !void {
+    lua.setup(state.L);
+    try keys.init(state.a, state.global_keymap);
+    try render.init(state);
 }
 
 
@@ -114,6 +121,7 @@ pub fn deinit(state: *State) void {
 
     state.commandbuffer.deinit(state.a);
 
+
     for (state.autocommands.values()) |list| for (list.items) |*kf| kf.deinit(state.L, state.a);
     state.autocommands.deinit(state.a);
 
@@ -121,6 +129,7 @@ pub fn deinit(state: *State) void {
     // The keymaps must be released before lua as they reference each other.
     state.scratchbuffer.keymaps.deinit(state.a);
     state.a.destroy(state.scratchbuffer.keymaps);
+
     state.scratchbuffer.deinit();
     state.a.destroy(state.scratchbuffer);
 
@@ -129,6 +138,9 @@ pub fn deinit(state: *State) void {
         state.a.destroy(buffer);
     }
     state.buffers.deinit(state.a);
+
+    state.global_keymap.deinit();
+    state.a.destroy(state.global_keymap);
 
     state.components.deinit(state.a);
 
@@ -140,6 +152,7 @@ pub fn deinit(state: *State) void {
     // state.loop.deinit();
     state.arena.deinit();
 }
+
 
 pub fn triggerAutocommands(state: *State, name: []const u8) !void {
     if (state.autocommands.get(name)) |list| {
@@ -162,21 +175,163 @@ pub fn getCurrentBuffer(state: *State) *Buffer {
     return state.buffers.items[idx];
 }
 
-pub fn press(state: *State, ke: trm.KeyEvent) !void {
-    // try state.loop.run(.no_wait);
+pub fn press(state: *State, key: trm.KeyEvent) !void {
+    const ke = trm.keys.bits(key);
 
-    const keymap = state.getKeyMaps();
-    root.log(@src(), .debug, "press (mode: {d}, key: {d})", .{ keymap.modeid._, trm.keys.bits(ke) });
-    try keymap.run(state, ke);
-}
-
-// TODO: make a const and mut version
-pub fn getKeyMaps(state: *State) *km.KeyMaps {
-    // std.debug.print("cmd: {s}\n", .{state.commandbuffer.items});
     const buffer = state.getCurrentBuffer();
-    if (buffer.curkeymap) |map| return map;
+    const oldstate = buffer.input_state;
+    var newstate = oldstate;
+    // TODO: catch this error
+    newstate.append(ke) catch {
+        root.log(@src(), .err, "Failed to append key event to input state", .{});
+        buffer.input_state.len = 0;
+        return;
+    };
+    std.log.info("newstate: {any}", .{newstate.keys[0..newstate.len]});
+    std.log.info("oldstate: {any}", .{oldstate.keys[0..oldstate.len]});
 
-    return buffer.keymaps.get(Buffer.ModeId.Normal).?;
+    const BlockState = enum {
+        local_binding,
+        global_binding,
+        local_fallback,
+        global_fallback,
+        targeter,
+        end,
+        none,
+    };
+
+    var foundmatch: bool = false;
+
+    // if (true) {
+    //     var biter = buffer.local_keymap.bindings.iterator();
+    //     while (biter.next()) |entry| {
+    //         std.log.info("local: {any}", .{entry.key_ptr.keys[0..entry.key_ptr.len]});
+    //     }
+    //     var giter = buffer.global_keymap.bindings.iterator();
+    //     while (giter.next()) |entry| {
+    //         std.log.info("mode: {}, global: {any}", .{ entry.key_ptr.mode._, entry.key_ptr.keys[0..entry.key_ptr.len] });
+    //     }
+    // }
+
+    // zig bug: error targets tag token
+    blkrun: switch (BlockState.local_binding) {
+        .local_binding => {
+            var iter = buffer.local_keymap.bindings.iterator();
+            while (iter.next()) |entry| {
+                const k = entry.key_ptr;
+
+                // can't possibly match
+                if (!k.mode.eql(newstate.mode)) continue;
+
+                // it cant be an exact match and we already know that a prefix match exists
+                if (k.len != newstate.len and foundmatch) continue;
+                // could be the one...
+                if (k.len == newstate.len) {
+                    if (std.mem.eql(u16, k.keys[0..k.len], newstate.keys[0..k.len])) {
+                        try entry.value_ptr.run(state);
+                        continue :blkrun BlockState.targeter;
+                    }
+                }
+                // aw dangit
+                if (newstate.len < k.len) {
+                    if (std.mem.eql(u16, k.keys[0..newstate.len], newstate.keys[0..newstate.len])) {
+                        foundmatch = true;
+                        continue;
+                    }
+                }
+            }
+
+            // root.log(@src(), .debug, "no match local found for ({any})", .{newstate.keys[0..newstate.len]});
+            continue :blkrun BlockState.global_binding;
+        },
+        .global_binding => {
+            // same code as the local one ^^
+            //
+            var iter = state.global_keymap.bindings.iterator();
+            while (iter.next()) |entry| {
+                const k = entry.key_ptr;
+
+                // can't possibly match
+                if (!k.mode.eql(newstate.mode)) continue;
+
+                // it cant be an exact match and we already know that a prefix match exists
+                if (k.len != newstate.len and foundmatch) continue;
+                // could be the one...
+                if (k.len == newstate.len) {
+                    if (std.mem.eql(u16, k.keys[0..k.len], newstate.keys[0..k.len])) {
+                        try entry.value_ptr.run(state);
+                        std.log.info("running local binding: {any}", .{entry.value_ptr.function});
+                        continue :blkrun BlockState.targeter;
+                    }
+                }
+
+                // aw dangit
+                if (newstate.len < k.len) {
+                    if (std.mem.eql(u16, k.keys[0..newstate.len], newstate.keys[0..newstate.len])) {
+                        std.log.info("{any} matches {any}", .{ newstate.keys[0..newstate.len], k.keys[0..k.len] });
+                        foundmatch = true;
+                        continue;
+                    }
+                }
+            }
+
+            continue :blkrun BlockState.local_fallback;
+        },
+        .local_fallback => {
+            // no need to check prefixes
+            if (buffer.local_keymap.fallbacks.get(oldstate)) |*kf| {
+                try kf.run(state);
+                continue :blkrun BlockState.targeter;
+            } else {
+                continue :blkrun BlockState.global_fallback;
+            }
+        },
+        .global_fallback => {
+            if (state.global_keymap.fallbacks.get(oldstate)) |*kf| {
+                try kf.run(state);
+                continue :blkrun BlockState.targeter;
+            } else {
+                // we could still find something
+                if (foundmatch) continue :blkrun BlockState.none;
+
+                continue :blkrun BlockState.end;
+            }
+        },
+        .targeter => {
+            std.log.info("running targeter", .{});
+
+            const bkeyslice = buffer.local_keymap.targeters.items(.keys);
+            for (bkeyslice, 0..) |keyseq, i| {
+                if (keyseq.eql(oldstate)) {
+                    const tkf = buffer.local_keymap.targeters.items(.func)[i];
+                    std.log.info("running local targeter", .{});
+                    try tkf.run(state);
+                    continue :blkrun BlockState.end;
+                }
+            }
+
+            const gkeyslice = state.global_keymap.targeters.items(.keys);
+            for (gkeyslice, 0..) |keyseq, i| {
+                if (keyseq.eql(oldstate)) {
+                    const tkf = state.global_keymap.targeters.items(.func)[i];
+                    std.log.info("running global targeter", .{});
+                    try tkf.run(state);
+                    continue :blkrun BlockState.end;
+                }
+            }
+
+            continue :blkrun BlockState.end;
+        },
+        .end => {
+            buffer.input_state.len = 0;
+            break :blkrun;
+        },
+        .none => {
+            // if nothing matches, then keep the sequence going
+            buffer.input_state = newstate;
+            break :blkrun;
+        },
+    }
 }
 
 pub const Repeating = struct {
@@ -199,24 +354,6 @@ pub const Repeating = struct {
 /// DEPRECATED: use `state.repeating.take()` instead.
 pub fn takeRepeating(state: *State) usize {
     return state.repeating.take();
-}
-
-fn checkfirstrun(a: std.mem.Allocator) !void {
-    const home = std.posix.getenv("HOME") orelse unreachable;
-    const initFile = try std.fmt.allocPrint(a, "{s}/.config/neomacs/init.lua", .{home});
-    defer a.free(initFile);
-
-    if (std.fs.accessAbsolute(initFile, .{})) |_| {
-        std.log.info("Welcome back vet!", .{});
-        return;
-    } else |_| {
-        // welcome FNG
-        // const DEFAULTCONFIG = @embedFile("config.lua");
-        // const file = try std.fs.openFileAbsolute(initFile, .{ .mode = .write_only });
-        // defer file.close();
-        // try file.writeAll(DEFAULTCONFIG);
-        return;
-    }
 }
 
 // TODO: fix these and make them better

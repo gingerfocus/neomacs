@@ -40,10 +40,14 @@ col: usize = 0,
 filename: []const u8,
 hasbackingfile: bool,
 
-/// Not owned, unless this is the scratch buffer
-keymaps: *km.ModeToKeys,
+global_keymap: *km.Keymap,
+local_keymap: km.Keymap,
 
-curkeymap: ?*km.KeyMaps = null,
+input_state: km.KeySequence = .{
+    // TODO: make this always be in sync with the buffer mode
+    .mode = km.ModeId.Normal,
+},
+mode: km.ModeId = km.ModeId.Normal,
 
 const Line = std.ArrayListUnmanaged(u8);
 
@@ -58,9 +62,17 @@ pub const VisualMode = enum {
     Block,
 };
 
+pub fn setMode(buffer: *Buffer, mode: km.ModeId) void {
+    buffer.mode = mode;
+
+    buffer.input_state.mode = mode;
+    // is this corrent?
+    buffer.input_state.len = 0;
+}
+
 pub fn init(
     a: std.mem.Allocator,
-    keymaps: *km.ModeToKeys,
+    global_keymap: *km.Keymap,
     filename: []const u8,
 ) !Buffer {
     var lines = std.ArrayList(Line).init(a);
@@ -86,7 +98,8 @@ pub fn init(
         .filename = filename,
         .hasbackingfile = true,
         .lines = lines.moveToUnmanaged(),
-        .keymaps = keymaps,
+        .global_keymap = global_keymap,
+        .local_keymap = km.Keymap.init(a),
         .alloc = a,
     };
 }
@@ -96,23 +109,9 @@ pub fn deinit(buffer: *Buffer) void {
         line.deinit(buffer.alloc);
     }
     buffer.lines.deinit(buffer.alloc);
+    buffer.local_keymap.deinit();
 
     buffer.* = undefined;
-}
-
-pub fn getKeymap(buffer: *Buffer) *km.KeyMaps {
-    return buffer.curkeymap orelse return buffer.keymaps.get(Buffer.ModeId.Normal).?;
-}
-
-pub fn setMode(buffer: *Buffer, mode: Buffer.ModeId) void {
-    // buffer.mode = mode;
-    const keymap = buffer.keymaps.get(mode) orelse {
-        std.debug.print("no keymap for mode: {any}\n", .{mode});
-        buffer.curkeymap = null;
-        return;
-    };
-    // std.debug.print("set keymap for mode: {any}\n", .{mode});
-    buffer.curkeymap = keymap;
 }
 
 pub fn updateTarget(buffer: *Buffer, mode: Buffer.VisualMode, start: lib.Vec2, end: lib.Vec2) void {
@@ -346,64 +345,5 @@ pub const idgen = struct {
     pub fn next() usize {
         count += 1;
         return count;
-    }
-};
-
-// const Target = struct {
-//     down: ?isize = null,
-//     left: ?isize = null,
-// };
-
-pub const ModeId = struct {
-    _: usize,
-
-    pub fn from(str: []const u8) ModeId {
-        var bytes: usize = 0;
-        @memcpy(std.mem.asBytes(&bytes)[0..str.len], str);
-
-        return .{ ._ = bytes };
-    }
-
-    pub const new = @compileError("TODO: walk the states maps and find the next a tag greater than 65535");
-
-    pub fn toString(self: ModeId) []const u8 {
-        return switch (self._) {
-            0 => "NULL",
-            'n' => "NORMAL",
-            'i' => "INSERT",
-            'v' => "VISUAL",
-            'c' => "COMMAND",
-            else => "UNKNOWN",
-        };
-    }
-
-    pub fn chain(self: ModeId, next: u16) ModeId {
-        // TODO: check for uniquness and overflow
-        return .{ ._ = self._ + next };
-    }
-
-    // const static = struct {
-    //     const id: usize = 65535;
-    // };
-
-    pub const Null: ModeId = .{ ._ = 0 };
-    pub const Normal: ModeId = .{ ._ = 'n' };
-    pub const Visual: ModeId = .{ ._ = 'v' };
-    pub const Insert: ModeId = .{ ._ = 'i' };
-    pub const Command: ModeId = .{ ._ = 'c' };
-
-    test "MapId.from" {
-        // I would be interested to see if these work on little endian machines
-        try std.testing.expectEqual(ModeId.Normal, ModeId.from("n"));
-        try std.testing.expectEqual(ModeId.Visual, ModeId.from("v"));
-        try std.testing.expectEqual(ModeId.Insert, ModeId.from("i"));
-    }
-
-    test "ModeId comptime" {
-        try std.testing.expectEqualStrings("NORMAL", comptime ModeId.from("n").toString());
-        try std.testing.expectEqualStrings("VISUAL", comptime ModeId.from("v").toString());
-        try std.testing.expectEqualStrings("INSERT", comptime ModeId.from("i").toString());
-
-        try std.testing.expectEqualStrings("UNKNOWN", comptime ModeId.from("x").toString());
     }
 };

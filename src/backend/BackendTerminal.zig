@@ -106,5 +106,6 @@ pub fn backend(terminal: *TerminalBackend) Backend {
             .getSize = thunk.getSize,
             .setCursor = thunk.setCursor,
         },
+        .stdout = true,
     };
 }

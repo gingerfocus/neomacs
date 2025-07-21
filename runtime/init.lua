@@ -1,9 +1,8 @@
-local rt = require("runtime")
+local rt = require("rt")
 
-_G.vim = vim
 _G.neon = neon
 
-if neon then
+if not vim then
     print("neon loaded")
     rt.compat()
 end
@@ -60,3 +59,9 @@ vim.cmd.e = function(file)
         edit(file)
     end
 end
+
+vim.keymap.set("n", " t", function()
+    print("user keymap")
+end)
+
+require("rt.oil").setup({})

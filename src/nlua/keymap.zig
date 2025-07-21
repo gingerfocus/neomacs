@@ -16,9 +16,11 @@ fn getFunction(L: ?*lua.State, idx: c_int) void {
     } else {}
 }
 
+const km = root.km;
+
 // vim.keyapi.set(mode, lhs, rhs, opts)
 pub fn set(L: ?*lua.State) callconv(.C) c_int {
-    root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
+    // root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
 
     const modestr = lua.check(L, 1, []const u8) orelse {
         root.log(@src(), .err, "neomacs.keymap.set: expected mode", .{});
@@ -38,18 +40,13 @@ pub fn set(L: ?*lua.State) callconv(.C) c_int {
     };
 
     // TODO: get opts
-    _ = lhs;
-    _ = rhs;
 
     const state = root.state();
     const mode = root.km.ModeId.from(modestr);
 
-    const maps = state.scratchbuffer.keymaps.get(mode) orelse {
-        // TODO: make a new mode for this
-        // use getOrPut
-        return 0;
-    };
-    _ = maps;
+    const keyseq = km.KeySequence.init(mode, lhs);
+    state.global_keymap.put(state.a, keyseq, rhs) catch {};
+    root.log(@src(), .debug, "neomacs.keymap.set: mode {s} lhs {s} rhs {any}", .{ modestr, lhs, rhs });
 
     return 0;
 }

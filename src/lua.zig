@@ -15,8 +15,9 @@ const SYSINIT =
     \\    runtime = home .. "/.local/stat/neon"
     \\end
     \\neon.opt.runtime = runtime
-    \\package.path = runtime .. "/lua/?.lua;" .. package.path
-    \\require("runtime").startup()
+    \\package.path = runtime .. "/?.lua;" .. package.path
+    \\package.path = runtime .. "/?/init.lua;" .. package.path
+    \\require("rt").startup()
 ;
 
 // TODO: move to lua file
@@ -29,6 +30,10 @@ pub fn init() *State {
     root.log(@src(), .debug, "creating lua state", .{});
 
     const L = sys.luaL_newstate() orelse unreachable;
+    return L;
+}
+
+pub fn setup(L: *State) void {
     sys.luaL_openlibs(L);
 
     // const a = root.alloc.galloc();
@@ -106,7 +111,6 @@ pub fn init() *State {
     }
     // -----------------
 
-    return L;
 }
 
 pub fn deinit(L: *State) void {

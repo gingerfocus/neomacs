@@ -5,43 +5,20 @@ const lua = root.lua;
 const km = root.km;
 const State = root.State;
 
-pub fn init(a: std.mem.Allocator, modes: *km.ModeToKeys) !void {
-    const res = try modes.getOrPut(a, km.ModeId.Command);
-    if (!res.found_existing) {
-        std.log.debug("creating new command map", .{});
-        res.value_ptr.* = try a.create(km.KeyMaps);
-    }
+const norm = trm.keys.norm;
+const ctrl = trm.keys.ctrl;
 
-    const map = res.value_ptr.*;
-    map.* = km.KeyMaps{
-        .modeid = km.ModeId.Command,
-        .fallback = km.KeyFunction.initstate(commandline.append),
-        .targeter = null,
-    };
+pub fn init(a: std.mem.Allocator, modes: *km.Keymap) !void {
+    var normal = modes.appender(km.ModeId.Command);
+    try normal.put(a, norm(':'), .initsetmod(km.ModeId.Command));
 
-    try map.put(
-        a,
-        trm.keys.norm(trm.KeySymbol.Backspace.toBits()),
-        km.KeyFunction.initstate(commandline.delete),
-    );
+    var command = modes.appender(km.ModeId.Command);
+    command.fallback(.initstate(commandline.append));
 
-    try map.put(
-        a,
-        trm.keys.norm(trm.KeySymbol.Esc.toBits()),
-        km.KeyFunction.initstate(commandline.stop),
-    );
-
-    try map.put(
-        a,
-        trm.keys.ctrl('c'),
-        km.KeyFunction.initstate(commandline.stop),
-    );
-
-    try map.put(
-        a,
-        trm.keys.norm('\n'),
-        km.KeyFunction.initstate(commandline.run),
-    );
+    try command.put(a, norm(trm.KeySymbol.Backspace.toBits()), .initstate(commandline.delete));
+    try command.put(a, norm(trm.KeySymbol.Esc.toBits()), .initstate(commandline.stop));
+    try command.put(a, norm('\n'), .initstate(commandline.run));
+    try command.put(a, ctrl('c'), .initstate(commandline.stop));
 }
 
 const commandline = struct {
