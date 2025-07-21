@@ -56,19 +56,19 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
         }
     }
 
-    {
-        const mode = buffer.getKeymap();
-        const modenname = mode.modeid.toString();
-
-        for (modenname, 0..) |ch, i| {
-            writer.draw(
-                .{ .col = view.x + i, .row = view.y + 0 },
-                .{
-                    .background = Color.Black,
-                    .foreground = Color.Yellow,
-                    .content = .{ .Text = ch },
-                },
-            );
-        }
-    }
+    // {
+    //     const mode = buffer.getKeymap();
+    //     const modenname = mode.modeid.toString();
+    //
+    //     for (modenname, 0..) |ch, i| {
+    //         writer.draw(
+    //             .{ .col = view.x + i, .row = view.y + 0 },
+    //             .{
+    //                 .background = Color.Black,
+    //                 .foreground = Color.Yellow,
+    //                 .content = .{ .Text = ch },
+    //             },
+    //         );
+    //     }
+    // }
 }

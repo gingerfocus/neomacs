@@ -28,7 +28,7 @@ pub fn open(L: ?*lua.State) callconv(.C) c_int {
     const nbuf = state.a.create(root.Buffer) catch return 0;
 
     // TODO: make sure its the scratch buffer
-    nbuf.* = root.Buffer.init(state.a, state.scratchbuffer.keymaps, file) catch {
+    nbuf.* = root.Buffer.init(state.a, state.global_keymap, file) catch {
         state.a.destroy(nbuf);
         root.log(@src(), .err, "File Not Found: {s}", .{file});
         return 0;

@@ -9,23 +9,26 @@ const View = @import("../Component.zig").View;
 
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
     _ = self;
+    _ = state;
+    _ = writer;
+    _ = view;
 
     // const buffer = state.getCurrentBuffer();
 
-    if (state.getKeyMaps().modeid._ == root.Buffer.ModeId.Command._) {
-        const command = std.fmt.allocPrint(state.a, ":{s}", .{state.commandbuffer.items}) catch return;
-        defer state.a.free(command);
-
-        for (command, 0..) |ch, i| {
-            writer.draw(
-                .{ .col = view.x + i, .row = view.y },
-                .{
-                    .background = Color.Black,
-                    .foreground = Color.White,
-                    .content = .{ .Text = ch },
-                },
-            );
-        }
-        writer.setCursor(.{ .col = view.x + command.len, .row = view.y });
-    }
+    // if (state.getKeyMaps().modeid._ == root.Buffer.ModeId.Command._) {
+    //     const command = std.fmt.allocPrint(state.a, ":{s}", .{state.commandbuffer.items}) catch return;
+    //     defer state.a.free(command);
+    //
+    //     for (command, 0..) |ch, i| {
+    //         writer.draw(
+    //             .{ .col = view.x + i, .row = view.y },
+    //             .{
+    //                 .background = Color.Black,
+    //                 .foreground = Color.White,
+    //                 .content = .{ .Text = ch },
+    //             },
+    //         );
+    //     }
+    //     writer.setCursor(.{ .col = view.x + command.len, .row = view.y });
+    // }
 }

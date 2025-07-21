@@ -22,55 +22,55 @@ const Ks = trm.KeySymbol;
 /// TODO: I dont think this needs an arena
 pub fn create(
     alloc: std.mem.Allocator,
-    arena: *std.heap.ArenaAllocator,
-) !km.ModeToKeys {
-    const a = arena.allocator();
+) !*km.Keymap {
+    const a = alloc;
 
-    var modes = km.ModeToKeys{};
+    const modes = try a.create(km.Keymap);
+    modes.* = km.Keymap.init(a);
 
-    const normal = try a.create(km.KeyMaps);
-    normal.* = km.KeyMaps{
-        .modeid = ModeId.Normal,
-        .targeter = km.KeyFunction.initstate(actions.move),
-        .fallback = null,
-    };
-    try modes.put(alloc, ModeId.Normal, normal);
-
-    const insert = try a.create(km.KeyMaps);
-    insert.* = km.KeyMaps{
-        .modeid = ModeId.Insert,
-        .targeter = km.KeyFunction.initstate(actions.move),
-        .fallback = km.KeyFunction.initstate(insertsfn.append),
-    };
-    try modes.put(alloc, ModeId.Insert, insert);
-
-    const visual = try a.create(km.KeyMaps);
-    visual.* = km.KeyMaps{
-        .modeid = ModeId.Visual,
-        .targeter = km.KeyFunction.initstate(actions.moveKeep),
-        .fallback = null,
-    };
-    try modes.put(alloc, ModeId.Visual, visual);
-
-    // insert
-    try initInsertKeys(a, insert);
-    try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
-
-    // normal
-    try initToInsertKeys(a, normal);
-    try initToVisualKeys(a, normal);
-    try initMotionKeys(a, normal, &modes);
-    try initNormalKeys(a, normal);
-    try initModifyingKeys(a, normal, &modes);
-
-    // visual
-    try initMotionKeys(a, visual, &modes);
-    try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
-    try visual.put(a, norm('d'), km.KeyFunction.initstate(actions.deletelines));
-
-    // command
-    try normal.put(a, norm(':'), km.KeyFunction.initsetmod(km.ModeId.Command));
-    try command.init(a, &modes);
+    // const normal = try a.create(km.KeyMaps);
+    // normal.* = km.KeyMaps{
+    //     .modeid = ModeId.Normal,
+    //     .targeter = km.KeyFunction.initstate(actions.move),
+    //     .fallback = null,
+    // };
+    // try modes.put(alloc, ModeId.Normal, normal);
+    //
+    // const insert = try a.create(km.KeyMaps);
+    // insert.* = km.KeyMaps{
+    //     .modeid = ModeId.Insert,
+    //     .targeter = km.KeyFunction.initstate(actions.move),
+    //     .fallback = km.KeyFunction.initstate(insertsfn.append),
+    // };
+    // try modes.put(alloc, ModeId.Insert, insert);
+    //
+    // const visual = try a.create(km.KeyMaps);
+    // visual.* = km.KeyMaps{
+    //     .modeid = ModeId.Visual,
+    //     .targeter = km.KeyFunction.initstate(actions.moveKeep),
+    //     .fallback = null,
+    // };
+    // try modes.put(alloc, ModeId.Visual, visual);
+    //
+    // // insert
+    // try initInsertKeys(a, insert);
+    // try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
+    //
+    // // normal
+    // try initToInsertKeys(a, normal);
+    // try initToVisualKeys(a, normal);
+    // try initMotionKeys(a, normal, &modes);
+    // try initNormalKeys(a, normal);
+    // try initModifyingKeys(a, normal, &modes);
+    //
+    // // visual
+    // try initMotionKeys(a, visual, &modes);
+    // try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
+    // try visual.put(a, norm('d'), km.KeyFunction.initstate(actions.deletelines));
+    //
+    // // command
+    // try normal.put(a, norm(':'), km.KeyFunction.initsetmod(km.ModeId.Command));
+    // try command.init(a, &modes);
     return modes;
 }
 

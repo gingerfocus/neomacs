@@ -40,16 +40,16 @@ pub fn set(L: ?*lua.State) callconv(.C) c_int {
     // TODO: get opts
     _ = lhs;
     _ = rhs;
+    _ = modestr;
 
-    const state = root.state();
-    const mode = root.km.ModeId.from(modestr);
+    // const state = root.state();
+    // const mode = root.km.ModeId.from(modestr);
 
-    const maps = state.scratchbuffer.keymaps.get(mode) orelse {
-        // TODO: make a new mode for this
-        // use getOrPut
-        return 0;
-    };
-    _ = maps;
+    // const maps = state.scratchbuffer.keymaps.get(mode) orelse {
+    //     // TODO: make a new mode for this
+    //     // use getOrPut
+    //     return 0;
+    // };
 
     return 0;
 }

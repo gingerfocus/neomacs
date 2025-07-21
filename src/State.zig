@@ -5,7 +5,6 @@ const trm = root.trm;
 const lua = root.lua;
 const km = root.km;
 const keys = root.keys;
-// const xev = root.xev;
 
 const Buffer = root.Buffer;
 const Args = root.Args;
@@ -36,6 +35,8 @@ buffers: std.ArrayListUnmanaged(*Buffer),
 /// null selects the scratch buffer
 bufferindex: ?usize,
 
+global_keymap: *km.Keymap,
+
 // resized: bool = true,
 
 components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
@@ -56,29 +57,23 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
     try checkfirstrun(a);
     const L = lua.init();
 
-    var arena = std.heap.ArenaAllocator.init(a);
-    const maps = try a.create(km.ModeToKeys);
-    maps.* = try keys.create(a, &arena);
+    const arena = std.heap.ArenaAllocator.init(a);
+
+    const keysmap = try keys.create(a);
 
     // ---------
 
     const scratch: *Buffer = try a.create(Buffer);
-    scratch.* = Buffer{
-        .filename = "*scratch*",
-        .hasbackingfile = false,
-        .keymaps = maps,
-        .id = Buffer.idgen.next(),
-        .lines = .{},
-        .alloc = a,
+    scratch.* = Buffer.init(a, keysmap, "*scratch*") catch |err| {
+        root.log(@src(), .err, "Could not create scratch buffer", .{});
+        return err;
     };
-    // TODO: append welcome content to scratch buffer
-    // try scratch.insertCharacter(a, 't');
 
     var buffers = std.ArrayListUnmanaged(*Buffer){};
     for (args.files) |f| {
         const buffer = try a.create(Buffer);
         root.log(@src(), .debug, "opening file ({s})", .{f});
-        buffer.* = Buffer.init(a, maps, f) catch |err| {
+        buffer.* = Buffer.init(a, keysmap, f) catch |err| {
             root.log(@src(), .err, "File Not Found: {s}", .{f});
             a.destroy(buffer);
             return err;
@@ -96,6 +91,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
         .scratchbuffer = scratch,
         .buffers = buffers,
         .bufferindex = if (args.files.len > 0) 0 else null,
+        .global_keymap = keysmap,
     };
 
     try render.init(&state);
@@ -106,12 +102,9 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
 pub fn deinit(state: *State) void {
     std.log.debug("deiniting state", .{});
 
+
     state.commandbuffer.deinit(state.a);
 
-    // The scratchbuffer owns the keymaps.
-    // The keymaps must be released before lua as they reference each other.
-    state.scratchbuffer.keymaps.deinit(state.a);
-    state.a.destroy(state.scratchbuffer.keymaps);
     state.scratchbuffer.deinit();
     state.a.destroy(state.scratchbuffer);
 
@@ -120,6 +113,9 @@ pub fn deinit(state: *State) void {
         state.a.destroy(buffer);
     }
     state.buffers.deinit(state.a);
+
+    state.global_keymap.deinit(state.a);
+    state.a.destroy(state.global_keymap);
 
     state.components.deinit(state.a);
 
@@ -148,21 +144,28 @@ pub fn getCurrentBuffer(state: *State) *Buffer {
 }
 
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
-    // try state.loop.run(.no_wait);
-
-    const keymap = state.getKeyMaps();
-    root.log(@src(), .debug, "press (mode: {d}, key: {d})", .{ keymap.modeid._, trm.keys.bits(ke) });
-    try keymap.run(state, ke);
-}
-
-// TODO: make a const and mut version
-pub fn getKeyMaps(state: *State) *km.KeyMaps {
-    // std.debug.print("cmd: {s}\n", .{state.commandbuffer.items});
     const buffer = state.getCurrentBuffer();
-    if (buffer.curkeymap) |map| return map;
+    try buffer.input_state.current_sequence.append(trm.keys.bits(ke));
 
-    return buffer.keymaps.get(Buffer.ModeId.Normal).?;
+    if (buffer.local_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
+        try kf.run(state);
+        buffer.input_state.current_sequence.len = 0;
+        return;
+    }
+
+    if (state.global_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
+        try kf.run(state);
+        buffer.input_state.current_sequence.len = 0;
+        return;
+    }
+
+    if (buffer.local_keymap.isPrefix(buffer.input_state.current_sequence)) return;
+    if (state.global_keymap.isPrefix(buffer.input_state.current_sequence)) return;
+
+    // TODO: run fallback
+    buffer.input_state.current_sequence.len = 0;
 }
+
 
 pub const Repeating = struct {
     is: bool = false,

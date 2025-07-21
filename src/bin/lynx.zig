@@ -88,7 +88,7 @@ const Iter = struct {
     index: usize,
 
     pub fn peek(self: *const Iter) ?u8 {
-        if (self.index < self.items.len) return self.index[self.index];
+        if (self.index < self.items.len) return self.items[self.index];
         return null;
     }
 
@@ -111,7 +111,7 @@ pub fn http2md(
     var iter = Iter{ .items = input, .index = 0 };
 
     loop: while (iter.next()) |c| {
-        const i = iter.index;
+        var i = iter.index;
 
         skipwhitespace(&iter);
 
