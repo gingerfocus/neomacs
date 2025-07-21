@@ -28,14 +28,9 @@ pub fn create(
     const modes = try a.create(km.Keymap);
     modes.* = km.Keymap.init(a);
 
-    // const normal = try a.create(km.KeyMaps);
-    // normal.* = km.KeyMaps{
-    //     .modeid = ModeId.Normal,
-    //     .targeter = km.KeyFunction.initstate(actions.move),
-    //     .fallback = null,
-    // };
-    // try modes.put(alloc, ModeId.Normal, normal);
-    //
+    var normal = modes.appender(km.ModeId.Normal);
+    normal.targeter(km.KeyFunction.initstate(actions.move));
+
     // const insert = try a.create(km.KeyMaps);
     // insert.* = km.KeyMaps{
     //     .modeid = ModeId.Insert,
@@ -56,12 +51,12 @@ pub fn create(
     // try initInsertKeys(a, insert);
     // try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
     //
-    // // normal
-    // try initToInsertKeys(a, normal);
-    // try initToVisualKeys(a, normal);
-    // try initMotionKeys(a, normal, &modes);
-    // try initNormalKeys(a, normal);
-    // try initModifyingKeys(a, normal, &modes);
+    // normal
+    try initToInsertKeys(a, &normal);
+    try initToVisualKeys(a, &normal);
+    try initMotionKeys(a, &normal);
+    try initNormalKeys(a, &normal);
+    try initModifyingKeys(a, &normal);
     //
     // // visual
     // try initMotionKeys(a, visual, &modes);
@@ -74,72 +69,62 @@ pub fn create(
     return modes;
 }
 
-pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeToKeys) !void {
+fn initToInsertKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
+    _ = a;
+    try normal.put(norm('i'), km.KeyFunction.initstate(inserts.before));
+    try normal.put(norm('I'), km.KeyFunction.initstate(inserts.start));
+    try normal.put(norm('a'), km.KeyFunction.initstate(inserts.after));
+    try normal.put(norm('A'), km.KeyFunction.initstate(inserts.end));
+    try normal.put(norm('o'), km.KeyFunction.initstate(inserts.below));
+    try normal.put(norm('O'), km.KeyFunction.initstate(inserts.above));
+}
+
+fn initToVisualKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
+    _ = a;
+    try normal.put(norm('v'), km.KeyFunction.initstate(visuals.range));
+    try normal.put(norm('V'), km.KeyFunction.initstate(visuals.line));
+    try normal.put(ctrl('v'), km.KeyFunction.initstate(visuals.block));
+}
+
+pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
+    _ = a;
     // arrow keys?
-    try maps.put(a, norm('j'), km.KeyFunction.initstate(targeters.target_down_linewise));
-    try maps.put(a, norm('k'), km.KeyFunction.initstate(targeters.target_up_linewise));
-    try maps.put(a, norm('l'), km.KeyFunction.initstate(targeters.target_right));
-    try maps.put(a, norm('h'), km.KeyFunction.initstate(targeters.target_left));
+    try maps.put(norm('j'), km.KeyFunction.initstate(targeters.target_down_linewise));
+    try maps.put(norm('k'), km.KeyFunction.initstate(targeters.target_up_linewise));
+    try maps.put(norm('l'), km.KeyFunction.initstate(targeters.target_right));
+    try maps.put(norm('h'), km.KeyFunction.initstate(targeters.target_left));
 
-    try maps.put(a, norm('G'), km.KeyFunction.initstate(targeters.target_bottom));
-    try maps.put(a, '$', km.KeyFunction.initstate(targeters.motion_end));
-    try maps.put(a, '0', km.KeyFunction.initstate(targeters.motionstart));
+    try maps.put(norm('G'), km.KeyFunction.initstate(targeters.target_bottom));
+    try maps.put('$', km.KeyFunction.initstate(targeters.motion_end));
+    try maps.put('0', km.KeyFunction.initstate(targeters.motionstart));
 
-    try maps.put(a, norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
+    try maps.put(norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
     // try maps.put(a, norm('e'), km.KeyFunction.initstate(targeters.motion_word_end));
     // try maps.put(a, norm('b'), km.KeyFunction.initstate(targeters.motion_word_back));
     // try maps.put(a, norm('B'), km.KeyFunction.initstate(targeters.TODO));
 
-    const f = try maps.then(a, modes, norm('f'));
-    try f.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
-    f.fallback = km.KeyFunction.initbuffer(targeters.jump_letter);
-    f.targeter = km.KeyFunction.initstate(actions.move);
+    var f = try maps.then(norm('f'));
+    try f.put(Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
+    f.fallback(km.KeyFunction.initbuffer(targeters.jump_letter));
+    f.targeter(km.KeyFunction.initstate(actions.move));
 
-    const t = try maps.then(a, modes, norm('t'));
-    try t.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
-    t.fallback = km.KeyFunction.initbuffer(targeters.jump_letter_before);
-    t.targeter = km.KeyFunction.initstate(actions.move);
+    var t = try maps.then(norm('t'));
+    try t.put(Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
+    t.fallback(km.KeyFunction.initbuffer(targeters.jump_letter_before));
+    t.targeter(km.KeyFunction.initstate(actions.move));
 
     //  @as(c_int, 37) buffer_next_brace(buffer);
 
-    const g = try maps.then(a, modes, norm('g'));
-    g.targeter = km.KeyFunction.initstate(actions.move);
+    var g = try maps.then(norm('g'));
+    g.targeter(km.KeyFunction.initstate(actions.move));
 
-    try g.put(a, norm('g'), km.KeyFunction.initstate(targeters.top));
+    try g.put(norm('g'), km.KeyFunction.initstate(targeters.top));
 
     // const gq = try g.then(a, 'q');
     // _ = gq; // autofix
 }
 
-pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.KeyMaps, modes: *km.ModeToKeys) !void {
-    // x - buffer_delete_ch(buffer, state);
-
-    // c - buffer_replace_ch(buffer, state);
-
-    const d = try maps.then(a, modes, norm('d'));
-    d.targeter = km.KeyFunction.initstate(actions.deletelines);
-    try d.put(a, norm('d'), km.KeyFunction.initstate(targeters.full_linewise));
-    // TODO: this is not correct, some motions select different areas in this
-    // mode
-    try initMotionKeys(a, d, modes);
-}
-
-fn initToVisualKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
-    try normal.put(a, norm('v'), km.KeyFunction.initstate(visuals.range));
-    try normal.put(a, norm('V'), km.KeyFunction.initstate(visuals.line));
-    try normal.put(a, ctrl('v'), km.KeyFunction.initstate(visuals.block));
-}
-
-fn initToInsertKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
-    try normal.put(a, norm('i'), km.KeyFunction.initstate(inserts.before));
-    try normal.put(a, norm('I'), km.KeyFunction.initstate(inserts.start));
-    try normal.put(a, norm('a'), km.KeyFunction.initstate(inserts.after));
-    try normal.put(a, norm('A'), km.KeyFunction.initstate(inserts.end));
-    try normal.put(a, norm('o'), km.KeyFunction.initstate(inserts.below));
-    try normal.put(a, norm('O'), km.KeyFunction.initstate(inserts.above));
-}
-
-fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
+fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     _ = a;
     _ = normal;
 
@@ -413,6 +398,18 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.KeyMaps) !void {
     // if (state.repeating.repeating_count == 0) {
     //     state.leader = .NONE;
     // }
+}
+
+pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
+    // x - buffer_delete_ch(buffer, state);
+
+    // c - buffer_replace_ch(buffer, state);
+
+    var d = try maps.then(norm('d'));
+    d.targeter(km.KeyFunction.initstate(actions.deletelines));
+    try d.put(norm('d'), km.KeyFunction.initstate(targeters.full_linewise));
+    // TODO: this is correct, the j and k motions are just linewise
+    try initMotionKeys(a, &d);
 }
 
 fn deleteBufferCharacter(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -1120,7 +1117,7 @@ const actions = struct {
             buffer.col = target.end.col;
 
             // only go back if we expend something
-            buffer.curkeymap = null;
+            buffer.input_state.current_sequence.len = 0;
         }
     }
 

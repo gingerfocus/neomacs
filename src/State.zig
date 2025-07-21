@@ -114,7 +114,7 @@ pub fn deinit(state: *State) void {
     }
     state.buffers.deinit(state.a);
 
-    state.global_keymap.deinit(state.a);
+    state.global_keymap.deinit();
     state.a.destroy(state.global_keymap);
 
     state.components.deinit(state.a);
@@ -144,26 +144,30 @@ pub fn getCurrentBuffer(state: *State) *Buffer {
 }
 
 pub fn press(state: *State, ke: trm.KeyEvent) !void {
-    const buffer = state.getCurrentBuffer();
-    try buffer.input_state.current_sequence.append(trm.keys.bits(ke));
+    _ = state;
+    _ = ke;
 
-    if (buffer.local_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
-        try kf.run(state);
-        buffer.input_state.current_sequence.len = 0;
-        return;
-    }
-
-    if (state.global_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
-        try kf.run(state);
-        buffer.input_state.current_sequence.len = 0;
-        return;
-    }
-
-    if (buffer.local_keymap.isPrefix(buffer.input_state.current_sequence)) return;
-    if (state.global_keymap.isPrefix(buffer.input_state.current_sequence)) return;
-
-    // TODO: run fallback
-    buffer.input_state.current_sequence.len = 0;
+    return error.NotImplemented;
+    // const buffer = state.getCurrentBuffer();
+    // try buffer.input_state.current_sequence.append(trm.keys.bits(ke));
+    //
+    // if (buffer.local_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
+    //     try kf.run(state);
+    //     buffer.input_state.current_sequence.len = 0;
+    //     return;
+    // }
+    //
+    // if (state.global_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
+    //     try kf.run(state);
+    //     buffer.input_state.current_sequence.len = 0;
+    //     return;
+    // }
+    //
+    // if (buffer.local_keymap.isPrefix(buffer.input_state.current_sequence)) return;
+    // if (state.global_keymap.isPrefix(buffer.input_state.current_sequence)) return;
+    //
+    // // TODO: run fallback
+    // buffer.input_state.current_sequence.len = 0;
 }
 
 

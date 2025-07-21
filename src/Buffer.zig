@@ -49,7 +49,9 @@ mode: km.ModeId = km.ModeId.Normal,
 const Line = std.ArrayListUnmanaged(u8);
 
 const InputState = struct {
-    current_sequence: km.KeySequence = .{},
+    current_sequence: km.KeySequence = .{
+        .mode = km.ModeId.Normal,
+    },
     // timeout: u64 = 0,
 };
 
@@ -108,7 +110,7 @@ pub fn deinit(buffer: *Buffer) void {
         line.deinit(buffer.alloc);
     }
     buffer.lines.deinit(buffer.alloc);
-    buffer.local_keymap.deinit(buffer.alloc);
+    buffer.local_keymap.deinit();
 
     buffer.* = undefined;
 }

@@ -4,7 +4,9 @@ pub const KeySequence = @This();
 
 // TODO: make some better allignment for this and find a good size for the keys
 
-mode: u16 = 0,
+const km = @import("root.zig");
+
+mode: km.ModeId,
 keys: [8]u16 = .{0} ** 8,
 len: u8 = 0,
 
