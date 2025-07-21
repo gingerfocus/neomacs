@@ -64,7 +64,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     }
 
     // render the cursor
-    // if (buffer.getKeymap().modeid._ != root.Buffer.ModeId.Command._) {
-    //     writer.setCursor(.{ .col = view.x + buffer.col + 1, .row = view.y + buffer.row - row_render_start });
-    // }
+    if (buffer.mode._ != root.km.ModeId.Command._) {
+        writer.setCursor(.{ .col = view.x + buffer.col + 1, .row = view.y + buffer.row - row_render_start });
+    }
 }

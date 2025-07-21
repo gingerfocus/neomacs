@@ -6,9 +6,9 @@ const Keymap = @This();
 const km = @import("root.zig");
 
 /// TODO: make this unmanaged
-bindings: std.AutoArrayHashMapUnmanaged(KeySequence, KeyFunction),
-fallbacks: std.AutoArrayHashMapUnmanaged(KeySequence, KeyFunction),
-targeters: std.AutoArrayHashMapUnmanaged(KeySequence, KeyFunction),
+bindings: std.ArrayHashMapUnmanaged(KeySequence, KeyFunction, KeySequence.Ctx, true),
+fallbacks: std.ArrayHashMapUnmanaged(KeySequence, KeyFunction, KeySequence.Ctx, true),
+targeters: std.MultiArrayList(struct { keys: KeySequence, func: KeyFunction }),
 alloc: std.mem.Allocator,
 
 pub fn init(alloc: std.mem.Allocator) Keymap {
@@ -36,6 +36,10 @@ pub fn appender(self: *Keymap, mode: km.ModeId) Keymap.Appender {
     };
 }
 
+pub fn put(self: *Keymap, a: std.mem.Allocator, keyseq: KeySequence, value: KeyFunction) !void {
+    try self.bindings.put(a, keyseq, value);
+}
+
 /// A nice API for building keymaps
 pub const Appender = struct {
     keymap: *Keymap,
@@ -51,7 +55,8 @@ pub const Appender = struct {
         };
     }
 
-    pub fn put(self: *Appender, key: u16, value: KeyFunction) !void {
+    pub fn put(self: *Appender, a: std.mem.Allocator, key: u16, value: KeyFunction) !void {
+        _ = a;
         var newprefix = self.curprefix;
         try newprefix.append(key);
 
@@ -63,6 +68,7 @@ pub const Appender = struct {
     }
 
     pub fn targeter(self: *Appender, value: KeyFunction) void {
-        self.keymap.targeters.put(self.keymap.alloc, self.curprefix, value) catch unreachable;
+        // TODO: check duplicate
+        self.keymap.targeters.append(self.keymap.alloc, .{ .keys = self.curprefix, .func = value }) catch unreachable;
     }
 };

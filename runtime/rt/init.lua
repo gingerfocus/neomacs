@@ -5,6 +5,7 @@ local neon = _G.neon
 M.portage = function(name)
     -- standard package management
     if not name then
+        neon.print("usage: portage <package>")
         return
     end
     -- TODO: install it
@@ -29,7 +30,7 @@ M.startup = function()
             print("neon: init.lua not found, using default")
             -- print("writing default init.lua")
 
-            init = loadfile(vim.opt.runtime .. "/init.lua") or function() end
+            init = loadfile(neon.opt.runtime .. "/init.lua") or function() end
         end
 
         init()
@@ -68,12 +69,23 @@ M.compat = function()
         neon.buf.write()
         neon.api.quit()
     end
-    neon.cmd.e = neon.buf.edit
+
+    -- neon.cmd.wqa = function()
+    --     neon.buf.iter(function(buf)
+    --         buf.write()
+    --     end)
+    --     neon.api.quit()
+    -- end
+
+    neon.cmd.e = neon.buf.editini
     neon.cmd.bn = neon.buf.next
     neon.cmd.bp = neon.buf.prev
 end
 
--- HACK: this is just for testing beacuse im bad
-M.compat()
+-- setmetatable(M, {
+--     __index = function(self, key)
+--         return require("rt." .. key)
+--     end,
+-- })
 
 return M

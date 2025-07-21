@@ -104,6 +104,7 @@ pub fn run(self: Self, state: *State) anyerror!void {
             try fc(buffer, .{ .character = state.ch, .dataptr = self.dataptr });
         },
         .setmod => |mode| {
+            root.log(@src(), .debug, "setting mode {s}", .{mode.toString()});
             const buffer = state.getCurrentBuffer();
             buffer.setMode(mode);
         },

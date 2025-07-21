@@ -64,7 +64,10 @@ pub const VisualMode = enum {
 
 pub fn setMode(buffer: *Buffer, mode: km.ModeId) void {
     buffer.mode = mode;
-    // buffer.input_state
+
+    buffer.input_state.mode = mode;
+    // is this corrent?
+    buffer.input_state.len = 0;
 }
 
 pub fn init(

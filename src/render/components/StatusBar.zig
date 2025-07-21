@@ -56,19 +56,34 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
         }
     }
 
-    // {
-    //     const mode = buffer.getKeymap();
-    //     const modenname = mode.modeid.toString();
-    //
-    //     for (modenname, 0..) |ch, i| {
-    //         writer.draw(
-    //             .{ .col = view.x + i, .row = view.y + 0 },
-    //             .{
-    //                 .background = Color.Black,
-    //                 .foreground = Color.Yellow,
-    //                 .content = .{ .Text = ch },
-    //             },
-    //         );
-    //     }
-    // }
+    {
+        const modenname = buffer.mode.toString();
+
+        for (modenname, 0..) |ch, i| {
+            writer.draw(
+                .{ .col = view.x + i, .row = view.y + 0 },
+                .{
+                    .background = Color.Black,
+                    .foreground = Color.Yellow,
+                    .content = .{ .Text = ch },
+                },
+            );
+        }
+    }
+
+    {
+        const prefix = buffer.input_state.keys[0..buffer.input_state.len];
+        // std.log.info("prefix: {any}", .{prefix});
+
+        for (prefix, 0..) |ch, i| {
+            writer.draw(
+                .{ .col = view.x + i + 20, .row = view.y + 0 },
+                .{
+                    .background = Color.Red,
+                    .foreground = Color.Yellow,
+                    .content = .{ .Text = @intCast(ch) },
+                },
+            );
+        }
+    }
 }

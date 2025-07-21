@@ -101,5 +101,6 @@ pub fn backend(self: *Self) Backend {
             .getSize = thunk.getSize,
             .setCursor = thunk.setCursor,
         },
+        .stdout = true,
     };
 }

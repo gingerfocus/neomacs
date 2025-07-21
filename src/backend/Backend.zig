@@ -15,6 +15,7 @@ const BackendHeadless = @import("BackendHeadless.zig");
 // arena: std.heap.ArenaAllocator,
 dataptr: *anyopaque,
 vtable: *const VTable,
+stdout: bool = false,
 
 const Self = @This();
 

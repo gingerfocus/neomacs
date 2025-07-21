@@ -22,8 +22,20 @@ pub const render = @import("render/root.zig");
 
 // pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
 
+fn logfn(
+    comptime message_level: std.log.Level,
+    comptime scope: @TypeOf(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    if (scu.log.file) |_| {
+        scu.log.toFile(message_level, scope, format, args);
+    } else {
+        std.log.defaultLog(message_level, scope, format, args);
+    }
+}
 pub const std_options: std.Options = .{
-    .logFn = scu.log.toFile,
+    .logFn = logfn,
 };
 
 //-----------------------------------------------------------------------------
@@ -70,11 +82,9 @@ test "all" {
 //-----------------------------------------------------------------------------
 
 pub fn main() u8 {
-    const logFile = std.fs.cwd().createFile("neomacs.log", .{}) catch null;
-    defer if (logFile) |file| file.close();
-    scu.log.file = logFile;
-
     alloc.init();
+
+    defer if (scu.log.file) |file| file.close();
 
     neomacs() catch |err| {
         std.debug.print("Some unrecoverable error occorred. Check log file for details.\n", .{});
@@ -122,6 +132,8 @@ fn neomacs() !void {
 
     s.* = try root.State.init(a, args);
     defer s.deinit();
+
+    try s.setup();
 
     while (!s.config.QUIT) {
         try root.render.draw(s);
