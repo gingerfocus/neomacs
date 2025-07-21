@@ -42,18 +42,14 @@ hasbackingfile: bool,
 
 global_keymap: *km.Keymap,
 local_keymap: km.Keymap,
-input_state: InputState = .{},
 
+input_state: km.KeySequence = .{
+    // TODO: make this always be in sync with the buffer mode
+    .mode = km.ModeId.Normal,
+},
 mode: km.ModeId = km.ModeId.Normal,
 
 const Line = std.ArrayListUnmanaged(u8);
-
-const InputState = struct {
-    current_sequence: km.KeySequence = .{
-        .mode = km.ModeId.Normal,
-    },
-    // timeout: u64 = 0,
-};
 
 pub const Visual = struct {
     mode: VisualMode = .Range,

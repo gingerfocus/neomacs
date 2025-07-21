@@ -102,7 +102,6 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
 pub fn deinit(state: *State) void {
     std.log.debug("deiniting state", .{});
 
-
     state.commandbuffer.deinit(state.a);
 
     state.scratchbuffer.deinit();
@@ -128,10 +127,6 @@ pub fn deinit(state: *State) void {
     state.arena.deinit();
 }
 
-// pub fn getBuffer(state: *const State) *Buffer {
-//     return state.buffers.items[state.bufferindex];
-// }
-
 pub fn getCurrentBuffer(state: *State) *Buffer {
     const idx = state.bufferindex orelse return state.scratchbuffer;
     if (state.buffers.items.len == 0) return state.scratchbuffer;
@@ -143,33 +138,46 @@ pub fn getCurrentBuffer(state: *State) *Buffer {
     return state.buffers.items[idx];
 }
 
-pub fn press(state: *State, ke: trm.KeyEvent) !void {
-    _ = state;
-    _ = ke;
+pub fn press(state: *State, key: trm.KeyEvent) !void {
+    const ke = trm.keys.bits(key);
 
-    return error.NotImplemented;
-    // const buffer = state.getCurrentBuffer();
-    // try buffer.input_state.current_sequence.append(trm.keys.bits(ke));
-    //
-    // if (buffer.local_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
-    //     try kf.run(state);
-    //     buffer.input_state.current_sequence.len = 0;
-    //     return;
-    // }
-    //
-    // if (state.global_keymap.bindings.get(buffer.input_state.current_sequence)) |*kf| {
-    //     try kf.run(state);
-    //     buffer.input_state.current_sequence.len = 0;
-    //     return;
-    // }
-    //
-    // if (buffer.local_keymap.isPrefix(buffer.input_state.current_sequence)) return;
-    // if (state.global_keymap.isPrefix(buffer.input_state.current_sequence)) return;
-    //
-    // // TODO: run fallback
-    // buffer.input_state.current_sequence.len = 0;
+    const buffer = state.getCurrentBuffer();
+    const oldstate = buffer.input_state;
+    var newstate = oldstate;
+
+    // TODO: catch this error
+    try newstate.append(ke);
+
+    if (buffer.local_keymap.bindings.get(newstate)) |*kf| {
+        try kf.run(state);
+        buffer.input_state.len = 0;
+
+        if (buffer.local_keymap.targeters.get(oldstate)) |*tkf| try tkf.run(state);
+        return;
+    }
+
+    if (state.global_keymap.bindings.get(newstate)) |*kf| {
+        try kf.run(state);
+        buffer.input_state.len = 0;
+
+        if (state.global_keymap.targeters.get(oldstate)) |*tkf| try tkf.run(state);
+        return;
+    }
+
+    if (buffer.local_keymap.fallbacks.get(oldstate)) |*kf| {
+        try kf.run(state);
+        buffer.input_state.len = 0;
+        return;
+    }
+    if (state.global_keymap.fallbacks.get(oldstate)) |*kf| {
+        try kf.run(state);
+        buffer.input_state.len = 0;
+        return;
+    }
+
+    // if nothing matches, then keep the sequence going
+    buffer.input_state = newstate;
 }
-
 
 pub const Repeating = struct {
     is: bool = false,

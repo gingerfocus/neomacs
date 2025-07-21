@@ -1117,7 +1117,7 @@ const actions = struct {
             buffer.col = target.end.col;
 
             // only go back if we expend something
-            buffer.input_state.current_sequence.len = 0;
+            buffer.input_state.len = 0;
         }
     }
 
