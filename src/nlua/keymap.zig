@@ -16,7 +16,7 @@ fn getFunction(L: ?*lua.State, idx: c_int) void {
     } else {}
 }
 
-    const km = root.km;
+const km = root.km;
 
 // vim.keyapi.set(mode, lhs, rhs, opts)
 pub fn set(L: ?*lua.State) callconv(.C) c_int {

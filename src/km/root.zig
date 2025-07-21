@@ -37,11 +37,11 @@ pub const ModeId = struct {
     }
 
     test "ModeId.from" {
-        std.testing.expectEqual(ModeId.Null, ModeId.from(""));
-        std.testing.expectEqual(ModeId.Normal, ModeId.from("n"));
-        std.testing.expectEqual(ModeId.Insert, ModeId.from("i"));
-        std.testing.expectEqual(ModeId.Visual, ModeId.from("v"));
-        std.testing.expectEqual(ModeId.Command, ModeId.from("c"));
+        try std.testing.expectEqual(ModeId.Null, ModeId.from(""));
+        try std.testing.expectEqual(ModeId.Normal, ModeId.from("n"));
+        try std.testing.expectEqual(ModeId.Insert, ModeId.from("i"));
+        try std.testing.expectEqual(ModeId.Visual, ModeId.from("v"));
+        try std.testing.expectEqual(ModeId.Command, ModeId.from("c"));
     }
 
     // // MUST always be one greater than the last one above
