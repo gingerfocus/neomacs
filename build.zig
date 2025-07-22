@@ -3,11 +3,14 @@ const std = @import("std");
 pub fn build(b: *std.Build) !void {
     const usegtk = b.option(bool, "gtk", "compile the gtk backend") orelse false;
     const usewayland = b.option(bool, "wayland", "compile the wayland backend") orelse false;
-    const needsdyn = usegtk or usewayland;
+    const usewgpu = b.option(bool, "wgpu", "compile the wgpu backend") orelse false;
+    const needsdyn = usegtk or usewayland or usewgpu;
 
-    // TODO: do more warning for this or make it a compile error
-    const static = if (needsdyn) false else b.option(bool, "static", "try to complile everything statically") orelse true;
-    const staticlua = if (static) true else b.option(bool, "static-lua", "complile lua statically") orelse static;
+    const argstatic = b.option(bool, "static", "try to complile everything statically") orelse true;
+    const static = if (needsdyn) false else argstatic;
+
+    const argstaticlua = b.option(bool, "static-lua", "complile lua statically") orelse static;
+    const staticlua = if (static) true else argstaticlua;
 
     // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
     // const runtimeVar = b.option([]const u8, "runtime", "set the runtime directory");
@@ -16,6 +19,7 @@ pub fn build(b: *std.Build) !void {
 
     options.addOption(bool, "usegtk", usegtk);
     options.addOption(bool, "usewayland", usewayland);
+    options.addOption(bool, "usewgpu", usewgpu);
 
     // std.debug.print("using options: \n{any}\n", .{.{ .gtk = usegtk, .wayland = usewayland, .static = static }});
 
@@ -92,6 +96,17 @@ pub fn build(b: *std.Build) !void {
 
         neomacs.linkLibrary(graphi.artifact("graphi"));
         neomacs.addIncludePath(graphi.namedLazyPath("include"));
+    }
+
+    if (usewgpu) {
+        if (b.lazyDependency("wgpu-native", .{
+            .target = target,
+            .optimize = optimize,
+            .link_mode = .static,
+        })) |wgpu| {
+            neomacs.addImport("wgpu", wgpu.module("wgpu"));
+        }
+        neomacs.linkSystemLibrary("glfw", .{});
     }
 
     if (usegtk) {

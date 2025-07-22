@@ -45,6 +45,8 @@
           pkgs.stylua
           pkgs.lua-language-server
           pkgs.cloc
+          # wgpu-utils
+
         ];
 
         # HACK: Allow for local development despite presence of zig.hook
