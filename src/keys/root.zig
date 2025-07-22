@@ -41,7 +41,7 @@ pub fn init(
     // visual
     try normal.initMotionKeys(a, &visual);
     try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
-    try visual.put(a, norm('d'), km.KeyFunction.initstate(actions.deletelines));
+    try visual.put(a, norm('d'), km.KeyFunction.initbuffer(actions.delete));
 
     // command
     try command.init(a, modes);
@@ -477,7 +477,9 @@ pub const actions = struct {
     fn yeank(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
         if (buffer.target) |target| {
             _ = target;
-            // TODO: implement
+            // TODO: paste with replace
+        } else {
+            // TODO: paste without replace
         }
     }
 
@@ -504,22 +506,70 @@ pub const actions = struct {
 
     pub fn none(_: *State) !void {}
 
-    // Deletes text only using the target as a guide for lines
-    pub fn deletelines(state: *State, _: km.KeyFunctionDataValue) !void {
-        const buffer = state.getCurrentBuffer();
+    pub fn delete(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
+        const a = buffer.alloc;
 
         root.log(@src(), .debug, "delete motion", .{});
 
-        if (buffer.target) |target| {
-            // TODO: checking
-            std.debug.assert(target.start.row <= target.end.row);
-            for (buffer.lines.items[target.start.row..target.end.row]) |*line| {
-                line.deinit(state.a);
+        if (buffer.target) |atarget| {
+            const targ = atarget.normalize();
+
+            std.debug.assert(targ.start.row <= targ.end.row);
+            if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
+
+            var remove_range_begin: ?usize = null;
+            var remove_range_len: usize = 0;
+
+            std.log.info("delete motion, target: {any}", .{targ});
+            var row: usize = targ.start.row;
+            while (row <= targ.end.row) : (row += 1) {
+                const line: *Buffer.Line = &buffer.lines.items[row];
+
+                var start = switch (targ.mode) {
+                    .Line => 0,
+                    .Range => if (row == targ.start.row) targ.start.col else 0,
+                    .Block => targ.start.col,
+                };
+                start = @min(start, line.items.len);
+
+                const end = switch (targ.mode) {
+                    .Line => line.items.len,
+                    .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
+                    .Block => targ.end.col,
+                };
+
+                const iswholeline = switch (targ.mode) {
+                    .Line => true,
+                    // its not the only row and its the whole row
+                    .Range => (targ.start.row != targ.end.row) and start == 0 and end == line.items.len,
+                    .Block => false,
+                };
+
+                std.log.info("row: {d}, start: {d}, end: {d}, iswholeline: {}", .{ row, start, end, iswholeline });
+
+                if (iswholeline) {
+                    if (remove_range_begin) |_| {
+                        remove_range_len += 1;
+                    } else {
+                        remove_range_begin = row;
+                        remove_range_len = 1;
+                    }
+                    // line.deinit(a);
+                } else {
+                    line.replaceRange(a, start, end - start, &.{}) catch unreachable; // never allocates
+                }
             }
-            try buffer.lines.replaceRange(state.a, target.start.row, target.end.row - target.start.row, &.{});
+
+            if (remove_range_begin) |rrange| {
+                buffer.lines.replaceRange(a, rrange, remove_range_len, &.{}) catch unreachable; // never allocates
+            }
         }
         buffer.target = null;
-        buffer.setMode(ModeId.Normal);
+
+        // TODO: move curosr
+
+        // Vim alwyas sets the mode to normal but i dont think that is a good idea
+        // buffer.setMode(ModeId.Normal);
     }
 };
 

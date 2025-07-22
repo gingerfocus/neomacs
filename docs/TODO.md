@@ -1,18 +1,24 @@
 # For 0.1.1
-- [ ] Targeters
-  - [ ] w/e
-  - [ ] b/B
+- [x] Targeters
+  - [x] w/e/b
   - [x] t
   - [x] f
   - [x] $
   - [x] 0
 - [x] Deletion (d/x)
-- [ ] Changing (c/r)
+- [ ] Changing (c)
+- [ ] Replace (r) (R, later)
+- [ ] Yank (y)
 - [ ] Visual Mode Targeting
+  - [ ] Range
+  - [ ] Line
+  - [ ] Block (eh, later)
 - [ ] Scroll off
 
 # For 0.2.0
 - [ ] Window Split
+- [ ] More motions
+  - [ ] W/E/B
 - [ ] Lua API
 - [ ] Undo
 - [ ] Make an example plugin (oil)

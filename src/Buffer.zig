@@ -49,13 +49,24 @@ input_state: km.KeySequence = .{
 },
 mode: km.ModeId = km.ModeId.Normal,
 
-const Line = std.ArrayListUnmanaged(u8);
+pub const Line = std.ArrayListUnmanaged(u8);
 
 pub const Visual = struct {
     mode: VisualMode = .Range,
     start: lib.Vec2,
     end: lib.Vec2,
+
+    /// often called by consumers to not have to deal with inversted selections
+    pub fn normalize(target: Visual) Visual {
+        var start = target.start;
+        var end = target.end;
+
+        if (end.cmp(start) == .lt) std.mem.swap(lib.Vec2, &start, &end);
+
+        return Visual{ .mode = target.mode, .start = start, .end = end };
+    }
 };
+
 pub const VisualMode = enum {
     Range,
     Line,

@@ -33,7 +33,6 @@ fn initToInsertKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     try normal.put(a, norm('I'), km.KeyFunction.initstate(inserts.start));
     try normal.put(a, norm('a'), km.KeyFunction.initstate(inserts.after));
     try normal.put(a, norm('A'), km.KeyFunction.initstate(inserts.end));
-    std.log.debug("thing: {}", .{norm('o')});
     try normal.put(a, norm('o'), km.KeyFunction.initstate(inserts.below));
     try normal.put(a, norm('O'), km.KeyFunction.initstate(inserts.above));
 }
@@ -45,6 +44,8 @@ fn initToVisualKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
 }
 
 pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
+    std.log.info("prefix: {any}", .{maps.curprefix});
+
     // arrow keys?
     try maps.put(a, norm('j'), km.KeyFunction.initstate(targeters.target_down_linewise));
     try maps.put(a, norm('k'), km.KeyFunction.initstate(targeters.target_up_linewise));
@@ -53,12 +54,14 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
 
     try maps.put(a, norm('G'), km.KeyFunction.initstate(targeters.target_bottom));
     try maps.put(a, '$', km.KeyFunction.initstate(targeters.motion_end));
-    try maps.put(a, '0', km.KeyFunction.initstate(targeters.motionstart));
+    try maps.put(a, '0', km.KeyFunction.initstate(targeters.motion_start));
 
     try maps.put(a, norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
+    // try maps.put(a, norm('W'), km.KeyFunction.initstate(targeters.motion_WORD_start));
     try maps.put(a, norm('e'), km.KeyFunction.initstate(targeters.motion_word_end));
+    // try maps.put(a, norm('E'), km.KeyFunction.initstate(targeters.motion_WORD_end));
     try maps.put(a, norm('b'), km.KeyFunction.initstate(targeters.motion_word_back));
-    try maps.put(a, norm('B'), km.KeyFunction.initstate(targeters.motion_WORD_back));
+    // try maps.put(a, norm('B'), km.KeyFunction.initstate(targeters.motion_WORD_back));
 
     var f = try maps.then(norm('f'));
     try f.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
@@ -70,15 +73,12 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
     t.fallback(km.KeyFunction.initbuffer(targeters.jump_letter_before));
     t.targeter(km.KeyFunction.initstate(keys.actions.move));
 
-    //  @as(c_int, 37) buffer_next_brace(buffer);
-
     var g = try maps.then(norm('g'));
     g.targeter(km.KeyFunction.initstate(keys.actions.move));
+    try g.put(a, norm('g'), km.KeyFunction.initstate(targeters.target_top));
 
-    try g.put(a, norm('g'), km.KeyFunction.initstate(targeters.top));
+    //  @as(c_int, 37) buffer_next_brace(buffer);
 
-    // const gq = try g.then(a, 'q');
-    // _ = gq; // autofix
 }
 
 fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
@@ -86,12 +86,6 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     _ = normal;
 
     // if (tools.check_keymaps(buffer, state)) return;
-
-    // if (state.leader == .NONE) {
-    //     if (handleLeaderKeys(state)) return;
-    // } else if (state.ch.character == .Esc) {
-    //     state.leader = .NONE;
-    // }
 
     // if (isdigit(state.ch) and
     //     !(state.ch.character.b() == '0' and state.num.items.len == 0))
@@ -132,107 +126,58 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     //     break;
     // },
 
-    // @as(c_int, 15) => {
-    //     {
-    //         while (true) {
-    //             var undo: Undo = Undo{
-    //                 .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-    //                 .data = @import("std").mem.zeroes(Data),
-    //                 .start = @import("std").mem.zeroes(usize),
-    //                 .end = @import("std").mem.zeroes(usize),
-    //             };
-    //             _ = &undo;
-    //             undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-    //             undo.start = buffer.*.cursor;
-    //             state.*.cur_undo = undo;
-    //             if (!false) break;
-    //         }
+    // 15 => {
     //         var row: usize = buffer_get_row(buffer);
-    //         _ = &row;
     //         var end: usize = buffer.*.rows.data[row].end;
-    //         _ = &end;
     //         buffer.*.cursor = end;
     //         buffer_newline_indent(buffer, state);
-    //         undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-    //         break;
-    //     }
     // },
 
     // @as(c_int, 110) => {
-    //     {
     //         var index_1: usize = search(buffer, state.*.command, state.*.command_s);
     //         _ = &index_1;
     //         buffer.*.cursor = index_1;
-    //     }
-    //     break;
     // },
+
     // ctrl('s') => save
+
     // @as(c_int, 3), @as(c_int, 27) => {
     //     state.*.repeating.repeating_count = 0;
     //     reset_command(state.*.command, &state.*.command_s);
     //     state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
     //     break;
     // },
+
     // @as(c_int, 121) => {
-    //     {
-    //         while (true) {
-    //             switch (state.*.leader) {
-    //                 @as(c_uint, @bitCast(@as(c_int, 3))) => {
-    //                     {
-    //                         if (state.*.repeating.repeating_count == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
-    //                             state.*.repeating.repeating_count = 1;
-    //                         }
-    //                         reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-    //                         {
-    //                             var i: usize = 0;
-    //                             _ = &i;
-    //                             while (i < state.*.repeating.repeating_count) : (i +%= 1) {
-    //                                 buffer_yank_line(buffer, state, i);
-    //                             }
-    //                         }
-    //                         state.*.repeating.repeating_count = 0;
+    //     switch (state.*.leader) {
+    //         @as(c_uint, @bitCast(@as(c_int, 3))) => {
+    //             {
+    //                 if (state.*.repeating.repeating_count == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) {
+    //                     state.*.repeating.repeating_count = 1;
+    //                 }
+    //                 reset_command(state.*.clipboard.str, &state.*.clipboard.len);
+    //                 {
+    //                     var i: usize = 0;
+    //                     _ = &i;
+    //                     while (i < state.*.repeating.repeating_count) : (i +%= 1) {
+    //                         buffer_yank_line(buffer, state, i);
     //                     }
-    //                     break;
-    //                 },
-    //                 else => break,
+    //                 }
+    //                 state.*.repeating.repeating_count = 0;
     //             }
     //             break;
-    //         }
+    //         },
+    //         else => break,
     //     }
-    //     break;
     // },
-    // @as(c_int, 112) => {
-    //     {
+
+    // 'p', 'P' => {
     //         if (state.*.clipboard.len == @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) break;
-    //         while (true) {
-    //             var undo: Undo = Undo{
-    //                 .type = @as(c_uint, @bitCast(@as(c_int, 0))),
-    //                 .data = @import("std").mem.zeroes(Data),
-    //                 .start = @import("std").mem.zeroes(usize),
-    //                 .end = @import("std").mem.zeroes(usize),
-    //             };
-    //             _ = &undo;
-    //             undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-    //             undo.start = buffer.*.cursor;
-    //             state.*.cur_undo = undo;
-    //             if (!false) break;
-    //         }
     //         var data: Data = dynstr_to_data(state.*.clipboard);
-    //         _ = &data;
+    //
     //         if ((state.*.clipboard.len > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, state.*.clipboard.str[@as(c_uint, @intCast(@as(c_int, 0)))]))) == @as(c_int, '\n'))) {
-    //             while (true) {
-    //                 var file: *FILE = fopen("logs/cano.log", "a");
-    //                 _ = &file;
-    //                 if (file != @as(*FILE, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0))))))) {
-    //                     _ = fprintf(file, "%s:%d: newline\n", "src/keys.c", @as(c_int, 433));
-    //                     _ = fclose(file);
-    //                 }
-    //                 if (!false) break;
-    //             }
     //             var row: usize = buffer_get_row(buffer);
-    //             _ = &row;
     //             var end: usize = buffer.*.rows.data[row].end;
-    //             _ = &end;
     //             buffer.*.cursor = end;
     //         }
     //         buffer_insert_selection(buffer, &data, buffer.*.cursor);
@@ -241,8 +186,6 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     //         if (((state.*.clipboard.len > @as(usize, @bitCast(@as(c_long, @as(c_int, 0))))) and (@as(c_int, @bitCast(@as(c_uint, state.*.clipboard.str[@as(c_uint, @intCast(@as(c_int, 0)))]))) == @as(c_int, '\n'))) and (buffer.*.cursor < buffer.*.data.count)) {
     //             buffer.*.cursor +%= 1;
     //         }
-    //     }
-    //     break;
     // },
 
     // term.ctrl('n') => {
@@ -256,11 +199,13 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void 
     // c - buffer_replace_ch(buffer, state);
 
     var d = try maps.then(norm('d'));
-    d.targeter(km.KeyFunction.initstate(keys.actions.deletelines));
+    d.targeter(km.KeyFunction.initbuffer(keys.actions.delete));
 
     try d.put(a, norm('d'), km.KeyFunction.initstate(targeters.full_linewise));
-    // TODO: this is correct, the j and k motions are just linewise
     try initMotionKeys(a, &d);
+
+    // const gq = try g.then(a, 'q');
+    // _ = gq; // autofix
 }
 
 /// A collection of key targeters that can be applied in different contexts.
@@ -316,8 +261,7 @@ const targeters = struct {
         end.row = @min(start.row + count, buffer.lines.items.len - 1);
         end.col = @min(end.col, buffer.lines.items[end.row].items.len);
 
-        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
-        buffer.target.?.mode = .Line;
+        buffer.updateTarget(Buffer.VisualMode.Line, start, end);
     }
 
     fn target_up_linewise(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -346,19 +290,16 @@ const targeters = struct {
 
     fn target_left(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-
-        const count = state.takeRepeating();
+        const count = state.repeating.take();
 
         const start = buffer.position();
         buffer.target = .{ .start = start, .end = buffer.moveLeft(start, count) };
     }
 
-    fn top(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn target_top(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
+        const count = state.repeating.take();
 
-        const count = state.takeRepeating();
-
-        std.log.debug("motionTop: target = {}", .{count});
         buffer.target = .{
             .mode = .Line,
             .start = buffer.position(),
@@ -369,16 +310,20 @@ const targeters = struct {
     }
 
     fn target_bottom(state: *State, _: km.KeyFunctionDataValue) !void {
-        _ = state.repeating.take();
         const buffer = state.getCurrentBuffer();
-
         const start = buffer.position();
         var end = start;
-        end.row = buffer.lines.items.len - 1;
+
+        // yeah the G motion is weird
+        end.row =
+            if (state.repeating.some()) |count| count - 1 // eh
+            else buffer.lines.items.len - 1;
 
         buffer.updateTarget(Buffer.VisualMode.Range, start, end);
     }
 
+    /// TODO: make a word selector and then just get the end. also can be used
+    /// for the word start
     fn motion_word_end(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
         const count = state.repeating.take();
@@ -402,7 +347,8 @@ const targeters = struct {
                 const next_pos = buffer.moveRight(end, 1);
                 if (next_pos.row >= buffer.lines.items.len or
                     std.ascii.isWhitespace(buffer.lines.items[next_pos.row].items[next_pos.col]) or
-                    is_word != isWordChar(buffer.lines.items[next_pos.row].items[next_pos.col])) {
+                    is_word != isWordChar(buffer.lines.items[next_pos.row].items[next_pos.col]))
+                {
                     break;
                 }
                 end = next_pos;
@@ -460,7 +406,8 @@ const targeters = struct {
             while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
                 const prev_pos = buffer.moveLeft(end, 1);
                 if (std.ascii.isWhitespace(buffer.lines.items[prev_pos.row].items[prev_pos.col]) or
-                    is_word != isWordChar(buffer.lines.items[prev_pos.row].items[prev_pos.col])) {
+                    is_word != isWordChar(buffer.lines.items[prev_pos.row].items[prev_pos.col]))
+                {
                     break;
                 }
                 end = prev_pos;
@@ -470,31 +417,31 @@ const targeters = struct {
         buffer.updateTarget(Buffer.VisualMode.Range, start, end);
     }
 
-    fn motion_WORD_back(state: *State, _: km.KeyFunctionDataValue) !void {
-        const buffer = state.getCurrentBuffer();
-        const count = state.repeating.take();
-
-        const start = buffer.position();
-        var end = start;
-
-        var i: u32 = 0;
-        while (i < count) : (i += 1) {
-            end = buffer.moveLeft(end, 1);
-            while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
-                end = buffer.moveLeft(end, 1);
-            }
-
-            while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
-                const prev_pos = buffer.moveLeft(end, 1);
-                if (std.ascii.isWhitespace(buffer.lines.items[prev_pos.row].items[prev_pos.col])) {
-                    break;
-                }
-                end = prev_pos;
-            }
-        }
-
-        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
-    }
+    // fn motion_WORD_back(state: *State, _: km.KeyFunctionDataValue) !void {
+    //     const buffer = state.getCurrentBuffer();
+    //     const count = state.repeating.take();
+    //
+    //     const start = buffer.position();
+    //     var end = start;
+    //
+    //     var i: u32 = 0;
+    //     while (i < count) : (i += 1) {
+    //         end = buffer.moveLeft(end, 1);
+    //         while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+    //             end = buffer.moveLeft(end, 1);
+    //         }
+    //
+    //         while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+    //             const prev_pos = buffer.moveLeft(end, 1);
+    //             if (std.ascii.isWhitespace(buffer.lines.items[prev_pos.row].items[prev_pos.col])) {
+    //                 break;
+    //             }
+    //             end = prev_pos;
+    //         }
+    //     }
+    //
+    //     buffer.updateTarget(Buffer.VisualMode.Range, start, end);
+    // }
 
     fn isWordChar(c: u8) bool {
         return std.ascii.isAlphanumeric(c) or c == '_';
@@ -513,7 +460,7 @@ const targeters = struct {
         buffer.updateTarget(Buffer.VisualMode.Range, begin, end);
     }
 
-    fn motionstart(state: *State, _: km.KeyFunctionDataValue) !void {
+    fn motion_start(state: *State, _: km.KeyFunctionDataValue) !void {
         const count = state.repeating.take();
         const buffer = state.getCurrentBuffer();
 
@@ -601,7 +548,7 @@ const inserts = struct {
         // buffer.moveto(target.end);
         // buffer.setMode(ModeId.Insert);
 
-        try targeters.motionstart(state, ctx);
+        try targeters.motion_start(state, ctx);
         const buffer = state.getCurrentBuffer();
         buffer.setMode(ModeId.Insert);
     }

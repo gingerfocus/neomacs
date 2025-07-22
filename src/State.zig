@@ -346,10 +346,16 @@ pub const Repeating = struct {
     }
 
     pub inline fn take(self: *Repeating) usize {
-        const count = if (self.is) self.count else 1;
-        self.count = 0;
-        self.is = false;
+        const count = self.some() orelse 1;
+        std.debug.assert(count != 0);
+
+        self.reset();
         return count;
+    }
+
+    pub inline fn some(self: *Repeating) ?usize {
+        if (self.is) return self.count;
+        return null;
     }
 };
 
