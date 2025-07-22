@@ -56,9 +56,9 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
     try maps.put(a, '0', km.KeyFunction.initstate(targeters.motionstart));
 
     try maps.put(a, norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
-    // try maps.put(a, norm('e'), km.KeyFunction.initstate(targeters.motion_word_end));
-    // try maps.put(a, norm('b'), km.KeyFunction.initstate(targeters.motion_word_back));
-    // try maps.put(a, norm('B'), km.KeyFunction.initstate(targeters.TODO));
+    try maps.put(a, norm('e'), km.KeyFunction.initstate(targeters.motion_word_end));
+    try maps.put(a, norm('b'), km.KeyFunction.initstate(targeters.motion_word_back));
+    try maps.put(a, norm('B'), km.KeyFunction.initstate(targeters.motion_WORD_back));
 
     var f = try maps.then(norm('f'));
     try f.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
@@ -379,38 +379,37 @@ const targeters = struct {
         buffer.updateTarget(Buffer.VisualMode.Range, start, end);
     }
 
-    fn motion_word_end(state: *State, ctx: km.KeyFunctionDataValue) !void {
-        _ = state;
-        _ = ctx;
+    fn motion_word_end(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+        const count = state.repeating.take();
 
-        root.log(@src(), .debug, "motion_word_end: unimplemented", .{});
+        const start = buffer.position();
+        var end = start;
 
-        // try motion_word_start(state, ctx);
-        //
-        // const buffer = state.getCurrentBuffer();
-        // if (buffer.target) |*target| {
-        //     target.end = buffer.moveLeft(target.end, 1);
-        // }
-    }
+        var i: u32 = 0;
+        while (i < count) : (i += 1) {
+            end = buffer.moveRight(end, 1);
+            while (end.row < buffer.lines.items.len and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+                end = buffer.moveRight(end, 1);
+            }
+            if (end.row >= buffer.lines.items.len) {
+                end = buffer.moveLeft(end, 1);
+                break;
+            }
 
-    fn motion_word_back(state: *State, _: km.KeyFunctionDataValue) !void {
-        _ = state;
+            const is_word = isWordChar(buffer.lines.items[end.row].items[end.col]);
+            while (end.row < buffer.lines.items.len and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+                const next_pos = buffer.moveRight(end, 1);
+                if (next_pos.row >= buffer.lines.items.len or
+                    std.ascii.isWhitespace(buffer.lines.items[next_pos.row].items[next_pos.col]) or
+                    is_word != isWordChar(buffer.lines.items[next_pos.row].items[next_pos.col])) {
+                    break;
+                }
+                end = next_pos;
+            }
+        }
 
-        root.log(@src(), .debug, "motion_word_back: unimplemented", .{});
-        // const buffer = state.getCurrentBuffer();
-        // const start = buffer.position();
-        // var end = start;
-        //
-        // var loop = true;
-        // while (loop) {
-        //     end = buffer.moveLeft(end, 1);
-        //
-        //     if (std.ascii.isAlphanumeric(buffer.lines.items[end.row].items[end.col])) {
-        //         loop = false;
-        //     } else {
-        //         loop = std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col]);
-        //     }
-        // }
+        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
     }
 
     /// TODO: this is not correct, it should loop on more than just
@@ -441,6 +440,64 @@ const targeters = struct {
         }
 
         buffer.updateTarget(Buffer.VisualMode.Range, start, end);
+    }
+
+    fn motion_word_back(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+        const count = state.repeating.take();
+
+        const start = buffer.position();
+        var end = start;
+
+        var i: u32 = 0;
+        while (i < count) : (i += 1) {
+            end = buffer.moveLeft(end, 1);
+            while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+                end = buffer.moveLeft(end, 1);
+            }
+
+            const is_word = isWordChar(buffer.lines.items[end.row].items[end.col]);
+            while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+                const prev_pos = buffer.moveLeft(end, 1);
+                if (std.ascii.isWhitespace(buffer.lines.items[prev_pos.row].items[prev_pos.col]) or
+                    is_word != isWordChar(buffer.lines.items[prev_pos.row].items[prev_pos.col])) {
+                    break;
+                }
+                end = prev_pos;
+            }
+        }
+
+        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
+    }
+
+    fn motion_WORD_back(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+        const count = state.repeating.take();
+
+        const start = buffer.position();
+        var end = start;
+
+        var i: u32 = 0;
+        while (i < count) : (i += 1) {
+            end = buffer.moveLeft(end, 1);
+            while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+                end = buffer.moveLeft(end, 1);
+            }
+
+            while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+                const prev_pos = buffer.moveLeft(end, 1);
+                if (std.ascii.isWhitespace(buffer.lines.items[prev_pos.row].items[prev_pos.col])) {
+                    break;
+                }
+                end = prev_pos;
+            }
+        }
+
+        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
+    }
+
+    fn isWordChar(c: u8) bool {
+        return std.ascii.isAlphanumeric(c) or c == '_';
     }
 
     pub fn motion_end(state: *State, _: km.KeyFunctionDataValue) !void {

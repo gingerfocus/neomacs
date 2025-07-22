@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) !void {
-    const usegtk = b.option(bool, "gtk", "compile the gtk backend") orelse true;
+    const usegtk = b.option(bool, "gtk", "compile the gtk backend") orelse false;
     const usewayland = b.option(bool, "wayland", "compile the wayland backend") orelse false;
     const needsdyn = usegtk or usewayland;
 

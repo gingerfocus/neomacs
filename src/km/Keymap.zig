@@ -5,10 +5,11 @@ const KeySequence = @import("KeySequence.zig");
 const Keymap = @This();
 const km = @import("root.zig");
 
+const Storage = struct { keys: KeySequence, func: KeyFunction };
 /// TODO: make this unmanaged
 bindings: std.ArrayHashMapUnmanaged(KeySequence, KeyFunction, KeySequence.Ctx, true),
-fallbacks: std.ArrayHashMapUnmanaged(KeySequence, KeyFunction, KeySequence.Ctx, true),
-targeters: std.MultiArrayList(struct { keys: KeySequence, func: KeyFunction }),
+fallbacks: std.MultiArrayList(Storage),
+targeters: std.MultiArrayList(Storage),
 alloc: std.mem.Allocator,
 
 pub fn init(alloc: std.mem.Allocator) Keymap {
@@ -64,7 +65,7 @@ pub const Appender = struct {
     }
 
     pub fn fallback(self: *Appender, value: KeyFunction) void {
-        self.keymap.fallbacks.put(self.keymap.alloc, self.curprefix, value) catch unreachable;
+        self.keymap.fallbacks.append(self.keymap.alloc, .{ .keys = self.curprefix, .func = value }) catch unreachable;
     }
 
     pub fn targeter(self: *Appender, value: KeyFunction) void {

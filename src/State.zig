@@ -30,6 +30,7 @@ config: Config = .{},
 resized: bool = false,
 
 /// Also call zygot buffer sometimes
+/// TODO: i think i can go back to removing this
 scratchbuffer: *Buffer,
 buffers: std.ArrayListUnmanaged(*Buffer),
 /// null selects the scratch buffer
@@ -105,7 +106,6 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
         .bufferindex = if (args.files.len > 0) 0 else null,
         .global_keymap = keysmap,
         .autocommands = .{},
-
     };
 }
 
@@ -115,20 +115,13 @@ pub fn setup(state: *State) !void {
     try render.init(state);
 }
 
-
 pub fn deinit(state: *State) void {
     std.log.debug("deiniting state", .{});
 
     state.commandbuffer.deinit(state.a);
 
-
     for (state.autocommands.values()) |list| for (list.items) |*kf| kf.deinit(state.L, state.a);
     state.autocommands.deinit(state.a);
-
-    // The scratchbuffer owns the keymaps.
-    // The keymaps must be released before lua as they reference each other.
-    state.scratchbuffer.keymaps.deinit(state.a);
-    state.a.destroy(state.scratchbuffer.keymaps);
 
     state.scratchbuffer.deinit();
     state.a.destroy(state.scratchbuffer);
@@ -152,7 +145,6 @@ pub fn deinit(state: *State) void {
     // state.loop.deinit();
     state.arena.deinit();
 }
-
 
 pub fn triggerAutocommands(state: *State, name: []const u8) !void {
     if (state.autocommands.get(name)) |list| {
@@ -187,14 +179,13 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
         buffer.input_state.len = 0;
         return;
     };
-    std.log.info("newstate: {any}", .{newstate.keys[0..newstate.len]});
-    std.log.info("oldstate: {any}", .{oldstate.keys[0..oldstate.len]});
+    // std.log.info("newstate: {any}", .{newstate.keys[0..newstate.len]});
+    // std.log.info("oldstate: {any}", .{oldstate.keys[0..oldstate.len]});
 
     const BlockState = enum {
         local_binding,
         global_binding,
-        local_fallback,
-        global_fallback,
+        fallback,
         targeter,
         end,
         none,
@@ -275,29 +266,40 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
                 }
             }
 
-            continue :blkrun BlockState.local_fallback;
+            continue :blkrun BlockState.fallback;
         },
-        .local_fallback => {
-            // no need to check prefixes
-            if (buffer.local_keymap.fallbacks.get(oldstate)) |*kf| {
-                try kf.run(state);
-                continue :blkrun BlockState.targeter;
-            } else {
-                continue :blkrun BlockState.global_fallback;
-            }
-        },
-        .global_fallback => {
-            if (state.global_keymap.fallbacks.get(oldstate)) |*kf| {
-                try kf.run(state);
-                continue :blkrun BlockState.targeter;
-            } else {
-                // we could still find something
-                if (foundmatch) continue :blkrun BlockState.none;
+        .fallback => {
 
-                continue :blkrun BlockState.end;
+            // no need to check prefixes
+            //
+            const bkeyslice = buffer.local_keymap.fallbacks.items(.keys);
+            for (bkeyslice, 0..) |keyseq, i| {
+                if (keyseq.eql(oldstate)) {
+                    const tkf = buffer.local_keymap.fallbacks.items(.func)[i];
+                    // std.log.info("running local targeter", .{});
+                    try tkf.run(state);
+                    continue :blkrun BlockState.targeter;
+                }
             }
+
+            const gkeyslice = state.global_keymap.fallbacks.items(.keys);
+            for (gkeyslice, 0..) |keyseq, i| {
+                if (keyseq.eql(oldstate)) {
+                    const tkf = state.global_keymap.fallbacks.items(.func)[i];
+                    // std.log.info("running global targeter", .{});
+                    try tkf.run(state);
+                    continue :blkrun BlockState.targeter;
+                }
+            }
+
+            // we could still find something
+            if (foundmatch) continue :blkrun BlockState.none;
+
+            continue :blkrun BlockState.end;
         },
         .targeter => {
+            if (buffer.target == null) continue :blkrun BlockState.end;
+
             std.log.info("running targeter", .{});
 
             const bkeyslice = buffer.local_keymap.targeters.items(.keys);

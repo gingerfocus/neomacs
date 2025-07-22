@@ -15,13 +15,14 @@
 - [ ] Window Split
 - [ ] Lua API
 - [ ] Undo
-- [ ] Make an example plugin
+- [ ] Make an example plugin (oil)
 - [ ] More Motions ('a', 'i') "(){}[]"
 
 # Refactors
 - [ ] move repeat structure to buffer
-- [ ] make all command buffer local
-- [ ] make log better (use builtin stacktrace and dynamically choose backend)
+- [ ] make log better 
+  - [ ] use builtin stacktrace 
+  - [x] dynamically choose backend
 - [ ] event loop
 - [ ] remove command line??
 
