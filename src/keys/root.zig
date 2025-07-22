@@ -507,62 +507,8 @@ pub const actions = struct {
     pub fn none(_: *State) !void {}
 
     pub fn delete(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
-        const a = buffer.alloc;
-
-        root.log(@src(), .debug, "delete motion", .{});
-
-        if (buffer.target) |atarget| {
-            const targ = atarget.normalize();
-
-            std.debug.assert(targ.start.row <= targ.end.row);
-            if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
-
-            var remove_range_begin: ?usize = null;
-            var remove_range_len: usize = 0;
-
-            std.log.info("delete motion, target: {any}", .{targ});
-            var row: usize = targ.start.row;
-            while (row <= targ.end.row) : (row += 1) {
-                const line: *Buffer.Line = &buffer.lines.items[row];
-
-                var start = switch (targ.mode) {
-                    .Line => 0,
-                    .Range => if (row == targ.start.row) targ.start.col else 0,
-                    .Block => targ.start.col,
-                };
-                start = @min(start, line.items.len);
-
-                const end = switch (targ.mode) {
-                    .Line => line.items.len,
-                    .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
-                    .Block => targ.end.col,
-                };
-
-                const iswholeline = switch (targ.mode) {
-                    .Line => true,
-                    // its not the only row and its the whole row
-                    .Range => (targ.start.row != targ.end.row) and start == 0 and end == line.items.len,
-                    .Block => false,
-                };
-
-                std.log.info("row: {d}, start: {d}, end: {d}, iswholeline: {}", .{ row, start, end, iswholeline });
-
-                if (iswholeline) {
-                    if (remove_range_begin) |_| {
-                        remove_range_len += 1;
-                    } else {
-                        remove_range_begin = row;
-                        remove_range_len = 1;
-                    }
-                    // line.deinit(a);
-                } else {
-                    line.replaceRange(a, start, end - start, &.{}) catch unreachable; // never allocates
-                }
-            }
-
-            if (remove_range_begin) |rrange| {
-                buffer.lines.replaceRange(a, rrange, remove_range_len, &.{}) catch unreachable; // never allocates
-            }
+        if (buffer.target) |target| {
+            try buffer.delete(target);
         }
         buffer.target = null;
 

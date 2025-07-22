@@ -173,18 +173,14 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
     const buffer = state.getCurrentBuffer();
     const oldstate = buffer.input_state;
     var newstate = oldstate;
-    // TODO: catch this error
     newstate.append(ke) catch {
         root.log(@src(), .err, "Failed to append key event to input state", .{});
         buffer.input_state.len = 0;
         return;
     };
-    // std.log.info("newstate: {any}", .{newstate.keys[0..newstate.len]});
-    // std.log.info("oldstate: {any}", .{oldstate.keys[0..oldstate.len]});
 
     const BlockState = enum {
-        local_binding,
-        global_binding,
+        binding,
         fallback,
         targeter,
         end,
@@ -193,85 +189,49 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
 
     var foundmatch: bool = false;
 
-    // if (true) {
-    //     var biter = buffer.local_keymap.bindings.iterator();
-    //     while (biter.next()) |entry| {
-    //         std.log.info("local: {any}", .{entry.key_ptr.keys[0..entry.key_ptr.len]});
-    //     }
-    //     var giter = buffer.global_keymap.bindings.iterator();
-    //     while (giter.next()) |entry| {
-    //         std.log.info("mode: {}, global: {any}", .{ entry.key_ptr.mode._, entry.key_ptr.keys[0..entry.key_ptr.len] });
-    //     }
-    // }
+    const thunk = struct {
+        fn itermaps(argstate: *State, maps: *km.Keymap, nextstate: *const km.KeySequence, foundprefix: *bool) !bool {
+            var iter = maps.bindings.iterator();
+            while (iter.next()) |entry| {
+                const k = entry.key_ptr;
+
+                // can't possibly match
+                if (!k.mode.eql(nextstate.mode)) continue;
+
+                // it cant be an exact match and we already know that a prefix match exists
+                if (k.len != nextstate.len and foundprefix.*) continue;
+                // could be the one...
+                if (k.len == nextstate.len) {
+                    if (std.mem.eql(u16, k.keys[0..k.len], nextstate.keys[0..k.len])) {
+                        try entry.value_ptr.run(argstate);
+                        return true;
+                    }
+                }
+                // aw dangit
+                if (nextstate.len < k.len) {
+                    if (std.mem.eql(u16, k.keys[0..nextstate.len], nextstate.keys[0..nextstate.len])) {
+                        root.log(@src(), .debug, "{any} matches {any}", .{ nextstate.keys[0..nextstate.len], k.keys[0..k.len] });
+                        foundprefix.* = true;
+                        continue;
+                    }
+                }
+            }
+
+            return false;
+        }
+    };
 
     // zig bug: error targets tag token
-    blkrun: switch (BlockState.local_binding) {
-        .local_binding => {
-            var iter = buffer.local_keymap.bindings.iterator();
-            while (iter.next()) |entry| {
-                const k = entry.key_ptr;
-
-                // can't possibly match
-                if (!k.mode.eql(newstate.mode)) continue;
-
-                // it cant be an exact match and we already know that a prefix match exists
-                if (k.len != newstate.len and foundmatch) continue;
-                // could be the one...
-                if (k.len == newstate.len) {
-                    if (std.mem.eql(u16, k.keys[0..k.len], newstate.keys[0..k.len])) {
-                        try entry.value_ptr.run(state);
-                        continue :blkrun BlockState.targeter;
-                    }
-                }
-                // aw dangit
-                if (newstate.len < k.len) {
-                    if (std.mem.eql(u16, k.keys[0..newstate.len], newstate.keys[0..newstate.len])) {
-                        foundmatch = true;
-                        continue;
-                    }
-                }
-            }
-
-            // root.log(@src(), .debug, "no match local found for ({any})", .{newstate.keys[0..newstate.len]});
-            continue :blkrun BlockState.global_binding;
-        },
-        .global_binding => {
-            // same code as the local one ^^
-            //
-            var iter = state.global_keymap.bindings.iterator();
-            while (iter.next()) |entry| {
-                const k = entry.key_ptr;
-
-                // can't possibly match
-                if (!k.mode.eql(newstate.mode)) continue;
-
-                // it cant be an exact match and we already know that a prefix match exists
-                if (k.len != newstate.len and foundmatch) continue;
-                // could be the one...
-                if (k.len == newstate.len) {
-                    if (std.mem.eql(u16, k.keys[0..k.len], newstate.keys[0..k.len])) {
-                        try entry.value_ptr.run(state);
-                        std.log.info("running local binding: {any}", .{entry.value_ptr.function});
-                        continue :blkrun BlockState.targeter;
-                    }
-                }
-
-                // aw dangit
-                if (newstate.len < k.len) {
-                    if (std.mem.eql(u16, k.keys[0..newstate.len], newstate.keys[0..newstate.len])) {
-                        std.log.info("{any} matches {any}", .{ newstate.keys[0..newstate.len], k.keys[0..k.len] });
-                        foundmatch = true;
-                        continue;
-                    }
-                }
-            }
-
+    blkrun: switch (BlockState.binding) {
+        .binding => if (try thunk.itermaps(state, &buffer.local_keymap, &newstate, &foundmatch)) {
+            continue :blkrun BlockState.targeter;
+        } else if (try thunk.itermaps(state, state.global_keymap, &newstate, &foundmatch)) {
+            continue :blkrun BlockState.targeter;
+        } else {
             continue :blkrun BlockState.fallback;
         },
         .fallback => {
-
             // no need to check prefixes
-            //
             const bkeyslice = buffer.local_keymap.fallbacks.items(.keys);
             for (bkeyslice, 0..) |keyseq, i| {
                 if (keyseq.eql(oldstate)) {
@@ -300,13 +260,10 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
         .targeter => {
             if (buffer.target == null) continue :blkrun BlockState.end;
 
-            std.log.info("running targeter", .{});
-
             const bkeyslice = buffer.local_keymap.targeters.items(.keys);
             for (bkeyslice, 0..) |keyseq, i| {
                 if (keyseq.eql(oldstate)) {
                     const tkf = buffer.local_keymap.targeters.items(.func)[i];
-                    std.log.info("running local targeter", .{});
                     try tkf.run(state);
                     continue :blkrun BlockState.end;
                 }
@@ -316,7 +273,6 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
             for (gkeyslice, 0..) |keyseq, i| {
                 if (keyseq.eql(oldstate)) {
                     const tkf = state.global_keymap.targeters.items(.func)[i];
-                    std.log.info("running global targeter", .{});
                     try tkf.run(state);
                     continue :blkrun BlockState.end;
                 }
