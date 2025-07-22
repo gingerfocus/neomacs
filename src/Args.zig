@@ -9,6 +9,7 @@ backend: BackendType,
 files: []const []const u8,
 
 pub const BackendType = union(enum) {
+    Wgpu,
     Wayland,
     GTK,
     Terminal,
@@ -33,6 +34,9 @@ const InputArgs = struct {
 
     /// Run with the Wayland backend
     wayland: bool = options.usewayland,
+
+    /// Run with the WGPU backend
+    wgpu: bool = options.usewgpu,
 
     /// The config file to load
     config: ?[]const u8 = null,
@@ -99,6 +103,11 @@ pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
             continue;
         }
 
+        if (mem.eql(u8, arg, "--wgpu")) {
+            inputs.wgpu = true;
+            continue;
+        }
+
         if (mem.eql(u8, arg, "-R") or mem.eql(u8, arg, "--render-to-file")) {
             if (i >= args.len) continue;
             inputs.dosnapshot = try a.dupe(u8, std.mem.span(args[i]));
@@ -134,6 +143,9 @@ pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
     }
     if (options.usewayland and inputs.wayland) {
         backend = .Wayland;
+    }
+    if (inputs.wgpu) {
+        backend = .Wgpu;
     }
     if (options.usegtk and inputs.gtk) {
         backend = .GTK;

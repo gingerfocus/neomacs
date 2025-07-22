@@ -12,30 +12,27 @@
         "build.zig.zon",
     },
     .dependencies = .{
-        .graphi = .{
-            .url = "https://github.com/gingerfocus/graphi/archive/e2e08244a1c55db5df95db088158901280c68f6b.tar.gz",
-            .hash = "graphi-0.1.0-gpZJC2RdAAA3kOAu3V5KLmB6yY2eeoOksS9uDl7Hldqh",
-        },
+        // .graphi = .{
+        //     .url = "https://github.com/gingerfocus/graphi/archive/e2e08244a1c55db5df95db088158901280c68f6b.tar.gz",
+        //     .hash = "graphi-0.1.0-gpZJC2RdAAA3kOAu3V5KLmB6yY2eeoOksS9uDl7Hldqh",
+        // },
         .terminal = .{
             .url = "https://github.com/gingerfocus/thermit/archive/5a78059eea5ff1b2dd80059128d40d04ad5cf060.tar.gz",
             .hash = "thermit-0.1.0-wTQBCK6xAACeA7Jn4eYRowWfeV8KT94NaNQs-f62JTfd",
         },
         .@"luajit-build" = .{
-            // .url = "https://github.com/sackosoft/zig-luajit-build/archive/eeae54c83591f4376f1adea00a03e1497aea2425.tar.gz",
-            // .hash = "luajit_build-1.1.4-HFjoU14-AACEEcPwP8nRnDSLS3EByuR8u5ZWAXBq08PH"
             .url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz",
             .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
             .lazy = true,
         },
-        .libxev = .{
-            .url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz",
-            .hash = "libxev-0.0.0-86vtc4b1EgCl0Kvo2Ixmjfl5PgAaJmvCXRIn_n89nCaR",
+        .@"wgpu-native" = .{
+            .url = "https://github.com/bronter/wgpu_native_zig/archive/refs/tags/v6.2.0.tar.gz",
+            .hash = "wgpu_native_zig-6.2.0-B9jeDMszAwDC_kDLa9gZMZp1NNQ6VE7blZ7OEcBUXycW",
             .lazy = true,
         },
-        // .mach = .{
-        //     .url = "https://pkg.machengine.org/mach/af1cf9865bbd7e79e05c1a86560945afd2342891.tar.gz",
-        //     .hash = "1220e3e557f8659f4b30c66280bcd226d295c59aa4a3e9d2947d575aa202c05acdda",
-        //     // .hash = "mach-0.4.0-AAAAAPKJLgDj5Vf4ZZ9LMMZigLzSJtKVxZqko-nSlH1X",
+        // .libxev = .{
+        //     .url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz",
+        //     .hash = "libxev-0.0.0-86vtc4b1EgCl0Kvo2Ixmjfl5PgAaJmvCXRIn_n89nCaR",
         //     .lazy = true,
         // },
         // .zigrc = .{

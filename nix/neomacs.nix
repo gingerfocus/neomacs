@@ -16,6 +16,7 @@
   gobject-introspection,
   freetype,
   atk,
+  glfw
 }:
 stdenv.mkDerivation {
   pname = "neomacs";
@@ -41,6 +42,9 @@ stdenv.mkDerivation {
     libxkbcommon
     freetype
     atk
+
+    # Gpu Dependencies
+    glfw
 
     # tree-sitter
     # tree-sitter-grammars.tree-sitter-zig

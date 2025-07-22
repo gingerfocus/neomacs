@@ -1,6 +1,10 @@
+//! a lot of the different backends either are xkbd or cairo based and these
+//! are just shared functions for them
+//!
+
 const root = @import("../root.zig");
-const std = @import("std");
-const trm = @import("thermit");
+const std = root.std;
+const trm = root.trm;
 
 const Backend = @import("Backend.zig");
 

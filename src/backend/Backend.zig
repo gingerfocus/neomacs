@@ -7,10 +7,11 @@ const lib = root.lib;
 const options = @import("options");
 
 const BackendTerminal = @import("BackendTerminal.zig");
-const BackendWayland = @import("BackendWayland.zig");
+const BackendWayland = @import("BackendWaylandCairo.zig");
 const BackendGtk = @import("BackendGtk.zig");
 const BackendFile = @import("BackendFile.zig");
 const BackendHeadless = @import("BackendHeadless.zig");
+// const BackendWgpu = @import("BackendGlfwWgpu.zig");
 
 // arena: std.heap.ArenaAllocator,
 dataptr: *anyopaque,
@@ -50,6 +51,11 @@ pub fn init(a: std.mem.Allocator, args: root.Args) !Self {
         .Headless => {
             const headless = try BackendHeadless.init(a);
             return headless.backend();
+        },
+        .Wgpu => {
+            unreachable; // not implemented
+            // const wgpu = try BackendWgpu.init(a);
+            // return wgpu.backend();
         },
     }
 }
