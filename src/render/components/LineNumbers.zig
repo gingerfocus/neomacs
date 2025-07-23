@@ -13,7 +13,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     _ = self;
     // TODO: this should have buffer as its self
     const buffer = state.getCurrentBuffer();
-    const row_render_start = std.math.sub(usize, buffer.row, view.h) catch 0;
+    const row_render_start = std.math.sub(usize, buffer.row + state.config.scrolloff, view.h) catch 0;
 
     var renderRow: usize = row_render_start;
     while (renderRow < buffer.lines.items.len and renderRow < row_render_start + view.h) : (renderRow += 1) {

@@ -8,7 +8,7 @@
 - [x] Replace (r)
 - [x] Yank (y)
 - [x] Visual Mode Targeting (Right, Line, Block)
-- [ ] Scroll off
+- [x] Scroll off
 
 # For 0.2.0
 - [ ] Window Split

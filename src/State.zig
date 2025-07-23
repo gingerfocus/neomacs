@@ -341,7 +341,7 @@ pub const Config = struct {
 
     relativenumber: bool = false,
     autoindent: bool = true,
-    scrolloff: u16 = 8,
+    scrolloff: usize = 8,
 
     runtime: []const u8 = "",
 
