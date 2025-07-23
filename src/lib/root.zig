@@ -1,6 +1,8 @@
 const std = @import("std");
 const mem = std.mem;
 
+pub const desktop = @import("desktop.zig");
+
 /// Common utilitis shared among many modules
 //
 //

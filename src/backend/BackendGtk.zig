@@ -3,8 +3,9 @@ const std = root.std;
 const lib = root.lib;
 const trm = root.trm;
 
+const desktop = lib.desktop;
+
 const Backend = @import("Backend.zig");
-const desktop = @import("desktop.zig");
 
 const Self = @This();
 

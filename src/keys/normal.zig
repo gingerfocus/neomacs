@@ -639,6 +639,8 @@ const functions = struct {
 
             root.log(@src(), .debug, "yank: {s}", .{selection.items});
 
+            // TODO: the wayland server supplies this but i dont want to worry
+            // about that
             var child = std.process.Child.init(&.{"wl-copy", selection.items}, state.a);
             try child.spawn();
             _ = try child.wait();
@@ -693,3 +695,7 @@ const functions = struct {
         try buffer.replace(target, ch.character);
     }
 };
+
+// pub fn shift_str_left(arg_str: *u8, arg_str_s: *usize, arg_index_1: usize) void {
+// pub fn shift_str_right(arg_str: *u8, arg_str_s: *usize, arg_index_1: usize) void {
+// pub fn find_opposite_brace(arg_opening: u8) Brace {

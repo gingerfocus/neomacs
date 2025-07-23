@@ -6,8 +6,6 @@ const root = @import("../root.zig");
 const std = root.std;
 const trm = root.trm;
 
-const Backend = @import("Backend.zig");
-
 /// common function to parse xkbd events, used by both gtk and wayland
 pub fn parseKey(
     key: u32,
@@ -101,7 +99,7 @@ pub const FONT_SIZE = 36;
 pub const CHAR_WIDTH = FONT_SIZE / 2;
 pub const CHAR_HEIGHT = FONT_SIZE;
 
-pub fn cairodraw(cr: *cairo.cairo_t, pos: lib.Vec2, node: Backend.Node) void {
+pub fn cairodraw(cr: *cairo.cairo_t, pos: lib.Vec2, node: root.Backend.Node) void {
     // Convert the logical position (row, col) to pixel coordinates
     const x = @as(f64, @floatFromInt(pos.col)) * CHAR_WIDTH;
     const y = @as(f64, @floatFromInt(pos.row)) * CHAR_HEIGHT;

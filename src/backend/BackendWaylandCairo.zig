@@ -3,6 +3,7 @@ const std = root.std;
 const lib = root.lib;
 const mem = std.mem;
 const trm = root.trm;
+const desktop = lib.desktop;
 const cairo = desktop.cairo;
 
 const Backend = @import("Backend.zig");
@@ -10,7 +11,7 @@ const Backend = @import("Backend.zig");
 const Self = @This();
 const Window = @This();
 
-const desktop = @import("desktop.zig");
+
 const wl = @cImport({
     @cInclude("wayland-client-core.h");
     @cInclude("wayland-client-protocol.h");

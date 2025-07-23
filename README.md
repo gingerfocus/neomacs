@@ -35,7 +35,7 @@ straight lua meaning that there is no second syntax to learn and you can type
 
 # Devolopment
 ## Binary Size
-By default, compile to a static, 756k binary with:
+By default, compile to a static, 772k binary with:
 ```sh
 zig build --release=small
 ```
@@ -53,7 +53,7 @@ see [TODO.md](./docs/TODO.md) for random ideas I have.
 
 ## Lines of Code
 I very much dont like maintaining code so I just dont write it. I am hard
-limiting myself to 10k lines of zig code (currently 4154). More lua code can be
+limiting myself to 10k lines of zig code (currently 4493). More lua code can be
 written but to me all lua code can be replaced at runtime so it is not
 premanent.
 
