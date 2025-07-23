@@ -7,7 +7,7 @@
 - [x] Changing (c/C)
 - [x] Replace (r)
 - [x] Yank (y)
-- [ ] Visual Mode Targeting (Right, Line, Block)
+- [x] Visual Mode Targeting (Right, Line, Block)
 - [ ] Scroll off
 
 # For 0.2.0

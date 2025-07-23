@@ -88,6 +88,8 @@ pub fn setMode(buffer: *Buffer, mode: km.ModeId) void {
     buffer.input_state.mode = mode;
     // is this corrent?
     buffer.input_state.len = 0;
+
+    buffer.target = null;
 }
 
 pub fn init(
@@ -136,7 +138,7 @@ pub fn deinit(buffer: *Buffer) void {
 
 pub fn updateTarget(buffer: *Buffer, mode: Buffer.VisualMode, start: lib.Vec2, end: lib.Vec2) void {
     if (buffer.target) |*t| {
-        if (t.start.cmp(start) == .lt) t.start = start;
+        // if (t.start.cmp(start) == .gt) t.start = start;
         t.end = end;
         t.mode = mode;
     } else {

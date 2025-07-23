@@ -228,42 +228,67 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
         } else {
             continue :blkrun BlockState.fallback;
         },
-        .fallback => {
-            // yes need to check prefixes as modes like r have no keymaps and
-            // only a fallback
-
-            if (try thunk.itermaps(state, &buffer.local_keymap.fallbacks, &oldstate, &foundmatch)) {
-                continue :blkrun BlockState.targeter;
-            } else if (try thunk.itermaps(state, &state.global_keymap.fallbacks, &oldstate, &foundmatch)) {
-                continue :blkrun BlockState.targeter;
-            } else {
-                // we could still find something
-                if (foundmatch) continue :blkrun BlockState.none;
-
-                continue :blkrun BlockState.end;
-            }
+        // yes need to check prefixes as modes like r have no keymaps and
+        // only a fallback
+        .fallback => if (try thunk.itermaps(state, &buffer.local_keymap.fallbacks, &oldstate, &foundmatch)) {
+            continue :blkrun BlockState.targeter;
+        } else if (try thunk.itermaps(state, &state.global_keymap.fallbacks, &oldstate, &foundmatch)) {
+            continue :blkrun BlockState.targeter;
+        } else if (foundmatch) {
+            // we could still find something
+            continue :blkrun BlockState.none;
+        } else {
+            continue :blkrun BlockState.end;
         },
         .targeter => {
             if (buffer.target == null) continue :blkrun BlockState.end;
 
-            const bkeyslice = buffer.local_keymap.targeters.items(.keys);
-            for (bkeyslice, 0..) |keyseq, i| {
-                if (keyseq.eql(oldstate)) {
-                    const tkf = buffer.local_keymap.targeters.items(.func)[i];
-                    try tkf.run(state);
-                    continue :blkrun BlockState.end;
-                }
-            }
+            // TODO: find the best match for the targeter
+            // if e->a has a targeter and the sequence is e->a->b then it should match that one
+
+            var bestlen: ?usize = null;
+            var bestkey: ?km.KeyFunction = null;
 
             const gkeyslice = state.global_keymap.targeters.items(.keys);
             for (gkeyslice, 0..) |keyseq, i| {
-                if (keyseq.eql(oldstate)) {
-                    const tkf = state.global_keymap.targeters.items(.func)[i];
-                    try tkf.run(state);
-                    continue :blkrun BlockState.end;
+                // too long
+                if (keyseq.len > oldstate.len) continue;
+
+                if (bestlen) |len| if (len > keyseq.len) continue;
+
+                if (keyseq.mode.eql(oldstate.mode)) {
+                    if (std.mem.eql(u16, keyseq.keys[0..keyseq.len], oldstate.keys[0..keyseq.len])) {
+                        bestlen = keyseq.len;
+                        bestkey = state.global_keymap.targeters.items(.func)[i];
+
+                        // cant be better
+                        if (keyseq.len == oldstate.len) break;
+                    }
                 }
             }
 
+            const bkeyslice = buffer.local_keymap.targeters.items(.keys);
+            for (bkeyslice, 0..) |keyseq, i| {
+                // too long
+                if (keyseq.len > oldstate.len) continue;
+
+                if (bestlen) |len| if (len > keyseq.len) continue;
+
+                if (keyseq.mode.eql(oldstate.mode)) {
+                    if (std.mem.eql(u16, keyseq.keys[0..keyseq.len], oldstate.keys[0..keyseq.len])) {
+                        bestlen = keyseq.len;
+                        bestkey = buffer.local_keymap.targeters.items(.func)[i];
+
+                        // cant be better
+                        if (keyseq.len == oldstate.len) break;
+                    }
+                }
+            }
+
+            if (bestkey) |tkf| {
+                // root.log(@src(), .debug, "found targeter {any}", .{tkf});
+                try tkf.run(state);
+            }
             continue :blkrun BlockState.end;
         },
         .end => {

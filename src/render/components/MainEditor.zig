@@ -52,11 +52,13 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
             if (cur.row > end.row) break;
             if (cur.row == end.row and cur.col >= end.col) break;
 
+            const items = buffer.lines.items[cur.row].items;
             writer.draw(
                 .{ .col = @as(usize, @intCast(view.x)) + 1 + cur.col, .row = @as(usize, @intCast(view.y)) + cur.row - row_render_start },
                 .{
-                    .background = Color.Reset,
-                    .content = .{ .Text = buffer.lines.items[cur.row].items[cur.col] },
+                    .background = Color.Red,
+                    .foreground = Color.White,
+                    .content = .{ .Text = if (items.len == 0) ' ' else items[cur.col] },
                 },
             );
 

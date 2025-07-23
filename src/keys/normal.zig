@@ -66,19 +66,19 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
     var f = try maps.then(norm('f'));
     try f.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
     f.fallback(km.KeyFunction.initbuffer(targeters.jump_letter));
-    f.targeter(km.KeyFunction.initstate(keys.actions.move));
+
+    // use the higher states targeter, so in normal it is chill and visual it keeps
+    // the thing
 
     var t = try maps.then(norm('t'));
     try t.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
     t.fallback(km.KeyFunction.initbuffer(targeters.jump_letter_before));
-    t.targeter(km.KeyFunction.initstate(keys.actions.move));
 
     var g = try maps.then(norm('g'));
     g.targeter(km.KeyFunction.initstate(keys.actions.move));
     try g.put(a, norm('g'), km.KeyFunction.initstate(targeters.target_top));
 
     //  @as(c_int, 37) buffer_next_brace(buffer);
-
 }
 
 fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
@@ -640,7 +640,7 @@ const functions = struct {
 
             // TODO: the wayland server supplies this but i dont want to worry
             // about that
-            var child = std.process.Child.init(&.{"wl-copy", selection.items}, state.a);
+            var child = std.process.Child.init(&.{ "wl-copy", selection.items }, state.a);
             try child.spawn();
             _ = try child.wait();
 

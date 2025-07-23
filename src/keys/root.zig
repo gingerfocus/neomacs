@@ -28,8 +28,6 @@ pub fn init(
     insert.targeter(km.KeyFunction.initstate(actions.move));
     insert.fallback(km.KeyFunction.initstate(insertsfn.append));
 
-    var visual = modes.appender(km.ModeId.Visual);
-    visual.targeter(km.KeyFunction.initstate(actions.move));
 
     // insert
     try initInsertKeys(a, &insert);
@@ -39,6 +37,9 @@ pub fn init(
     try normal.init(a, modes);
 
     // visual
+    var visual = modes.appender(km.ModeId.Visual);
+    visual.targeter(km.KeyFunction.initstate(actions.moveKeep));
+
     try normal.initMotionKeys(a, &visual);
     try visual.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
     try visual.put(a, norm('d'), km.KeyFunction.initbuffer(actions.delete));
@@ -513,7 +514,7 @@ pub const actions = struct {
         buffer.target = null;
 
         // Vim alwyas sets the mode to normal but i dont think that is a good idea
-        // buffer.setMode(ModeId.Normal);
+        buffer.setMode(ModeId.Normal);
     }
 
     pub fn change(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
