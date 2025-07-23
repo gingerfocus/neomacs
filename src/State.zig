@@ -20,8 +20,6 @@ arena: std.heap.ArenaAllocator,
 backend: Backend,
 
 ch: trm.KeyEvent = @bitCast(@as(u16, 0)),
-/// TODO: move to the buffer structure
-repeating: Repeating = .{},
 
 L: *lua.State,
 
@@ -280,32 +278,10 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
     }
 }
 
-pub const Repeating = struct {
-    is: bool = false,
-    count: usize = 0,
-
-    pub inline fn reset(self: *Repeating) void {
-        self.is = false;
-        self.count = 0;
-    }
-
-    pub inline fn take(self: *Repeating) usize {
-        const count = self.some() orelse 1;
-        std.debug.assert(count != 0);
-
-        self.reset();
-        return count;
-    }
-
-    pub inline fn some(self: *Repeating) ?usize {
-        if (self.is) return self.count;
-        return null;
-    }
-};
-
-/// DEPRECATED: use `state.repeating.take()` instead.
+/// DEPRECATED: use `state.takeRepeating()` instead.
 pub fn takeRepeating(state: *State) usize {
-    return state.repeating.take();
+    const buffer = state.getCurrentBuffer();
+    return buffer.repeating.take();
 }
 
 // TODO: fix these and make them better

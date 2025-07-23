@@ -11,7 +11,6 @@ const Backend = @import("Backend.zig");
 const Self = @This();
 const Window = @This();
 
-
 const wl = @cImport({
     @cInclude("wayland-client-core.h");
     @cInclude("wayland-client-protocol.h");
@@ -453,14 +452,6 @@ fn wl_keyboard_leave(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u
     //             wl_proxy_get_id((struct wl_proxy *)surface));
 }
 
-fn key_state_str(state: u32) []const u8 {
-    return switch (state) {
-        wl.WL_KEYBOARD_KEY_STATE_RELEASED => "released",
-        wl.WL_KEYBOARD_KEY_STATE_PRESSED => "pressed",
-        else => "unknown",
-    };
-}
-
 fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32, time: u32, key: u32, pressedstate: u32) callconv(.C) void {
     const window: *Window = @alignCast(@ptrCast(data));
 
@@ -471,12 +462,11 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
     // const name = mem.span(wl.wl_proxy_get_class(@ptrCast(wl_keyboard)));
     // const id = wl.wl_proxy_get_id(@ptrCast(wl_keyboard));
 
-    const pressed = pressedstate == wl.WL_KEYBOARD_KEY_STATE_PRESSED;
-
-    // std.debug.print(
-    //     "[{:2}:{s:16}] key: serial: {}; time: {}; key: {}; state: {} ({s})\n",
-    //     .{ id, name, serial, time, key + 8, pressed, key_state_str(pressedstate) },
-    // );
+    const pressed = switch (pressedstate) {
+        wl.WL_KEYBOARD_KEY_STATE_PRESSED => true,
+        wl.WL_KEYBOARD_KEY_STATE_RELEASED => false,
+        else => unreachable,
+    };
 
     // var buf: [128]u8 = undefined;
     const sym: wl.xkb_keysym_t = wl.xkb_state_key_get_one_sym(window.xkb_state, key + 8);
@@ -492,7 +482,7 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
 
     if (desktop.parseKey(sym, pressed, &window.modifiers)) |ksym| {
         if (pressed) {
-            root.log(@src(), .info, "keypress down: {c}", .{ksym.character});
+            // root.log(@src(), .info, "keypress down: {c}", .{ksym.character});
 
             const now = std.time.milliTimestamp();
             window.pressedkeys.append(window.a, .{
@@ -502,11 +492,16 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
             }) catch {};
             window.events.append(window.a, Backend.Event{ .Key = ksym }) catch {};
         } else {
-            root.log(@src(), .info, "keypress up: {c}", .{ksym.character});
+            // root.log(@src(), .info, "keypress up: {c}", .{ksym.character});
 
             var index: ?usize = null;
             for (window.pressedkeys.items, 0..) |pressedkey, i| {
-                if (pressedkey.key == ksym.character) {
+
+                // Fixes bug where releasing shift can cause the key to repeat
+                // forever
+                if (std.ascii.toLower(pressedkey.key) ==
+                    std.ascii.toLower(ksym.character))
+                {
                     index = i;
                     break;
                 }

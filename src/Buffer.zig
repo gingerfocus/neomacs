@@ -49,6 +49,10 @@ input_state: km.KeySequence = .{
 },
 mode: km.ModeId = km.ModeId.Normal,
 
+/// TODO: move to the buffer structure
+repeating: Repeating = .{},
+
+
 pub const Line = std.ArrayListUnmanaged(u8);
 
 pub const Visual = struct {
@@ -453,3 +457,26 @@ pub fn getchar(buffer: *Buffer, pos: lib.Vec2) ?u8 {
 
     return line.items[pos.col];
 }
+
+pub const Repeating = struct {
+    is: bool = false,
+    count: usize = 0,
+
+    pub inline fn reset(self: *Repeating) void {
+        self.is = false;
+        self.count = 0;
+    }
+
+    pub inline fn take(self: *Repeating) usize {
+        const count = self.some() orelse 1;
+        std.debug.assert(count != 0);
+
+        self.reset();
+        return count;
+    }
+
+    pub inline fn some(self: *Repeating) ?usize {
+        if (self.is) return self.count;
+        return null;
+    }
+};

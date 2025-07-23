@@ -44,7 +44,7 @@ fn initToVisualKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
 }
 
 pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
-    std.log.info("prefix: {any}", .{maps.curprefix});
+    // root.log(@src(), .debug, "prefix: {any}", .{maps.curprefix});
 
     // arrow keys?
     try maps.put(a, norm('j'), km.KeyFunction.initstate(targeters.target_down_linewise));
@@ -53,7 +53,7 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
     try maps.put(a, norm('h'), km.KeyFunction.initstate(targeters.target_left));
 
     try maps.put(a, norm('G'), km.KeyFunction.initstate(targeters.target_bottom));
-    try maps.put(a, '$', km.KeyFunction.initstate(motions.end_of_line));
+    try maps.put(a, '$', km.KeyFunction.initbuffer(motions.end_of_line));
     try maps.put(a, '0', km.KeyFunction.initstate(targeters.motion_start));
 
     try maps.put(a, norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
@@ -96,7 +96,7 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     // }
 
     // if (!isdigit(state.ch) and state.num.items.len > 0) {
-    //     state.repeating.repeating_count = std.fmt.parseInt(u32, state.num.items, 10) catch {
+    //     buffer.repeating.repeating_count = std.fmt.parseInt(u32, state.num.items, 10) catch {
     //         // TODO: error handleing
     //         return;
     //     };
@@ -108,12 +108,12 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     //     // An optimization might be to make this return a dynamic dispatch
     //     // object so we can just call it many times and not worry about finding
     //     // it many times.
-    //     errdefer state.repeating.repeating_count = 0;
+    //     errdefer buffer.repeating.repeating_count = 0;
     //     var i: usize = 0;
-    //     while (i < state.repeating.repeating_count) : (i += 1) {
+    //     while (i < buffer.repeating.repeating_count) : (i += 1) {
     //         try state.key_func[@intFromEnum(state.config.mode)](buffer, state);
     //     }
-    //     state.repeating.repeating_count = 0;
+    //     buffer.repeating.repeating_count = 0;
     //     return;
     // }
 
@@ -223,9 +223,8 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void 
 }
 
 pub const motions = struct {
-    pub fn end_of_line(state: *State, _: km.KeyFunctionDataValue) !void {
-        const count = state.repeating.take();
-        const buffer = state.getCurrentBuffer();
+    pub fn end_of_line(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
+        const count = buffer.repeating.take();
 
         const begin = buffer.position();
         const end = targeters.end_of_line(buffer, count);
@@ -316,7 +315,7 @@ const targeters = struct {
 
     fn target_left(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-        const count = state.repeating.take();
+        const count = state.takeRepeating();
 
         const start = buffer.position();
         buffer.target = .{ .start = start, .end = buffer.moveLeft(start, count) };
@@ -324,7 +323,7 @@ const targeters = struct {
 
     fn target_top(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-        const count = state.repeating.take();
+        const count = state.takeRepeating();
 
         buffer.target = .{
             .mode = .Line,
@@ -342,7 +341,7 @@ const targeters = struct {
 
         // yeah the G motion is weird
         end.row =
-            if (state.repeating.some()) |count| count - 1 // eh
+            if (buffer.repeating.some()) |count| count - 1 // eh
             else buffer.lines.items.len - 1;
 
         buffer.updateTarget(Buffer.VisualMode.Range, start, end);
@@ -352,7 +351,7 @@ const targeters = struct {
     /// for the word start
     fn motion_word_end(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-        const count = state.repeating.take();
+        const count = state.takeRepeating();
 
         const start = buffer.position();
         var end = start;
@@ -416,7 +415,7 @@ const targeters = struct {
 
     fn motion_word_back(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-        const count = state.repeating.take();
+        const count = state.takeRepeating();
 
         const start = buffer.position();
         var end = start;
@@ -445,7 +444,7 @@ const targeters = struct {
 
     // fn motion_WORD_back(state: *State, _: km.KeyFunctionDataValue) !void {
     //     const buffer = state.getCurrentBuffer();
-    //     const count = state.repeating.take();
+    //     const count = state.takeRepeating();
     //
     //     const start = buffer.position();
     //     var end = start;
@@ -485,7 +484,7 @@ const targeters = struct {
     }
 
     fn motion_start(state: *State, _: km.KeyFunctionDataValue) !void {
-        const count = state.repeating.take();
+        const count = state.takeRepeating();
         const buffer = state.getCurrentBuffer();
 
         const begin = buffer.position();
@@ -548,7 +547,7 @@ const inserts = struct {
 
         // TODO: repeating this repeart the text you insert, i dont want to
         // make that
-        state.repeating.reset();
+        buffer.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
 
@@ -561,7 +560,7 @@ const inserts = struct {
         // if (buffer.cursor < buffer.data.items.len) {
         //     buffer.cursor += 1;
         // }
-        //state.repeating.reset();
+        //buffer.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
 
@@ -584,7 +583,7 @@ const inserts = struct {
         // buffer.cursor = row.end;
         // buffer.col = row.end - row.start;
         //
-        // state.repeating.reset();
+        // buffer.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
 
@@ -598,7 +597,7 @@ const inserts = struct {
 
         buffer.row = @max(0, buffer.row - 1);
 
-        state.repeating.reset();
+        buffer.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
 
@@ -609,7 +608,7 @@ const inserts = struct {
         buffer.col = line.items.len;
         try buffer.newlineInsert(state.a);
 
-        state.repeating.reset();
+        buffer.repeating.reset();
         buffer.setMode(ModeId.Insert);
     }
 };
@@ -631,7 +630,7 @@ const visuals = struct {
 
 const functions = struct {
     fn yank(state: *State, _: km.KeyFunctionDataValue) !void {
-        _ = state.repeating.take();
+        _ = state.takeRepeating();
         const buffer = state.getCurrentBuffer();
         if (buffer.target) |target| {
             const selection = try buffer.gettarget(target);
@@ -651,7 +650,7 @@ const functions = struct {
     }
 
     fn delete_end_of_line(state: *State, _: km.KeyFunctionDataValue) !void {
-        const count = state.repeating.take();
+        const count = state.takeRepeating();
         const buffer = state.getCurrentBuffer();
 
         if (buffer.target) |target| {
@@ -680,7 +679,7 @@ const functions = struct {
 
     fn replace_letter(state: *State, ctx: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-        const count = state.repeating.take();
+        const count = state.takeRepeating();
 
         const ch = ctx.character;
 

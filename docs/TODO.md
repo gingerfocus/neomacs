@@ -1,6 +1,5 @@
-# known bugs
-- [ ] key press while pressing shift releasing shift and releasing key causes
-      it to repeat forever as it is not being reset
+# Known Bugs
+- [x] shift keys being released can repeat forever as the lower case key is released
 
 # For 0.1.1
 - [x] Basic Targeters (w/e/b, t/f, $/0)
@@ -23,7 +22,7 @@
 - [ ] R mode
 
 # Refactors
-- [ ] move repeat structure to buffer
+- [x] move repeat structure to buffer
 - [ ] make log better 
   - [ ] use builtin stacktrace 
   - [x] dynamically choose backend
