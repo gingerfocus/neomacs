@@ -1,5 +1,5 @@
 # Neomacs
-![Neomacs Banner Logo](./etc/neon.svg)
+![Neomacs Banner Logo](./etc/branding/logo.jpg)
 
 A combination of many small projects I have worked on.
 
@@ -49,7 +49,7 @@ zig build -Dgtk=true -Dstatic-lua=false --release=safe
 ```
 
 ## Progress
-see [TODO.md](./docs/TODO.md) for random ideas I have.
+see [TODO.md](./etc/docs/TODO.md) for random ideas I have.
 
 ## Lines of Code
 I very much dont like maintaining code so I just dont write it. I am hard

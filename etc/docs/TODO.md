@@ -1,24 +1,18 @@
 # Known Bugs
-- [x] shift keys being released can repeat forever as the lower case key is released
+- [ ] visual rendering for non-range selections is wrong
 
-# For 0.1.1
-- [x] Basic Targeters (w/e/b, t/f, $/0)
-- [x] Deletion (d/x/D)
-- [x] Changing (c/C)
-- [x] Replace (r)
-- [x] Yank (y)
-- [x] Visual Mode Targeting (Right, Line, Block)
-- [x] Scroll off
-
-# For 0.2.0
-- [ ] Window Split
+# For 0.1.2
 - [ ] More motions
   - [ ] W/E/B
-- [ ] Lua API
+  - [ ] a/i "(){}[]"
 - [ ] Undo
-- [ ] Make an example plugin
-  - [ ] Oil/Netrw/Dired/Neotree alternative
-- [ ] More Motions ('a', 'i') "(){}[]"
+
+# For 0.2.0
+- [ ] Lua API
+  - [ ] Window Split
+  - [ ] Make an example plugin
+    - [ ] Oil/Netrw/Dired/Neotree alternative
+    - [ ] Packager
 - [ ] R mode
 
 # Refactors
@@ -42,7 +36,6 @@
 - [ ] Batch Rendering Primitives
 - [ ] Better renering of text
 - [ ] Font Support
-- [ ] Packager
 - [ ] Marks
 - [ ] Vim `s` or Flash `s`?
 - [ ] `z` commands
@@ -54,19 +47,17 @@
 - [ ] Total runtime configuration to make paging truely zero cost
   - [ ] rework state object to handle missing/unconfigured resources
   - [ ] remove zss.zig file, should just be a consequence of the above
+- [ ] C/Wasi Api
 
 # Much Later
-- [ ] Inline Image preview
 - [ ] Shader support
   - [ ] Shaders from Lua
 - [ ] Pdf support
+  - [ ] Image preview
   - [ ] Typst support
 - [ ] RPC
-- [ ] C/Wasi Api
 - [ ] Literate Programming
 - [ ] TigerStyle type fuzzing
   - [ ] Compared to Neovim
 - [ ] file co-operation
 - [ ] Static compile Wayland+Wgpu backend
-
-https://typst.app/universe/package/timeliney

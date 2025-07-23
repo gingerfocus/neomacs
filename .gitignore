@@ -3,6 +3,7 @@
 /zig-out
 /.direnv
 /result
+/.envrc
 
 /docs/*.pdf
 

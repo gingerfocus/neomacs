@@ -68,11 +68,11 @@ pub fn build(b: *std.Build) !void {
 
     if (usewayland) {
         const clientHeaderCommand = b.addSystemCommand(&.{ "wayland-scanner", "client-header" });
-        clientHeaderCommand.addFileArg(b.path("etc/xdg-shell.xml"));
+        clientHeaderCommand.addFileArg(b.path("etc/share/xdg-shell.xml"));
         const clientHeader = clientHeaderCommand.addOutputFileArg("xdg-shell-protocol.h");
 
         const privateCodeCommand = b.addSystemCommand(&.{ "wayland-scanner", "private-code" });
-        privateCodeCommand.addFileArg(b.path("etc/xdg-shell.xml"));
+        privateCodeCommand.addFileArg(b.path("etc/share/xdg-shell.xml"));
         const privateCode = privateCodeCommand.addOutputFileArg("xdg-shell-protocol.c");
 
         neomacs.addCSourceFile(.{ .file = privateCode });
@@ -148,7 +148,7 @@ pub fn build(b: *std.Build) !void {
     const neomacs_exe_run = b.addRunArtifact(neomacsExe);
     if (b.args) |args| neomacs_exe_run.addArgs(args) else {
         // open a demo file
-        neomacs_exe_run.addArg("etc/demo.md");
+        neomacs_exe_run.addArg("README.md");
     }
     run_step.dependOn(&neomacs_exe_run.step);
 
@@ -236,7 +236,7 @@ pub fn build(b: *std.Build) !void {
     const docsStep = b.step("docs", "");
 
     const timeline = b.addSystemCommand(&.{ "typst", "compile" });
-    timeline.addFileArg(b.path("docs/timeline.typ"));
+    timeline.addFileArg(b.path("etc/docs/timeline.typ"));
     const timelinePdf = timeline.addOutputFileArg("timeline.pdf");
 
     const timelineInstall = b.addInstallFile(timelinePdf, "share/docs/timeline.pdf");
