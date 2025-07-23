@@ -24,8 +24,8 @@ pub fn init(a: std.mem.Allocator, modes: *km.Keymap) !void {
     try initToInsertKeys(a, &normal);
     try initToVisualKeys(a, &normal);
     try initMotionKeys(a, &normal);
-    try initNormalKeys(a, &normal);
     try initModifyingKeys(a, &normal);
+    // try initNormalKeys(a, &normal);
 }
 
 fn initToInsertKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
@@ -215,6 +215,11 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void 
 
     var r = try maps.then(norm('r'));
     r.fallback(km.KeyFunction.initstate(functions.replace_letter));
+
+    var y = try maps.then(norm('y'));
+    y.targeter(km.KeyFunction.initstate(functions.yank));
+    try initMotionKeys(a, &y);
+    try y.put(a, norm('y'), km.KeyFunction.initstate(targeters.full_linewise));
 }
 
 pub const motions = struct {
@@ -625,6 +630,24 @@ const visuals = struct {
 };
 
 const functions = struct {
+    fn yank(state: *State, _: km.KeyFunctionDataValue) !void {
+        _ = state.repeating.take();
+        const buffer = state.getCurrentBuffer();
+        if (buffer.target) |target| {
+            const selection = try buffer.gettarget(target);
+            defer selection.deinit();
+
+            root.log(@src(), .debug, "yank: {s}", .{selection.items});
+
+            var child = std.process.Child.init(&.{"wl-copy", selection.items}, state.a);
+            try child.spawn();
+            _ = try child.wait();
+
+            // TODO: this should reset by something else
+            buffer.target = null;
+        }
+    }
+
     fn delete_end_of_line(state: *State, _: km.KeyFunctionDataValue) !void {
         const count = state.repeating.take();
         const buffer = state.getCurrentBuffer();
@@ -638,6 +661,7 @@ const functions = struct {
             try buffer.delete(.{ .start = start, .end = end });
         }
     }
+
     fn change_end_of_line(state: *State, _: km.KeyFunctionDataValue) !void {
         const count = state.takeRepeating();
         const buffer = state.getCurrentBuffer();

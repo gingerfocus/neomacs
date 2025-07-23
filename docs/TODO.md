@@ -7,7 +7,7 @@
 - [x] Deletion (d/x/D)
 - [x] Changing (c/C)
 - [x] Replace (r)
-- [ ] Yank (y)
+- [x] Yank (y)
 - [ ] Visual Mode Targeting (Right, Line, Block)
 - [ ] Scroll off
 

@@ -63,7 +63,12 @@ pub const Visual = struct {
 
         if (end.cmp(start) == .lt) std.mem.swap(lib.Vec2, &start, &end);
 
-        return Visual{ .mode = target.mode, .start = start, .end = end };
+        const targ = Visual{ .mode = target.mode, .start = start, .end = end };
+
+        std.debug.assert(targ.start.row <= targ.end.row);
+        if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
+
+        return targ;
     }
 };
 
@@ -322,11 +327,6 @@ pub const idgen = struct {
 pub fn replace(buffer: *Buffer, target: Visual, ch: u8) !void {
     const targ = target.normalize();
 
-    std.debug.assert(targ.start.row <= targ.end.row);
-    if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
-
-    root.log(@src(), .debug, "TODO: replace", .{});
-
     var row: usize = targ.start.row;
     while (row <= targ.end.row) : (row += 1) {
         const line: *Buffer.Line = &buffer.lines.items[row];
@@ -348,6 +348,36 @@ pub fn replace(buffer: *Buffer, target: Visual, ch: u8) !void {
             och.* = ch;
         }
     }
+}
+
+pub fn gettarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
+    const targ = target.normalize();
+
+    var buf = std.ArrayList(u8).init(buffer.alloc);
+
+    var row: usize = targ.start.row;
+    while (row <= targ.end.row) : (row += 1) {
+        if (row != targ.start.row) try buf.append('\n');
+
+        const line: *Buffer.Line = &buffer.lines.items[row];
+
+        var start = switch (targ.mode) {
+            .Line => 0,
+            .Range => if (row == targ.start.row) targ.start.col else 0,
+            .Block => targ.start.col,
+        };
+        start = @min(start, line.items.len);
+
+        const end = switch (targ.mode) {
+            .Line => line.items.len,
+            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
+            .Block => targ.end.col,
+        };
+
+        try buf.appendSlice(line.items[start..end]);
+    }
+
+    return buf;
 }
 
 pub fn delete(buffer: *Buffer, target: Visual) !void {
