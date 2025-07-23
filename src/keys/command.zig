@@ -9,7 +9,7 @@ const norm = trm.keys.norm;
 const ctrl = trm.keys.ctrl;
 
 pub fn init(a: std.mem.Allocator, modes: *km.Keymap) !void {
-    var normal = modes.appender(km.ModeId.Command);
+    var normal = modes.appender(km.ModeId.Normal);
     try normal.put(a, norm(':'), .initsetmod(km.ModeId.Command));
 
     var command = modes.appender(km.ModeId.Command);

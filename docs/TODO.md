@@ -3,15 +3,12 @@
       it to repeat forever as it is not being reset
 
 # For 0.1.1
-- [x] Targeters
-  - [x] w/e/b
-  - [x] t
-  - [x] f
-  - [x] $
-  - [x] 0
+- [x] Basic Targeters (w/e/b, t/f, $/0)
 - [x] Deletion (d/x)
+- [ ] D
 - [x] Changing (c)
-- [ ] Replace (r) (R, later)
+- [ ] C
+- [ ] Replace (r)
 - [ ] Yank (y)
 - [x] Visual Mode Targeting
   - [x] Range
@@ -25,23 +22,27 @@
   - [ ] W/E/B
 - [ ] Lua API
 - [ ] Undo
-- [ ] Make an example plugin (oil)
+- [ ] Make an example plugin
+  - [ ] Oil/Netrw/Dired/Neotree alternative
 - [ ] More Motions ('a', 'i') "(){}[]"
+- [ ] R mode
 
 # Refactors
 - [ ] move repeat structure to buffer
 - [ ] make log better 
   - [ ] use builtin stacktrace 
   - [x] dynamically choose backend
-- [ ] event loop
+- [ ] event loop (wait for zig async)
 - [ ] remove command line??
 - [ ] remove row and col from Buffer (move to curosr object)
+  - [ ] remove calls to feild names in other files
+- [ ] reuse motion keys map (dont call initMotionKeys on most submaps)
 
 # Later
-- [ ] Wayland Keyrepeat
-- [ ] Test Compared to Neovim
+- [x] Wayland Keyrepeat
 - [ ] Lsp
 - [ ] Swap Files
+- [ ] Fix window backend sizing
 - [ ] Hardware Acceleration
   - [ ] Drop gtk backend
 - [ ] Batch Rendering Primitives
@@ -54,7 +55,6 @@
   - [ ] folds
 - [ ] Component events (subscriptions)
 - [ ] swaping the start and end position visual selection
-- [ ] Oil/Netrw/Dired/Neotree alternative
 - [ ] Rope Buffers / CRDT / VSR
 - [ ] Multi Backend
 - [ ] Total runtime configuration to make paging truely zero cost
@@ -71,6 +71,7 @@
 - [ ] C/Wasi Api
 - [ ] Literate Programming
 - [ ] TigerStyle type fuzzing
+  - [ ] Compared to Neovim
 - [ ] file co-operation
 
 https://typst.app/universe/package/timeliney

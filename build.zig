@@ -253,6 +253,18 @@ pub fn build(b: *std.Build) !void {
     check.dependOn(&lynx.step);
 
     addBuildAndRunSteps(b, "lynx", lynx);
+
+    // -------------------------------------------------------------------------
+    // const exstep = b.step("ex", "");
+    // const exExe = b.addExecutable(.{
+    //     .name = "ex",
+    //     .root_source_file = b.path("src/bin/ex.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
+    // exExe.root_module.addImport("thermit", terminal.module("thermit"));
+    // const exRun = b.addRunArtifact(exExe);
+    // exstep.dependOn(&exRun.step);
 }
 
 fn addBuildAndRunSteps(

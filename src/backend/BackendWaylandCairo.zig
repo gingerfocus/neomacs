@@ -317,8 +317,8 @@ fn getSize(dataptr: *anyopaque) lib.Vec2 {
     const window = @as(*Self, @ptrCast(@alignCast(dataptr)));
 
     const size: lib.Vec2 = .{
-        .row = @as(usize, @intCast(window.height)) / desktop.CHAR_HEIGHT,
-        .col = @as(usize, @intCast(window.width)) / desktop.CHAR_WIDTH,
+        .row = @as(usize, @intCast(window.height)) / desktop.CHAR_HEIGHT / 2,
+        .col = @as(usize, @intCast(window.width)) / desktop.CHAR_WIDTH / 2,
     };
     root.log(@src(), .info, "size: {any}", .{size});
     return size;

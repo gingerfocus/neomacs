@@ -67,7 +67,10 @@ const thunk = struct {
         const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
         const event: trm.Event = self.terminal.tty.read(timeout) catch return .Timeout;
         switch (event) {
-            .Key => |ke| return Backend.Event{ .Key = ke },
+            .Key => |ke| {
+                root.log(@src(), .debug, "Key: {any}", .{ke});
+                return Backend.Event{ .Key = ke };
+            },
             else => {
                 return Backend.Event.Unknown;
             },
