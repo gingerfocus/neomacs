@@ -142,7 +142,7 @@ fn neomacs() !void {
 
         switch (ev) {
             Backend.Event.Key => |ke| {
-                if (trm.keys.bits(ke) == trm.keys.altr('q')) break;
+                if (trm.keys.bits(ke) == trm.keys.ctrl('q')) break;
                 s.ch = ke; // used by bad events that reference state directly
                 // std.debug.print("key: {any}\n", .{ke});
                 try s.press(ke);

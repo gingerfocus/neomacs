@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) !void {
     const usegtk = b.option(bool, "gtk", "compile the gtk backend") orelse false;
@@ -29,7 +30,6 @@ pub fn build(b: *std.Build) !void {
     // ---------
 
     var query = std.Build.StandardTargetOptionsArgs{};
-    const builtin = @import("builtin");
     // use musl for static builds on linux
     if (static and builtin.os.tag == .linux) {
         query.default_target.abi = .musl;
