@@ -27,6 +27,6 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
                 },
             );
         }
-        writer.setCursor(.{ .col = view.x + command.len, .row = view.y });
+        writer.setCursor(.{ .col = view.x + command.len, .row = view.y }, .BlinkingBlock);
     }
 }

@@ -1,3 +1,7 @@
+# known bugs
+- [ ] key press while pressing shift releasing shift and releasing key causes
+      it to repeat forever as it is not being reset
+
 # For 0.1.1
 - [x] Targeters
   - [x] w/e/b
@@ -6,13 +10,13 @@
   - [x] $
   - [x] 0
 - [x] Deletion (d/x)
-- [ ] Changing (c)
+- [x] Changing (c)
 - [ ] Replace (r) (R, later)
 - [ ] Yank (y)
-- [ ] Visual Mode Targeting
-  - [ ] Range
-  - [ ] Line
-  - [ ] Block (eh, later)
+- [x] Visual Mode Targeting
+  - [x] Range
+  - [x] Line
+  - [x] Block
 - [ ] Scroll off
 
 # For 0.2.0
@@ -31,8 +35,11 @@
   - [x] dynamically choose backend
 - [ ] event loop
 - [ ] remove command line??
+- [ ] remove row and col from Buffer (move to curosr object)
 
 # Later
+- [ ] Wayland Keyrepeat
+- [ ] Test Compared to Neovim
 - [ ] Lsp
 - [ ] Swap Files
 - [ ] Hardware Acceleration
@@ -66,3 +73,4 @@
 - [ ] TigerStyle type fuzzing
 - [ ] file co-operation
 
+https://typst.app/universe/package/timeliney

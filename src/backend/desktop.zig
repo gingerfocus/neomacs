@@ -13,7 +13,7 @@ pub fn parseKey(
     key: u32,
     pressed: bool,
     mods: *trm.KeyModifiers,
-) ?Backend.Event {
+) ?trm.KeyEvent {
     switch (key) {
         65515 => mods.supr = pressed,
         65507, 65508 => mods.ctrl = pressed,
@@ -22,27 +22,27 @@ pub fn parseKey(
         65509 => {}, // CAPS LOCK
         else => {},
     }
-    if (!pressed) return null;
+    // if (!pressed) return null;
 
     return switch (key) {
         trm.KeySymbol.Return.toBits(),
         65293,
-        => Backend.Event{ .Key = .{
+        => .{
             .character = trm.KeySymbol.Return.toBits(),
             .modifiers = mods.*,
-        } },
-        65288 => Backend.Event{ .Key = .{
+        },
+        65288 => .{
             .character = trm.KeySymbol.Backspace.toBits(),
             .modifiers = mods.*,
-        } },
-        65307 => Backend.Event{ .Key = .{
+        },
+        65307 => .{
             .character = trm.KeySymbol.Esc.toBits(),
             .modifiers = mods.*,
-        } },
-        65289 => Backend.Event{ .Key = .{
+        },
+        65289 => .{
             .character = trm.KeySymbol.Tab.toBits(),
             .modifiers = mods.*,
-        } },
+        },
         // 65361 - arrow left
         // 65362 - arrow up
         // 65364 - arrow down
@@ -63,16 +63,16 @@ pub fn parseKey(
             var modifiers = mods.*;
             modifiers.shft = false; // characters dont use shift
 
-            break :blk Backend.Event{ .Key = .{
+            break :blk .{
                 .character = ch,
                 .modifiers = modifiers,
-            } };
+            };
         },
         trm.KeySymbol.Space.toBits(),
-        => Backend.Event{ .Key = .{
+        => .{
             .character = @intCast(key),
             .modifiers = mods.*,
-        } },
+        },
 
         // gtk.GDK_KEY_Left => trm.Key.Left,
         // gtk.GDK_KEY_Right => trm.Key.Right,
@@ -97,9 +97,9 @@ pub const cairo = @cImport({
     @cInclude("cairo.h");
 });
 
-pub const FONT_SIZE: f64 = 36.0;
-pub const CHAR_WIDTH: f64 = FONT_SIZE / 2;
-pub const CHAR_HEIGHT: f64 = FONT_SIZE;
+pub const FONT_SIZE = 36;
+pub const CHAR_WIDTH = FONT_SIZE / 2;
+pub const CHAR_HEIGHT = FONT_SIZE;
 
 pub fn cairodraw(cr: *cairo.cairo_t, pos: lib.Vec2, node: Backend.Node) void {
     // Convert the logical position (row, col) to pixel coordinates

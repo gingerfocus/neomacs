@@ -89,13 +89,13 @@ pub fn build(b: *std.Build) !void {
 
         // neomacs.linkSystemLibrary("graphi", .{});
 
-        const graphi = b.dependency("graphi", .{
-            .target = target,
-            .optimize = optimize,
-        });
-
-        neomacs.linkLibrary(graphi.artifact("graphi"));
-        neomacs.addIncludePath(graphi.namedLazyPath("include"));
+        // const graphi = b.dependency("graphi", .{
+        //     .target = target,
+        //     .optimize = optimize,
+        // });
+        //
+        // neomacs.linkLibrary(graphi.artifact("graphi"));
+        // neomacs.addIncludePath(graphi.namedLazyPath("include"));
     }
 
     if (usewgpu) {
@@ -175,7 +175,7 @@ pub fn build(b: *std.Build) !void {
     // -------------------------------------------------------------------------
 
     const runtime = b.addInstallDirectory(.{
-        .install_dir = .{ .custom = "state" },
+        .install_dir = .{ .custom = "share" },
         .install_subdir = "neon",
         .source_dir = b.path("runtime"),
     });
@@ -230,7 +230,18 @@ pub fn build(b: *std.Build) !void {
     // }
     //
     // -------------------------------------------------------------------------
+
     // TODO: man pages to share/man/man1
+
+    const docsStep = b.step("docs", "");
+
+    const timeline = b.addSystemCommand(&.{ "typst", "compile" });
+    timeline.addFileArg(b.path("docs/timeline.typ"));
+    const timelinePdf = timeline.addOutputFileArg("timeline.pdf");
+
+    const timelineInstall = b.addInstallFile(timelinePdf, "share/docs/timeline.pdf");
+
+    docsStep.dependOn(&timelineInstall.step);
 
     // -------------------------------------------------------------------------
     const lynx = b.addExecutable(.{

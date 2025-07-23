@@ -12,7 +12,7 @@ const SYSINIT =
     \\local runtime = os.getenv("NEONRUNTIME")
     \\if not runtime then
     \\    local home = os.getenv("HOME")
-    \\    runtime = home .. "/.local/stat/neon"
+    \\    runtime = home .. "/.local/share/neon"
     \\end
     \\neon.opt.runtime = runtime
     \\package.path = runtime .. "/?.lua;" .. package.path

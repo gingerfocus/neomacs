@@ -204,6 +204,11 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void 
     try d.put(a, norm('d'), km.KeyFunction.initstate(targeters.full_linewise));
     try initMotionKeys(a, &d);
 
+
+    var c = try maps.then(norm('c'));
+    c.targeter(km.KeyFunction.initbuffer(keys.actions.change));
+    try initMotionKeys(a, &c);
+
     // const gq = try g.then(a, 'q');
     // _ = gq; // autofix
 }

@@ -48,6 +48,12 @@ you can link to.
 zig build -Dgtk=true -Dstatic-lua=false --release=safe
 ```
 
-
 ## Progress
 see [TODO.md](./docs/TODO.md) for random ideas I have.
+
+## Lines of Code
+I very much dont like maintaining code so I just dont write it. I am hard
+limiting myself to 10k lines of zig code (currently 4154). More lua code can be
+written but to me all lua code can be replaced at runtime so it is not
+premanent.
+

@@ -4,5 +4,7 @@
 /.direnv
 /result
 
+/docs/*.pdf
+
 # logs
 /neomacs.log

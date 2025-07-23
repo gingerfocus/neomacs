@@ -56,6 +56,7 @@ const thunk = struct {
                 root.log(@src(), .warn, "cant draw images on terminal backend", .{});
                 cell.symbol = '';
             },
+            .Shader => |_| {},
             .None => {},
         }
 
@@ -89,8 +90,12 @@ const thunk = struct {
         self.a.destroy(self);
     }
 
-    fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
+    fn setCursor(ptr: *anyopaque, pos: lib.Vec2, ty: Backend.VTable.CursorType) void {
+        // TODO: cache this and only do something if it changes
+
         const self = @as(*TerminalBackend, @ptrCast(@alignCast(ptr)));
+
+        scu.thermit.setCursorStyle(self.terminal.tty.f, ty) catch {};
         self.terminal.cursor = .{ .x = @intCast(pos.col), .y = @intCast(pos.row) };
     }
 };

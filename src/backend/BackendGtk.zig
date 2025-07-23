@@ -119,7 +119,7 @@ fn eventKey(widget: *gtk.GtkWidget, arg_event: *gtk.GdkEventKey, self: *Self) ca
 
     const ev = desktop.parseKey(char, pressed, &self.modifiers) orelse return gtk.FALSE;
 
-    self.events.append(self.a, ev) catch |err| {
+    self.events.append(self.a, Backend.Event{ .Key = ev }) catch |err| {
         std.log.debug("Failed to append event: {any}", .{err});
     };
 

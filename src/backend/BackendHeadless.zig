@@ -48,9 +48,10 @@ const thunk = struct {
         self.a.destroy(self);
     }
 
-    fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
+    fn setCursor(ptr: *anyopaque, pos: lib.Vec2, ty: Backend.VTable.CursorType) void {
         _ = ptr;
         _ = pos;
+        _ = ty;
     }
 };
 

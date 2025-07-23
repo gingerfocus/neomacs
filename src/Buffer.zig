@@ -415,4 +415,21 @@ pub fn delete(buffer: *Buffer, target: Visual) !void {
     if (remove_range_begin) |rrange| {
         buffer.lines.replaceRange(a, rrange, remove_range_len, &.{}) catch unreachable; // never allocates
     }
+
+    buffer.movecursor(targ.start);
+}
+
+pub fn movecursor(buffer: *Buffer, pos: lib.Vec2) void {
+    // TODO: set desired and compute from their
+    buffer.row = pos.row;
+    buffer.col = pos.col;
+}
+
+pub fn getchar(buffer: *Buffer, pos: lib.Vec2) ?u8 {
+    if (pos.row >= buffer.lines.items.len) return null;
+
+    const line = &buffer.lines.items[pos.row];
+    if (pos.col >= line.items.len) return null;
+
+    return line.items[pos.col];
 }

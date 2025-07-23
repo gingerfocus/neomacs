@@ -1,6 +1,7 @@
 const std = @import("std");
 const root = @import("../../root.zig");
 const lib = root.lib;
+const km = root.km;
 
 const State = root.State;
 const Backend = root.Backend;
@@ -64,7 +65,9 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     }
 
     // render the cursor
-    if (buffer.mode._ != root.km.ModeId.Command._) {
-        writer.setCursor(.{ .col = view.x + buffer.col + 1, .row = view.y + buffer.row - row_render_start });
+    if (buffer.mode._ != km.ModeId.Command._) {
+        const cursormode: root.trm.CursorStyle = if (buffer.mode.eql(km.ModeId.Insert)) .SteadyBar else .SteadyBlock;
+
+        writer.setCursor(.{ .col = view.x + buffer.col + 1, .row = view.y + buffer.row - row_render_start }, cursormode);
     }
 }

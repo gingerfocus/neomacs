@@ -3,6 +3,7 @@ const std = root.std;
 const lib = root.lib;
 const mem = std.mem;
 const trm = root.trm;
+const cairo = desktop.cairo;
 
 const Backend = @import("Backend.zig");
 
@@ -10,9 +11,6 @@ const Self = @This();
 const Window = @This();
 
 const desktop = @import("desktop.zig");
-const graphi = @cImport({
-    @cInclude("graphi.h");
-});
 const wl = @cImport({
     @cInclude("wayland-client-core.h");
     @cInclude("wayland-client-protocol.h");
@@ -22,10 +20,13 @@ const wl = @cImport({
     @cInclude("xdg-shell-protocol.h");
 });
 
-// const Renderer = GraphiRenderer;
-const Renderer = CairoRenderer;
-
 events: std.ArrayListUnmanaged(Backend.Event) = .{},
+pressedkeys: std.ArrayListUnmanaged(struct {
+    // true if this keypress is the first of a repeat
+    start: bool,
+    time: i64,
+    key: u8,
+}) = .{},
 modifiers: trm.KeyModifiers = .{},
 
 closed: bool = false,
@@ -59,7 +60,10 @@ selection: ?*wl.wl_data_offer = null,
 dnd: ?*wl.wl_data_offer = null,
 
 a: std.mem.Allocator,
-repeat: struct { rate: i32, delay: i32 } = .{ .rate = 100, .delay = 300 },
+repeat: struct { rate: i32, delay: i32 } = .{
+    .rate = 25,
+    .delay = 300,
+},
 
 const DEFAULT_WIDTH = 1020;
 const DEFAULT_HEIGHT = 840;
@@ -149,93 +153,187 @@ pub fn init(
     return state;
 }
 
-const thunk = struct {
-    fn deinit(ptr: *anyopaque) void {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+fn deinit(ptr: *anyopaque) void {
+    const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
-        // window.a.free(window.bitmap.buffer);
-        window.buffer.deinit(window.a);
-        window.events.deinit(window.a);
+    // window.a.free(window.bitmap.buffer);
+    window.buffer.deinit(window.a);
+    window.events.deinit(window.a);
+    window.pressedkeys.deinit(window.a);
 
-        wl.wl_display_disconnect(window.display);
-        window.a.destroy(window);
-    }
+    wl.wl_display_disconnect(window.display);
+    // window.* = undefined;
 
-    fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+    window.a.destroy(window);
+}
 
-        Renderer.draw(window, pos, node);
+fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
+    const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
+    const ctx = window.cr orelse {
+        std.debug.print("Failed to create cairo context\n", .{});
         return;
+    };
+
+    desktop.cairodraw(ctx, pos, node);
+
+    return;
+}
+
+fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
+    const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+
+    switch (mode) {
+        .begin => {
+            std.debug.assert(window.frame == null);
+            std.debug.assert(window.cr == null);
+
+            const width = @as(c_int, @intCast(window.width));
+            const height = @as(c_int, @intCast(window.height));
+
+            const surface = cairo.cairo_image_surface_create(cairo.CAIRO_FORMAT_ARGB32, width, height);
+            window.frame = surface;
+            window.cr = cairo.cairo_create(surface);
+        },
+        .end => {
+            const surface = window.frame.?; // must call begin first
+            const data = cairo.cairo_image_surface_get_data(surface);
+            const width = cairo.cairo_image_surface_get_width(surface);
+            const height = cairo.cairo_image_surface_get_height(surface);
+            // const stride = c.cairo_image_surface_get_stride(surface);
+
+            // const fbuffer = FrameBuffer.init(window.a, width, height) catch return;
+            // defer fbuffer.deinit(window.a);
+            // @memcpy(fbuffer.data, data[0 .. @as(usize, @intCast(width)) * @as(usize, @intCast(height)) * 4]); // stride=4
+
+            const fbuffer = FrameBuffer{
+                .width = width,
+                .height = height,
+                .data = @alignCast(data[0 .. @as(usize, @intCast(width)) * @as(usize, @intCast(height)) * 4]),
+            };
+            const buffer = createBuffer(window, fbuffer) catch |err| {
+                std.debug.print("Failed to create buffer: {any}\n", .{err});
+                return;
+            };
+            wl.wl_surface_attach(window.surface, buffer, 0, 0);
+            wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
+            wl.wl_surface_commit(window.surface);
+
+            if (window.cr != null) {
+                cairo.cairo_destroy(window.cr);
+                window.cr = null;
+            }
+            if (window.frame != null) {
+                cairo.cairo_surface_destroy(window.frame);
+                window.frame = null;
+            }
+        },
     }
+}
 
-    fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+fn setCursor(ptr: *anyopaque, pos: lib.Vec2, ty: Backend.VTable.CursorType) void {
+    const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
-        Renderer.render(window, mode);
-    }
+    // TODO: set cursor line, no! that should be dont by the renderer
 
-    fn setCursor(ptr: *anyopaque, pos: lib.Vec2) void {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+    const cr = window.cr orelse return;
 
-        Renderer.setCursor(window, pos);
-    }
+    const x = @as(f64, @floatFromInt(pos.col)) * desktop.CHAR_WIDTH;
+    const y = @as(f64, @floatFromInt(pos.row)) * desktop.CHAR_HEIGHT;
 
-    fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+    const cursorwidth: f64 = switch (ty) {
+        .SteadyBlock => desktop.CHAR_WIDTH,
+        .SteadyBar => desktop.CHAR_WIDTH / 6,
+        else => desktop.CHAR_WIDTH,
+    };
 
-        if (window.closed) {
-            _ = wl.wl_display_dispatch(window.display);
-            return Backend.Event.End;
-        }
+    cairo.cairo_set_source_rgb(cr, 1.0, 1.0, 1.0); // White cursor
+    cairo.cairo_rectangle(cr, x, y, cursorwidth, desktop.CHAR_HEIGHT);
+    cairo.cairo_fill(cr);
+}
 
-        _ = wl.wl_display_dispatch_pending(window.display); // do client stuff
-        _ = wl.wl_display_flush(window.display); // send everything to server
+/// Logic, add all held keys to the event list, then poll with no block. add
+/// all those events to the list. If there are events then return them, else
+/// poll for the timeout and try to add those events.
+fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
+    const window = @as(*Self, @ptrCast(@alignCast(ptr)));
 
-        if (window.events.items.len == 0) {
-            const fd = wl.wl_display_get_fd(window.display);
-            // std.debug.print("fd: {d}\n", .{fd});
-            var fds = [1]std.posix.pollfd{std.posix.pollfd{
-                .fd = fd,
-                .events = std.posix.POLL.IN,
-                .revents = 0,
-            }};
-            const count = std.posix.poll(&fds, timeout) catch unreachable;
-
-            if (count == 0)
-                return Backend.Event.Timeout;
-        }
-
+    if (window.closed) {
         _ = wl.wl_display_dispatch(window.display);
-        // if (events < 0) return Backend.Event{ .Error = true };
-        // if (events == 0) return Backend.Event.Timeout;
+        return Backend.Event.End;
+    }
 
-        if (window.events.items.len > 0) {
-            return window.events.orderedRemove(0);
+    var events: std.ArrayList(Backend.Event) = .init(window.a);
+
+    const now = std.time.milliTimestamp();
+    for (window.pressedkeys.items) |*pressed| {
+        const diff = now - pressed.time;
+        if ((pressed.start and diff > window.repeat.delay) or (!pressed.start and diff > window.repeat.rate)) {
+            root.log(@src(), .info, "repeat: {c}", .{pressed.key});
+            pressed.start = false;
+            pressed.time = now;
+            events.append(Backend.Event{ .Key = trm.KeyEvent{ .character = pressed.key, .modifiers = window.modifiers } }) catch {};
         }
+    }
+
+    _ = wl.wl_display_dispatch_pending(window.display); // do client stuff
+    _ = wl.wl_display_flush(window.display); // send everything to server
+
+    // dont wait if we already have events
+    const to = if (events.items.len > 0) 0 else timeout;
+
+    const fd = wl.wl_display_get_fd(window.display);
+    // std.debug.print("fd: {d}\n", .{fd});
+    var fds = [1]std.posix.pollfd{
+        std.posix.pollfd{
+            .fd = fd,
+            .events = std.posix.POLL.IN,
+            .revents = 0,
+        },
+    };
+    const count = std.posix.poll(&fds, to) catch 0;
+
+    if (count > 0) {
+        _ = wl.wl_display_dispatch(window.display);
+    }
+
+    for (window.events.items) |event| {
+        events.append(event) catch {};
+    }
+    window.events.clearRetainingCapacity();
+
+    if (events.items.len > 1) {
+        return Backend.Event{ .Many = events };
+    } else if (events.items.len == 1) {
+        const ev = events.orderedRemove(0);
+        events.deinit();
+        return ev;
+    } else {
         return Backend.Event.Timeout;
     }
+}
 
-    fn getSize(ptr: *anyopaque) lib.Vec2 {
-        const window = @as(*Self, @ptrCast(@alignCast(ptr)));
+fn getSize(dataptr: *anyopaque) lib.Vec2 {
+    const window = @as(*Self, @ptrCast(@alignCast(dataptr)));
 
-        return .{
-            .row = @as(usize, @intCast(window.height)) / FONTHEIGHT / FONTSIZE / 2,
-            .col = @as(usize, @intCast(window.width)) / FONTWIDTH / FONTSIZE / 2,
-        };
-    }
-};
+    const size: lib.Vec2 = .{
+        .row = @as(usize, @intCast(window.height)) / desktop.CHAR_HEIGHT,
+        .col = @as(usize, @intCast(window.width)) / desktop.CHAR_WIDTH,
+    };
+    root.log(@src(), .info, "size: {any}", .{size});
+    return size;
+}
 
 pub fn backend(window: *Self) Backend {
     return Backend{
         .dataptr = window,
         .vtable = &Backend.VTable{
-            .draw = thunk.draw,
-            .poll = thunk.pollEvent,
-            .deinit = thunk.deinit,
-            .render = thunk.render,
-            .getSize = thunk.getSize,
-            .setCursor = thunk.setCursor,
+            .draw = draw,
+            .poll = pollEvent,
+            .deinit = deinit,
+            .render = render,
+            .getSize = getSize,
+            .setCursor = setCursor,
         },
     };
 }
@@ -391,8 +489,29 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
     // escape_utf8(buf);
     // std.debug.print(SPACER ++ "utf8: '{s}'\n", .{buf[0..12]});
 
-    if (desktop.parseKey(sym, pressed, &window.modifiers)) |event| {
-        window.events.append(window.a, event) catch {};
+    if (desktop.parseKey(sym, pressed, &window.modifiers)) |ksym| {
+        if (pressed) {
+            root.log(@src(), .info, "keypress down: {c}", .{ksym.character});
+
+            const now = std.time.milliTimestamp();
+            window.pressedkeys.append(window.a, .{
+                .start = true,
+                .time = now,
+                .key = ksym.character,
+            }) catch {};
+            window.events.append(window.a, Backend.Event{ .Key = ksym }) catch {};
+        } else {
+            root.log(@src(), .info, "keypress up: {c}", .{ksym.character});
+
+            var index: ?usize = null;
+            for (window.pressedkeys.items, 0..) |pressedkey, i| {
+                if (pressedkey.key == ksym.character) {
+                    index = i;
+                    break;
+                }
+            }
+            if (index) |idx| _ = window.pressedkeys.swapRemove(idx);
+        }
     }
 }
 
@@ -435,7 +554,12 @@ const wl_keyboard_listener = wl.wl_keyboard_listener{
             _ = wl_keyboard;
 
             const window: *Window = @alignCast(@ptrCast(data));
-            window.repeat = .{ .rate = rate, .delay = delay };
+            _ = window;
+
+            // I dont like my servers repeat rate so I use my own
+            const rep = .{ .rate = rate, .delay = delay };
+            root.log(@src(), .info, "server sent repeat: {any}", .{rep});
+            // window.repeat = rep;
         }
     }.repeat_info),
 };
@@ -593,7 +717,8 @@ const wl_registry_listener = wl.wl_registry_listener{
 const FrameBuffer = struct {
     width: i32 = 0,
     height: i32 = 0,
-    data: []align(4096) u8 = &[_]u8{},
+    // data: []align(4096) u8 = &[_]u8{},
+    data: []u8 = &[_]u8{},
 
     pub fn init(a: std.mem.Allocator, width: i32, height: i32) !FrameBuffer {
         const amount = @as(usize, @intCast(width * height * 4));
@@ -608,202 +733,5 @@ const FrameBuffer = struct {
 
     pub fn deinit(self: FrameBuffer, a: std.mem.Allocator) void {
         a.free(self.data);
-    }
-};
-
-const FONTWIDTH = 5;
-const FONTHEIGHT = 7;
-const FONTSIZE = 4;
-
-const GraphiRenderer = struct {
-    const State = void;
-
-    fn draw(window: *Window, pos: lib.Vec2, node: Backend.Node) void {
-        const width = @as(usize, @intCast(window.width));
-        const height = @as(usize, @intCast(window.height));
-
-        if (node.background) |bg| {
-            const rs: c_int = @intCast(pos.row * FONTHEIGHT * FONTSIZE);
-            const cs: c_int = @intCast(pos.col * FONTWIDTH * FONTSIZE);
-
-            const rgb = bg.toRgb();
-            const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
-
-            graphi.draw_rect(
-                @ptrCast(window.buffer.data),
-                width,
-                height,
-                cs,
-                rs,
-                FONTWIDTH * FONTSIZE,
-                FONTHEIGHT * FONTSIZE,
-                color,
-            );
-        }
-
-        switch (node.content) {
-            .Text => |ch| {
-                const rendercolor = node.foreground orelse .Black;
-                const rgb = rendercolor.toRgb();
-                // std.mem.writeInt()
-                const color: u32 = @bitCast([4]u8{ rgb[0], rgb[1], rgb[2], 0xFF });
-
-                var text_buf: [2]u8 = .{ ch, 0 };
-                // std.debug.print("ch: {c}\n", .{ch});
-
-                graphi.graphi_draw_text(
-                    @ptrCast(@alignCast(window.buffer.data.ptr)),
-                    width,
-                    height,
-                    &text_buf,
-                    @as(c_int, @intCast(pos.col * FONTWIDTH * FONTSIZE)),
-                    @as(c_int, @intCast(pos.row * FONTHEIGHT * FONTSIZE)),
-                    FONTSIZE,
-                    0,
-                    color, // graphi.BLACK,
-                );
-
-                // for (0..window.bitmap.height) |row| {
-                //     @memcpy(
-                //         window.buffer.data[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
-                //         window.bitmap.buffer[row * window.bitmap.width .. (row + 1) * window.bitmap.width],
-                //     );
-                // }
-            },
-            .Image => |_| {},
-            .None => {},
-        }
-    }
-
-    fn render(window: *Window, mode: Backend.VTable.RenderMode) void {
-        switch (mode) {
-            .begin => {
-                if (window.width != window.buffer.width or window.height != window.buffer.height) {
-                    root.log(@src(), .debug, "resizing buffer from {d}x{d} to {d}x{d}", .{
-                        window.buffer.width,
-                        window.buffer.height,
-                        window.width,
-                        window.height,
-                    });
-
-                    const buffer = FrameBuffer.init(
-                        window.a,
-                        window.width,
-                        window.height,
-                    ) catch {
-                        std.debug.print("Failed to create swap buffer\n", .{});
-                        return;
-                    };
-
-                    // const old = window.buffer;
-
-                    // // Copy overlapping region from old buffer to new buffer
-                    // const min_width: usize = @intCast(@min(old.width, window.width));
-                    // const min_height: usize = @intCast(@min(old.height, window.height));
-
-                    // // // Copy row by row to handle stride
-                    // var y: i32 = 0;
-                    // while (y < min_height) : (y += 1) {
-                    //     const old_row = window.buffer.data[@as(usize, @intCast(y * old.width * 4))..][0 .. min_width * 4];
-                    //     const new_row = buffer.data[@as(usize, @intCast(y * window.width * 4))..][0 .. min_width * 4];
-                    //     @memcpy(new_row, old_row);
-                    // }
-
-                    window.buffer.deinit(window.a);
-                    window.buffer = buffer;
-                } else {
-                    @memset(window.buffer.data, 44);
-                }
-            },
-            .end => {
-                // defaultRender(&window.buffer);
-                const buffer = createBuffer(window, window.buffer) catch |err| {
-                    std.debug.print("Failed to create buffer: {any}\n", .{err});
-                    return;
-                };
-                wl.wl_surface_attach(window.surface, buffer, 0, 0);
-                wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-                wl.wl_surface_commit(window.surface);
-            },
-        }
-    }
-
-    fn setCursor(window: *Window, pos: lib.Vec2) void {
-        // _ = wl.wl_pointer_set_cursor(window.pointer, 0, window.surface, pos.col, pos.row);
-
-        graphi.draw_rect(
-            @ptrCast(window.buffer.data),
-            @intCast(window.buffer.width),
-            @intCast(window.buffer.height),
-            @intCast(pos.col * FONTWIDTH * FONTSIZE),
-            @intCast(pos.row * FONTHEIGHT * FONTSIZE),
-            FONTWIDTH * FONTSIZE,
-            FONTHEIGHT * FONTSIZE,
-            graphi.LILAC,
-        );
-    }
-};
-
-const CairoRenderer = struct {
-    const cairo = desktop.cairo;
-
-    fn draw(window: *Window, pos: lib.Vec2, node: Backend.Node) void {
-        const ctx = window.cr orelse {
-            std.debug.print("Failed to create cairo context\n", .{});
-            return;
-        };
-
-        desktop.cairodraw(ctx, pos, node);
-    }
-
-    fn render(window: *Window, mode: Backend.VTable.RenderMode) void {
-        switch (mode) {
-            .begin => {
-                const width = @as(c_int, @intCast(window.width));
-                const height = @as(c_int, @intCast(window.height));
-
-                if (window.cr != null) {
-                    cairo.cairo_destroy(window.cr);
-                    window.cr = null;
-                }
-                if (window.frame != null) {
-                    cairo.cairo_surface_destroy(window.frame);
-                    window.frame = null;
-                }
-                const surface = cairo.cairo_image_surface_create(cairo.CAIRO_FORMAT_ARGB32, width, height);
-                const ctx = cairo.cairo_create(surface);
-
-                window.frame = surface;
-                window.cr = ctx;
-            },
-            .end => {
-                const surface = window.frame orelse return;
-                const data = cairo.cairo_image_surface_get_data(surface);
-                const width = cairo.cairo_image_surface_get_width(surface);
-                const height = cairo.cairo_image_surface_get_height(surface);
-                // const stride = c.cairo_image_surface_get_stride(surface);
-
-                const fbuffer = FrameBuffer.init(window.a, width, height) catch return;
-                defer fbuffer.deinit(window.a);
-
-                @memcpy(fbuffer.data, data[0 .. @as(usize, @intCast(width)) * @as(usize, @intCast(height)) * 4]); // stride=4
-                const buffer = createBuffer(window, fbuffer) catch |err| {
-                    std.debug.print("Failed to create buffer: {any}\n", .{err});
-                    return;
-                };
-                wl.wl_surface_attach(window.surface, buffer, 0, 0);
-                wl.wl_surface_damage_buffer(window.surface, 0, 0, std.math.maxInt(i32), std.math.maxInt(i32));
-                wl.wl_surface_commit(window.surface);
-            },
-        }
-    }
-
-    fn setCursor(window: *Window, pos: lib.Vec2) void {
-        // TODO: set cursor line, no! that should be dont by the renderer
-
-        // TODO: hes just a little guy, he just wants to chill
-        cairo.cairo_set_source_rgb(window.cr, 1, 0, 0);
-        cairo.cairo_rectangle(window.cr, @floatFromInt(pos.col), @floatFromInt(pos.row), FONTWIDTH, FONTHEIGHT);
-        cairo.cairo_fill(window.cr);
     }
 };
