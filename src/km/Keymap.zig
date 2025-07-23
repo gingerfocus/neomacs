@@ -6,10 +6,12 @@ const Keymap = @This();
 const km = @import("root.zig");
 
 const Storage = struct { keys: KeySequence, func: KeyFunction };
+pub const StorageList = std.MultiArrayList(Storage);
+
 /// TODO: make this unmanaged
-bindings: std.ArrayHashMapUnmanaged(KeySequence, KeyFunction, KeySequence.Ctx, true),
-fallbacks: std.MultiArrayList(Storage),
-targeters: std.MultiArrayList(Storage),
+bindings: StorageList,
+fallbacks: StorageList,
+targeters: StorageList,
 alloc: std.mem.Allocator,
 
 pub fn init(alloc: std.mem.Allocator) Keymap {
@@ -38,7 +40,7 @@ pub fn appender(self: *Keymap, mode: km.ModeId) Keymap.Appender {
 }
 
 pub fn put(self: *Keymap, a: std.mem.Allocator, keyseq: KeySequence, value: KeyFunction) !void {
-    try self.bindings.put(a, keyseq, value);
+    try self.bindings.append(a, .{ .keys = keyseq, .func = value });
 }
 
 /// A nice API for building keymaps
@@ -57,11 +59,10 @@ pub const Appender = struct {
     }
 
     pub fn put(self: *Appender, a: std.mem.Allocator, key: u16, value: KeyFunction) !void {
-        _ = a;
         var newprefix = self.curprefix;
         try newprefix.append(key);
 
-        try self.keymap.bindings.put(self.keymap.alloc, newprefix, value);
+        try self.keymap.bindings.append(a, .{ .keys = newprefix, .func = value });
     }
 
     pub fn fallback(self: *Appender, value: KeyFunction) void {

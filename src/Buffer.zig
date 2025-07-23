@@ -201,46 +201,6 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 //     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
 // }
 
-// pub fn buffer_replace_ch(state: *State) void {
-//     state.*.ch = frontend_getch(state.*.main_win);
-//     buffer.*.data.data[buffer.*.cursor] = @as(u8, @bitCast(@as(i8, @truncate(state.*.ch))));
-//     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-// }
-
-// pub fn bufferDeleteSelection(buffer: *EditBuffer, selection: Tar) !void {
-//     var start = arg_start;
-//     _ = &start;
-//     var end = arg_end;
-//     _ = &end;
-//     buffer_yank_selection(buffer, state, start, end);
-//     var size: usize = end -% start;
-//     _ = &size;
-//     if (size >= buffer.*.data.count) {
-//         size = buffer.*.data.count;
-//     }
-//     buffer.*.cursor = start;
-//     if ((buffer.*.cursor +% size) > buffer.*.data.count) return;
-//     if (state.*.cur_undo.data.capacity < size) {
-//         state.*.cur_undo.data.capacity = size;
-//         state.*.cur_undo.data.data = @as(*u8, @ptrCast(@alignCast(realloc(@as(?*anyopaque, @ptrCast(state.*.cur_undo.data.data)), @sizeOf(u8) *% size))));
-//         while (true) {
-//             if (!(state.*.cur_undo.data.data != @as(*u8, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0)))))))) {
-//                 frontend_end();
-//                 _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 166));
-//                 _ = fprintf(stderr, "could not alloc");
-//                 _ = fprintf(stderr, "\n");
-//                 exit(@as(c_int, 1));
-//             }
-//             if (!false) break;
-//         }
-//     }
-//     _ = strncpy(state.*.cur_undo.data.data, &buffer.*.data.data[buffer.*.cursor], size);
-//     state.*.cur_undo.data.count = size;
-//     _ = memmove(@as(?*anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor])), @as(?*const anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor +% size])), buffer.*.data.count -% end);
-//     buffer.*.data.count -%= size;
-//     buffer_calculate_rows(buffer);
-// }
-
 // pub fn buffer_insert_selection(arg_buffer: *Buffer, arg_selection: *Data, arg_start: usize) void {
 //     var buffer = arg_buffer;
 //     _ = &buffer;
@@ -359,15 +319,45 @@ pub const idgen = struct {
     }
 };
 
-pub fn delete(buffer: *Buffer, target: Visual) !void {
-    const a = buffer.alloc;
-
-    root.log(@src(), .debug, "delete motion", .{});
-
+pub fn replace(buffer: *Buffer, target: Visual, ch: u8) !void {
     const targ = target.normalize();
 
     std.debug.assert(targ.start.row <= targ.end.row);
     if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
+
+    root.log(@src(), .debug, "TODO: replace", .{});
+
+    var row: usize = targ.start.row;
+    while (row <= targ.end.row) : (row += 1) {
+        const line: *Buffer.Line = &buffer.lines.items[row];
+
+        var start = switch (targ.mode) {
+            .Line => 0,
+            .Range => if (row == targ.start.row) targ.start.col else 0,
+            .Block => targ.start.col,
+        };
+        start = @min(start, line.items.len);
+
+        const end = switch (targ.mode) {
+            .Line => line.items.len,
+            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
+            .Block => targ.end.col,
+        };
+
+        for (line.items[start..end]) |*och| {
+            och.* = ch;
+        }
+    }
+}
+
+pub fn delete(buffer: *Buffer, target: Visual) !void {
+    const targ = target.normalize();
+
+    std.debug.assert(targ.start.row <= targ.end.row);
+    if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
+
+    const a = buffer.alloc;
+    root.log(@src(), .debug, "delete motion", .{});
 
     var remove_range_begin: ?usize = null;
     var remove_range_len: usize = 0;

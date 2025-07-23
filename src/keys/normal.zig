@@ -53,7 +53,7 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
     try maps.put(a, norm('h'), km.KeyFunction.initstate(targeters.target_left));
 
     try maps.put(a, norm('G'), km.KeyFunction.initstate(targeters.target_bottom));
-    try maps.put(a, '$', km.KeyFunction.initstate(targeters.motion_end));
+    try maps.put(a, '$', km.KeyFunction.initstate(motions.end_of_line));
     try maps.put(a, '0', km.KeyFunction.initstate(targeters.motion_start));
 
     try maps.put(a, norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
@@ -200,10 +200,8 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void 
 
     var d = try maps.then(norm('d'));
     d.targeter(km.KeyFunction.initbuffer(keys.actions.delete));
-
     try d.put(a, norm('d'), km.KeyFunction.initstate(targeters.full_linewise));
     try initMotionKeys(a, &d);
-
 
     var c = try maps.then(norm('c'));
     c.targeter(km.KeyFunction.initbuffer(keys.actions.change));
@@ -211,7 +209,25 @@ pub fn initModifyingKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void 
 
     // const gq = try g.then(a, 'q');
     // _ = gq; // autofix
+
+    try maps.put(a, norm('D'), km.KeyFunction.initstate(functions.delete_end_of_line));
+    try maps.put(a, norm('C'), km.KeyFunction.initstate(functions.change_end_of_line));
+
+    var r = try maps.then(norm('r'));
+    r.fallback(km.KeyFunction.initstate(functions.replace_letter));
 }
+
+pub const motions = struct {
+    pub fn end_of_line(state: *State, _: km.KeyFunctionDataValue) !void {
+        const count = state.repeating.take();
+        const buffer = state.getCurrentBuffer();
+
+        const begin = buffer.position();
+        const end = targeters.end_of_line(buffer, count);
+
+        buffer.updateTarget(Buffer.VisualMode.Range, begin, end);
+    }
+};
 
 /// A collection of key targeters that can be applied in different contexts.
 const targeters = struct {
@@ -452,17 +468,15 @@ const targeters = struct {
         return std.ascii.isAlphanumeric(c) or c == '_';
     }
 
-    pub fn motion_end(state: *State, _: km.KeyFunctionDataValue) !void {
-        const count = state.repeating.take();
-        const buffer = state.getCurrentBuffer();
+    pub fn end_of_line(buffer: *Buffer, count: usize) lib.Vec2 {
+        var end = buffer.position();
 
-        const begin = buffer.position();
-        var end = begin;
-
-        end.row = @min(begin.row - (count - 1), buffer.lines.items.len - 1);
+        // move count-1, rows down
+        end.row = @min(end.row - (count - 1), buffer.lines.items.len - 1);
+        // move to end of line
         end.col = buffer.lines.items[buffer.row].items.len;
 
-        buffer.updateTarget(Buffer.VisualMode.Range, begin, end);
+        return end;
     }
 
     fn motion_start(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -607,5 +621,51 @@ const visuals = struct {
                 buffer.target = .{ .mode = mode, .start = cur, .end = cur };
             }
         }.set;
+    }
+};
+
+const functions = struct {
+    fn delete_end_of_line(state: *State, _: km.KeyFunctionDataValue) !void {
+        const count = state.repeating.take();
+        const buffer = state.getCurrentBuffer();
+
+        if (buffer.target) |target| {
+            try buffer.delete(target);
+            buffer.target = null;
+        } else {
+            const start = buffer.position();
+            const end = targeters.end_of_line(buffer, count);
+            try buffer.delete(.{ .start = start, .end = end });
+        }
+    }
+    fn change_end_of_line(state: *State, _: km.KeyFunctionDataValue) !void {
+        const count = state.takeRepeating();
+        const buffer = state.getCurrentBuffer();
+
+        if (buffer.target) |target| {
+            try buffer.delete(target);
+        } else {
+            const start = buffer.position();
+            const end = targeters.end_of_line(buffer, count);
+            try buffer.delete(.{ .start = start, .end = end });
+        }
+        buffer.setMode(ModeId.Insert);
+    }
+
+    fn replace_letter(state: *State, ctx: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+        const count = state.repeating.take();
+
+        const ch = ctx.character;
+
+        const target = buffer.target orelse blk: {
+            const start = buffer.position();
+            var end = start;
+            for (0..count) |_| {
+                end = buffer.moveRight(end, 1);
+            }
+            break :blk Buffer.Visual{ .start = start, .end = end };
+        };
+        try buffer.replace(target, ch.character);
     }
 };

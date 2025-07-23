@@ -4,16 +4,11 @@
 
 # For 0.1.1
 - [x] Basic Targeters (w/e/b, t/f, $/0)
-- [x] Deletion (d/x)
-- [ ] D
-- [x] Changing (c)
-- [ ] C
-- [ ] Replace (r)
+- [x] Deletion (d/x/D)
+- [x] Changing (c/C)
+- [x] Replace (r)
 - [ ] Yank (y)
-- [x] Visual Mode Targeting
-  - [x] Range
-  - [x] Line
-  - [x] Block
+- [ ] Visual Mode Targeting (Right, Line, Block)
 - [ ] Scroll off
 
 # For 0.2.0
@@ -73,5 +68,6 @@
 - [ ] TigerStyle type fuzzing
   - [ ] Compared to Neovim
 - [ ] file co-operation
+- [ ] Static compile Wayland+Wgpu backend
 
 https://typst.app/universe/package/timeliney

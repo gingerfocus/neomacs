@@ -190,10 +190,9 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
     var foundmatch: bool = false;
 
     const thunk = struct {
-        fn itermaps(argstate: *State, maps: *km.Keymap, nextstate: *const km.KeySequence, foundprefix: *bool) !bool {
-            var iter = maps.bindings.iterator();
-            while (iter.next()) |entry| {
-                const k = entry.key_ptr;
+        fn itermaps(argstate: *State, maps: *km.Keymap.StorageList, nextstate: *const km.KeySequence, foundprefix: *bool) !bool {
+            const keysitems = maps.items(.keys);
+            for (keysitems, 0..) |k, i| {
 
                 // can't possibly match
                 if (!k.mode.eql(nextstate.mode)) continue;
@@ -203,7 +202,8 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
                 // could be the one...
                 if (k.len == nextstate.len) {
                     if (std.mem.eql(u16, k.keys[0..k.len], nextstate.keys[0..k.len])) {
-                        try entry.value_ptr.run(argstate);
+                        const func = maps.items(.func)[i];
+                        try func.run(argstate);
                         return true;
                     }
                 }
@@ -223,39 +223,27 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
 
     // zig bug: error targets tag token
     blkrun: switch (BlockState.binding) {
-        .binding => if (try thunk.itermaps(state, &buffer.local_keymap, &newstate, &foundmatch)) {
+        .binding => if (try thunk.itermaps(state, &buffer.local_keymap.bindings, &newstate, &foundmatch)) {
             continue :blkrun BlockState.targeter;
-        } else if (try thunk.itermaps(state, state.global_keymap, &newstate, &foundmatch)) {
+        } else if (try thunk.itermaps(state, &state.global_keymap.bindings, &newstate, &foundmatch)) {
             continue :blkrun BlockState.targeter;
         } else {
             continue :blkrun BlockState.fallback;
         },
         .fallback => {
-            // no need to check prefixes
-            const bkeyslice = buffer.local_keymap.fallbacks.items(.keys);
-            for (bkeyslice, 0..) |keyseq, i| {
-                if (keyseq.eql(oldstate)) {
-                    const tkf = buffer.local_keymap.fallbacks.items(.func)[i];
-                    // std.log.info("running local targeter", .{});
-                    try tkf.run(state);
-                    continue :blkrun BlockState.targeter;
-                }
+            // yes need to check prefixes as modes like r have no keymaps and
+            // only a fallback
+
+            if (try thunk.itermaps(state, &buffer.local_keymap.fallbacks, &oldstate, &foundmatch)) {
+                continue :blkrun BlockState.targeter;
+            } else if (try thunk.itermaps(state, &state.global_keymap.fallbacks, &oldstate, &foundmatch)) {
+                continue :blkrun BlockState.targeter;
+            } else {
+                // we could still find something
+                if (foundmatch) continue :blkrun BlockState.none;
+
+                continue :blkrun BlockState.end;
             }
-
-            const gkeyslice = state.global_keymap.fallbacks.items(.keys);
-            for (gkeyslice, 0..) |keyseq, i| {
-                if (keyseq.eql(oldstate)) {
-                    const tkf = state.global_keymap.fallbacks.items(.func)[i];
-                    // std.log.info("running global targeter", .{});
-                    try tkf.run(state);
-                    continue :blkrun BlockState.targeter;
-                }
-            }
-
-            // we could still find something
-            if (foundmatch) continue :blkrun BlockState.none;
-
-            continue :blkrun BlockState.end;
         },
         .targeter => {
             if (buffer.target == null) continue :blkrun BlockState.end;
