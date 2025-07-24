@@ -2,6 +2,7 @@ const root = @import("root.zig");
 const std = root.std;
 const lib = root.lib;
 const km = root.km;
+const Undo = @import("Undo.zig");
 
 const State = root.State;
 
@@ -24,6 +25,8 @@ target: ?Visual = null,
 
 /// literal data in the buffer
 lines: std.ArrayListUnmanaged(Line),
+
+undos: Undo.UndoHistory,
 
 row: usize = 0,
 col: usize = 0,
@@ -51,7 +54,6 @@ mode: km.ModeId = km.ModeId.Normal,
 
 /// TODO: move to the buffer structure
 repeating: Repeating = .{},
-
 
 pub const Line = std.ArrayListUnmanaged(u8);
 
@@ -120,6 +122,7 @@ pub fn init(
         .filename = filename,
         .hasbackingfile = true,
         .lines = lines.moveToUnmanaged(),
+        .undos = Undo.UndoHistory.init(a),
         .global_keymap = global_keymap,
         .local_keymap = km.Keymap.init(a),
         .alloc = a,
@@ -131,6 +134,7 @@ pub fn deinit(buffer: *Buffer) void {
         line.deinit(buffer.alloc);
     }
     buffer.lines.deinit(buffer.alloc);
+    buffer.undos.deinit();
     buffer.local_keymap.deinit();
 
     buffer.* = undefined;
@@ -157,6 +161,7 @@ pub fn position(buffer: *Buffer) lib.Vec2 {
 }
 
 pub fn insertCharacter(buffer: *Buffer, ch: u8) !void {
+    try buffer.undos.recordInsert(buffer.position(), &.{ch});
     if (ch == '\n') {
         try buffer.newlineInsert(buffer.alloc);
         return;
@@ -178,6 +183,8 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 
     if (buffer.col == 0) {
         // get the coluimn now before its length changes
+        const deleted_text = &.{'\n'};
+        try buffer.undos.recordDelete(buffer.position(), buffer.position(), deleted_text);
         buffer.col = buffer.lines.items[buffer.row - 1].items.len;
 
         // delete the last character of the previous line
@@ -191,6 +198,9 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
         buffer.row -= 1;
     } else {
         // delete the character before the cursor
+        const deleted_char = buffer.lines.items[buffer.row].items[buffer.col - 1];
+        try buffer.undos.recordDelete(buffer.position(), buffer.position(), &.{deleted_char});
+
         buffer.col -= 1;
 
         var line = &buffer.lines.items[buffer.row];
