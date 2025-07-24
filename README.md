@@ -42,10 +42,9 @@ zig build --release=small
 
 
 ## All features
-You can also build a fully capable editor by informing the build system of what
-you can link to.
+You can also install a fully capable editor by using the recomeneded flags:
 ```bash
-zig build -Dgtk=true -Dstatic-lua=false --release=safe
+zig build install --release=safe --prefix ~/.local -Dwayland=true
 ```
 
 ## Progress

@@ -191,6 +191,13 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
         fn itermaps(argstate: *State, maps: *km.Keymap.StorageList, nextstate: *const km.KeySequence, foundprefix: *bool) !bool {
             const keysitems = maps.items(.keys);
             for (keysitems, 0..) |k, i| {
+                // switch (nextstate.better(nextstate.len, k)) {
+                //     .better => unreachable,
+                //     .equal => {
+                //         // run function
+                //     },
+                //     .worse => continue,
+                // }
 
                 // can't possibly match
                 if (!k.mode.eql(nextstate.mode)) continue;
@@ -246,44 +253,36 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
             // TODO: find the best match for the targeter
             // if e->a has a targeter and the sequence is e->a->b then it should match that one
 
-            var bestlen: ?usize = null;
+            var bestlen: u8 = 0;
             var bestkey: ?km.KeyFunction = null;
 
             const gkeyslice = state.global_keymap.targeters.items(.keys);
-            for (gkeyslice, 0..) |keyseq, i| {
-                // too long
-                if (keyseq.len > oldstate.len) continue;
-
-                if (bestlen) |len| if (len > keyseq.len) continue;
-
-                if (keyseq.mode.eql(oldstate.mode)) {
-                    if (std.mem.eql(u16, keyseq.keys[0..keyseq.len], oldstate.keys[0..keyseq.len])) {
-                        bestlen = keyseq.len;
-                        bestkey = state.global_keymap.targeters.items(.func)[i];
-
-                        // cant be better
-                        if (keyseq.len == oldstate.len) break;
-                    }
-                }
-            }
+            for (gkeyslice, 0..) |keyseq, i| switch (oldstate.better(bestlen, keyseq)) {
+                .better => {
+                    bestlen = keyseq.len;
+                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                },
+                .equal => {
+                    bestlen = keyseq.len;
+                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                    break;
+                },
+                .worse => continue,
+            };
 
             const bkeyslice = buffer.local_keymap.targeters.items(.keys);
-            for (bkeyslice, 0..) |keyseq, i| {
-                // too long
-                if (keyseq.len > oldstate.len) continue;
-
-                if (bestlen) |len| if (len > keyseq.len) continue;
-
-                if (keyseq.mode.eql(oldstate.mode)) {
-                    if (std.mem.eql(u16, keyseq.keys[0..keyseq.len], oldstate.keys[0..keyseq.len])) {
-                        bestlen = keyseq.len;
-                        bestkey = buffer.local_keymap.targeters.items(.func)[i];
-
-                        // cant be better
-                        if (keyseq.len == oldstate.len) break;
-                    }
-                }
-            }
+            for (bkeyslice, 0..) |keyseq, i| switch (oldstate.better(bestlen, keyseq)) {
+                .better => {
+                    bestlen = keyseq.len;
+                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                },
+                .equal => {
+                    bestlen = keyseq.len;
+                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                    break;
+                },
+                .worse => continue,
+            };
 
             if (bestkey) |tkf| {
                 // root.log(@src(), .debug, "found targeter {any}", .{tkf});

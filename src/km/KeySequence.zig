@@ -36,6 +36,28 @@ pub fn init(mode: km.ModeId, keys: []const u8) KeySequence {
     return seq;
 }
 
+const CompareResult = enum { better, equal, worse };
+
+/// Compares both a and b to src and return true if b matches better than a
+pub fn better(src: KeySequence, bestlen: u8, b: KeySequence) CompareResult {
+    // std.debug.assert(src.len != 0);
+
+    // wrong mode cant match
+    // TODO: remove this once the mode is moved to the array, also assert len
+    // is not 0
+    if (!src.mode.eql(b.mode)) return .worse;
+
+    // too long
+    if (b.len > src.len) return .worse;
+
+    // not better, equal length is ok
+    if (b.len < bestlen) return .worse;
+
+    if (std.mem.eql(u16, src.keys[0..b.len], b.keys[0..b.len])) {
+        return if (b.len == src.len) .equal else .better;
+    } else return .worse;
+}
+
 pub fn eql(
     a: KeySequence,
     b: KeySequence,

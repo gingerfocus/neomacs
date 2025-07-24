@@ -176,8 +176,6 @@ fn draw(ptr: *anyopaque, pos: lib.Vec2, node: Backend.Node) void {
     };
 
     desktop.cairodraw(ctx, pos, node);
-
-    return;
 }
 
 fn render(ptr: *anyopaque, mode: Backend.VTable.RenderMode) void {
@@ -468,23 +466,16 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
         else => unreachable,
     };
 
-    // var buf: [128]u8 = undefined;
+    // TODO: this is the only xkb function, other than the modifier state, perhaps I can make it myself
     const sym: wl.xkb_keysym_t = wl.xkb_state_key_get_one_sym(window.xkb_state, key + 8);
-
-    // _ = wl.xkb_keysym_get_name(sym, &buf, buf.len);
-    // std.debug.print(SPACER ++ "sym: {s} ({}), \n", .{ buf[0..12], sym });
-
-    // const keycode: u32 = if (pressed) key + 8 else 0;
-
-    // _ = wl.xkb_state_key_get_utf8(window.xkb_state, keycode, &buf, buf.len);
-    // escape_utf8(buf);
-    // std.debug.print(SPACER ++ "utf8: '{s}'\n", .{buf[0..12]});
 
     if (desktop.parseKey(sym, pressed, &window.modifiers)) |ksym| {
         if (pressed) {
-            // root.log(@src(), .info, "keypress down: {c}", .{ksym.character});
+            // root.log(@src(), .info, "keypress down: {d}", .{ksym.character});
 
+            // coult also use the time value
             const now = std.time.milliTimestamp();
+
             window.pressedkeys.append(window.a, .{
                 .start = true,
                 .time = now,
@@ -492,16 +483,14 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
             }) catch {};
             window.events.append(window.a, Backend.Event{ .Key = ksym }) catch {};
         } else {
-            // root.log(@src(), .info, "keypress up: {c}", .{ksym.character});
+            // root.log(@src(), .info, "keypress up: {d}", .{ksym.character});
 
             var index: ?usize = null;
             for (window.pressedkeys.items, 0..) |pressedkey, i| {
 
                 // Fixes bug where releasing shift can cause the key to repeat
                 // forever
-                if (std.ascii.toLower(pressedkey.key) ==
-                    std.ascii.toLower(ksym.character))
-                {
+                if (is_upper_letter(pressedkey.key, ksym.character)) {
                     index = i;
                     break;
                 }
@@ -509,6 +498,15 @@ fn wl_keyboard_key(data: ?*anyopaque, wl_keyboard: ?*wl.wl_keyboard, serial: u32
             if (index) |idx| _ = window.pressedkeys.swapRemove(idx);
         }
     }
+}
+
+// HACK: this works but it would be better if there was some api for the
+// physical key pressed that we can use
+fn is_upper_letter(c1: u8, c2: u8) bool {
+    if (c1 == 58 and c2 == 59) return true;
+    if (c2 == 58 and c1 == 59) return true;
+
+    return (std.ascii.toLower(c1) == std.ascii.toLower(c2));
 }
 
 // static void print_modifiers(struct Window *state, uint32_t mods) {

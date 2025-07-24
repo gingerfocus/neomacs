@@ -66,21 +66,12 @@ pub fn parseKey(
                 .modifiers = modifiers,
             };
         },
+
         trm.KeySymbol.Space.toBits(),
         => .{
             .character = @intCast(key),
             .modifiers = mods.*,
         },
-
-        // gtk.GDK_KEY_Left => trm.Key.Left,
-        // gtk.GDK_KEY_Right => trm.Key.Right,
-        // gtk.GDK_KEY_Up => trm.Key.Up,
-        // gtk.GDK_KEY_Down => trm.Key.Down,
-        // gtk.GDK_KEY_BackSpace => trm.Key.Backspace,
-        // gtk.GDK_KEY_Delete => trm.Key.Delete,
-        // gtk.GDK_KEY_Return => trm.Key.Enter,
-        // gtk.GDK_KEY_Escape => trm.Key.Escape,
-        // gtk.GDK_KEY_Tab => trm.Key.Tab,
 
         else => {
             std.debug.print("unknown key: {} ({})\n", .{ key, pressed });

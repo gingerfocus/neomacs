@@ -5,7 +5,9 @@
 - [ ] More motions
   - [ ] W/E/B
   - [ ] a/i "(){}[]"
+- [ ] Fix t/f motions getting stuck
 - [ ] Undo
+- [ ] Build on Windows + MacOS
 
 # For 0.2.0
 - [ ] Lua API
@@ -14,6 +16,9 @@
     - [ ] Oil/Netrw/Dired/Neotree alternative
     - [ ] Packager
 - [ ] R mode
+- [ ] Native Fennel Support
+- [ ] Component events
+  - [ ] Auto commands
 
 # Refactors
 - [x] move repeat structure to buffer
@@ -25,6 +30,7 @@
 - [ ] remove row and col from Buffer (move to curosr object)
   - [ ] remove calls to feild names in other files
 - [ ] reuse motion keys map (dont call initMotionKeys on most submaps)
+- [ ] remove xkb dependency for wayland
 
 # Later
 - [x] Wayland Keyrepeat
@@ -40,7 +46,6 @@
 - [ ] Vim `s` or Flash `s`?
 - [ ] `z` commands
   - [ ] folds
-- [ ] Component events (subscriptions)
 - [ ] swaping the start and end position visual selection
 - [ ] Rope Buffers / CRDT / VSR
 - [ ] Multi Backend

@@ -3,8 +3,9 @@ const builtin = @import("builtin");
 
 pub fn build(b: *std.Build) !void {
     const usegtk = b.option(bool, "gtk", "compile the gtk backend") orelse false;
-    const usewayland = b.option(bool, "wayland", "compile the wayland backend") orelse false;
+    const usewayland = b.option(bool, "wayland", "compile the wayland backend") orelse true;
     const usewgpu = b.option(bool, "wgpu", "compile the wgpu backend") orelse false;
+
     const needsdyn = usegtk or usewayland or usewgpu;
 
     const argstatic = b.option(bool, "static", "try to complile everything statically") orelse true;
@@ -51,18 +52,13 @@ pub fn build(b: *std.Build) !void {
     neomacs.addImport("thermit", terminal.module("thermit"));
     neomacs.addImport("options", options.createModule());
 
-    // neomacsExe.linkSystemLibrary("tree-sitter");
     neomacs.link_libc = true;
+
+    // neomacsExe.linkSystemLibrary("tree-sitter");
 
     // ---------
 
     addLuaImport(b, neomacs, staticlua, target, optimize);
-
-    // ---------
-
-    // if (b.lazyDependency("mach", .{ .target = target, .optimize = optimize })) |mach| {
-    //     neomacs.addImport("mach", mach.module("mach"));
-    // }
 
     // ---------
 
@@ -80,22 +76,7 @@ pub fn build(b: *std.Build) !void {
 
         neomacs.linkSystemLibrary("wayland-client", .{});
         neomacs.linkSystemLibrary("xkbcommon", .{});
-
-        // neomacs.linkSystemLibrary("freetype2", .{});
-
         neomacs.linkSystemLibrary("cairo", .{});
-
-        // ---------
-
-        // neomacs.linkSystemLibrary("graphi", .{});
-
-        // const graphi = b.dependency("graphi", .{
-        //     .target = target,
-        //     .optimize = optimize,
-        // });
-        //
-        // neomacs.linkLibrary(graphi.artifact("graphi"));
-        // neomacs.addIncludePath(graphi.namedLazyPath("include"));
     }
 
     if (usewgpu) {
@@ -154,18 +135,6 @@ pub fn build(b: *std.Build) !void {
 
     // -------------------------------------------------------------------------
 
-    const zssExe = b.addExecutable(.{
-        .name = "zss",
-        .root_source_file = b.path("src/bin/zss.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    zssExe.root_module.addImport("neomacs", neomacs);
-
-    addBuildAndRunSteps(b, "zss", zssExe);
-
-    // -------------------------------------------------------------------------
-
     // const treesitter = b.dependency("tree-sitter", .{
     //     .target = target,
     //     .optimize = optimize,
@@ -187,22 +156,7 @@ pub fn build(b: *std.Build) !void {
 
     // -------------------------------------------------------------------------
 
-    // const wevExe = b.addExecutable(.{
-    //     .root_source_file = b.path("src/bin/wev.zig"),
-    //     .name = "wev",
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    //
-    // wevExe.root_module.addImport("neomacs", neomacs);
-    //
-    // addBuildAndRunSteps(b, "wev", wevExe);
-
-    // -------------------------------------------------------------------------
-
     const check = b.step("check", "Lsp Check Step");
-    check.dependOn(&zssExe.step);
-    // check.dependOn(&wevExe.step);
     check.dependOn(&neomacsExe.step);
 
     // -------------------------------------------------------------------------
