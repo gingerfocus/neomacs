@@ -1,12 +1,12 @@
 const std = @import("std");
-const root = @import("../../root.zig");
+const root = @import("../root.zig");
 const lib = root.lib;
 const km = root.km;
 
 const State = root.State;
 const Backend = root.Backend;
 const Color = Backend.Color;
-const View = @import("../Component.zig").View;
+const View = @import("../component.zig").View;
 
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
     _ = self;

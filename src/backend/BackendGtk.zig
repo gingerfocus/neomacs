@@ -93,9 +93,10 @@ fn eventDraw(widget: *gtk.GtkWidget, cr: *desktop.cairo.cairo_t, self: *Self) ca
     self.cr = cr;
 
     // Call the render graph function directly now for immediate rendering
-    const state = root.state();
-    const render = @import("../render/root.zig");
-    render.draw(state) catch {};
+
+    // const state = root.state();
+    // const render = @import("../render/root.zig");
+    // render.draw(state) catch {};
 
     // remove drawing capabilities
     self.cr = null;

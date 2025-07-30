@@ -28,7 +28,6 @@ pub fn init(
     insert.targeter(km.KeyFunction.initstate(actions.move));
     insert.fallback(km.KeyFunction.initstate(insertsfn.append));
 
-
     // insert
     try initInsertKeys(a, &insert);
     try insert.put(a, norm(Ks.Esc.toBits()), km.KeyFunction.initsetmod(ModeId.Normal));
@@ -50,7 +49,7 @@ pub fn init(
 
 fn deleteBufferCharacter(state: *State, _: km.KeyFunctionDataValue) !void {
     const buffer = state.getCurrentBuffer();
-    try buffer.bufferDelete(state.a);
+    try buffer.delete_character(state.a);
 }
 
 fn insertTab(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {

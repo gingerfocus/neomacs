@@ -10,6 +10,9 @@ const State = root.State;
 const Buffer = @This();
 const Cursor = lib.Vec2;
 
+const LineStructure = struct { beg: usize, end: usize };
+const usenewthinger = false;
+
 alloc: std.mem.Allocator,
 
 /// Unique id for this buffer, never changes once created
@@ -27,9 +30,11 @@ target: ?Visual = null,
 
 /// literal data in the buffer
 lines: std.ArrayListUnmanaged(Line),
+
 /// As a long term pivot strategy I will try to manage both the rope and the
 /// lines structure until I can remove one
-content: rope.Rope,
+content: *rope.Rope,
+contentlines: std.ArrayListUnmanaged(LineStructure) = .{},
 
 undos: undo.UndoHistory,
 undoing: bool = false,
@@ -61,8 +66,11 @@ repeating: Repeating = .{},
 
 pub const Line = std.ArrayListUnmanaged(u8);
 
+pub const VisualMode = Visual.Mode;
 pub const Visual = struct {
-    mode: VisualMode = .Range,
+    pub const Mode = enum { Range, Line, Block };
+
+    mode: Visual.Mode = .Range,
     start: lib.Vec2,
     end: lib.Vec2,
 
@@ -82,12 +90,6 @@ pub const Visual = struct {
     }
 };
 
-pub const VisualMode = enum {
-    Range,
-    Line,
-    Block,
-};
-
 pub fn setMode(buffer: *Buffer, mode: km.ModeId) void {
     buffer.mode = mode;
 
@@ -103,7 +105,9 @@ pub fn init(
     global_keymap: *km.Keymap,
     filename: []const u8,
 ) !Buffer {
-    const roper = rope.Rope{ .allocator = a };
+    const roper = try rope.Rope.create(a, "");
+    var roperlines = std.ArrayListUnmanaged(LineStructure){};
+    var index: usize = 0;
 
     var lines = std.ArrayList(Line).init(a);
 
@@ -115,20 +119,23 @@ pub fn init(
             // if (line.len == 0) break;
 
             const l = Line.fromOwnedSlice(line);
-
             try lines.append(l);
+
+            try roper.append(line);
+            try roperlines.append(a, .{ .beg = index, .end = index + line.len });
+            index += line.len;
         }
     } else |_| {}
-
-    // not stable
-    // const fid = std.hash.murmur.Murmur2_64.hash(filename);
 
     return Buffer{
         .id = idgen.next(),
         .filename = filename,
         .hasbackingfile = true,
         .lines = lines.moveToUnmanaged(),
+
         .content = roper,
+        .contentlines = roperlines,
+
         .undos = undo.UndoHistory.init(a),
         .undoing = false,
         .global_keymap = global_keymap,
@@ -143,6 +150,7 @@ pub fn deinit(buffer: *Buffer) void {
     }
     buffer.lines.deinit(buffer.alloc);
     buffer.content.destroy();
+    buffer.contentlines.deinit(buffer.alloc);
 
     buffer.undos.deinit();
     buffer.local_keymap.deinit();
@@ -150,7 +158,7 @@ pub fn deinit(buffer: *Buffer) void {
     buffer.* = undefined;
 }
 
-pub fn updateTarget(buffer: *Buffer, mode: Buffer.VisualMode, start: lib.Vec2, end: lib.Vec2) void {
+pub fn updateTarget(buffer: *Buffer, mode: Visual.Mode, start: lib.Vec2, end: lib.Vec2) void {
     if (buffer.target) |*t| {
         // if (t.start.cmp(start) == .gt) t.start = start;
         t.end = end;
@@ -170,7 +178,37 @@ pub fn position(buffer: *Buffer) lib.Vec2 {
     return .{ .row = buffer.row, .col = buffer.col };
 }
 
+/// Convertes a cursor into and index into the rope buffer.
+fn getIndex(buffer: *const Buffer, cursor: Cursor) usize {
+    _ = buffer;
+    _ = cursor;
+
+    unreachable;
+}
+
 pub fn insertCharacter(buffer: *Buffer, ch: u8) !void {
+    if (usenewthinger) {
+        const index = getIndex(buffer, buffer.position());
+        try buffer.content.insert(index, &.{ch});
+
+        // split the line
+        if (ch == '\n') {
+            const row = &buffer.contentlines.items[buffer.row];
+
+            const end = row.end;
+            row.end = row.beg + buffer.col;
+
+            try buffer.contentlines.insert(buffer.alloc, buffer.row, .{ .beg = row.end, .end = end });
+        }
+
+        buffer.contentlines.items[buffer.row].end += 1;
+        // TODO: use reactive programing to lazyily calculate the rows by just making each subsequent row depend on the last
+        for (buffer.contentlines.items[buffer.row + 1 ..]) |*r| {
+            r.beg += 1;
+            r.end += 1;
+        }
+    }
+
     if (!buffer.undoing) {
         try buffer.undos.recordInsert(buffer.position(), &.{ch});
     }

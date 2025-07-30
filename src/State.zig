@@ -9,8 +9,7 @@ const keys = root.keys;
 const Buffer = root.Buffer;
 const Args = root.Args;
 
-const render = @import("render/root.zig");
-const Component = @import("render/Component.zig");
+const component = root.component;
 const Backend = @import("backend/Backend.zig");
 
 const State = @This();
@@ -110,7 +109,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
 pub fn setup(state: *State) !void {
     lua.setup(state.L);
     try keys.init(state.a, state.global_keymap);
-    try render.init(state);
+    try component.init(state);
 }
 
 pub fn deinit(state: *State) void {
@@ -331,8 +330,8 @@ pub fn bufferPrev(state: *State) void {
 }
 
 const Mountable = struct {
-    view: Component.View,
-    comp: Component,
+    view: component.View,
+    comp: component.Component,
 };
 
 pub const Config = struct {

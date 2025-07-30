@@ -231,7 +231,7 @@ pub const motions = struct {
         const begin = buffer.position();
         const end = targeters.end_of_line(buffer, count);
 
-        buffer.updateTarget(Buffer.VisualMode.Range, begin, end);
+        buffer.updateTarget(Buffer.Visual.Mode.Range, begin, end);
     }
 };
 
@@ -257,7 +257,7 @@ const targeters = struct {
             if (end.row >= buffer.lines.items.len) return;
         }
 
-        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
+        buffer.updateTarget(Buffer.Visual.Mode.Range, start, end);
     }
 
     /// Selects `count` full lines starting from the current cursor position.
@@ -495,7 +495,7 @@ const targeters = struct {
         end.row = std.math.sub(usize, begin.row, count - 1) catch 0;
         end.col = 0;
 
-        buffer.updateTarget(Buffer.VisualMode.Range, begin, end);
+        buffer.updateTarget(Buffer.Visual.Mode.Range, begin, end);
     }
 
     // pub fn buffer_next_brace(arg_buffer: *Buffer) void {
@@ -617,7 +617,7 @@ const inserts = struct {
 
 /// These are the visual mode shims that set a trivial target then move to visual mode
 const visuals = struct {
-    fn set(comptime mode: Buffer.VisualMode) (*const fn (*State, km.KeyFunctionDataValue) anyerror!void) {
+    fn set(comptime mode: Buffer.Visual.Mode) (*const fn (*State, km.KeyFunctionDataValue) anyerror!void) {
         return struct {
             fn set(state: *State, _: km.KeyFunctionDataValue) !void {
                 const buffer = state.getCurrentBuffer();

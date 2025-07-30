@@ -1,19 +1,24 @@
-const std = @import("std");
-const root = @import("../root.zig");
-const trm = root.trm;
+//! TODO: figure out how to compose these, have one component nest others
+//!
+const root = @import("root.zig");
+const std = root.std;
 const lib = root.lib;
+const trm = root.trm;
 
-const State = root.State;
-const Backend = State.Backend;
 const Node = Backend.Node;
 const Color = Backend.Color;
-const Component = @import("Component.zig");
-const View = Component.View;
+const State = root.State;
+const Backend = root.Backend;
 
-const StatusBar = @import("components/StatusBar.zig");
-const LineNumbers = @import("components/LineNumbers.zig");
-const MainEditor = @import("components/MainEditor.zig");
-const CommandLine = @import("components/CommandLine.zig");
+pub const View = lib.Vec4;
+pub const Component = struct {
+    dataptr: *anyopaque,
+    vtable: *const VTable,
+
+    pub const VTable = struct {
+        renderFn: *const fn (*anyopaque, state: *State, writer: *Backend, veiw: View) void,
+    };
+};
 
 pub const sidebarWidth = 3;
 pub const statusbarHeight = 2;
@@ -25,6 +30,11 @@ const id = struct {
         return static;
     }
 };
+
+const StatusBar = @import("components/StatusBar.zig");
+const LineNumbers = @import("components/LineNumbers.zig");
+const MainEditor = @import("components/MainEditor.zig");
+const CommandLine = @import("components/CommandLine.zig");
 
 /// TODO: change args so this doesnt have to take a finished state but can be
 /// done as part of startup
