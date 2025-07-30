@@ -2,11 +2,13 @@ const root = @import("root.zig");
 const std = root.std;
 const lib = root.lib;
 const km = root.km;
-const Undo = @import("Undo.zig");
+const undo = @import("undo.zig");
+const rope = @import("rope.zig");
 
 const State = root.State;
 
 const Buffer = @This();
+const Cursor = lib.Vec2;
 
 alloc: std.mem.Allocator,
 
@@ -25,8 +27,12 @@ target: ?Visual = null,
 
 /// literal data in the buffer
 lines: std.ArrayListUnmanaged(Line),
+/// As a long term pivot strategy I will try to manage both the rope and the
+/// lines structure until I can remove one
+content: rope.Rope,
 
-undos: Undo.UndoHistory,
+undos: undo.UndoHistory,
+undoing: bool = false,
 
 row: usize = 0,
 col: usize = 0,
@@ -36,10 +42,9 @@ col: usize = 0,
 // undo: Undo,
 
 /// Row and Col in buffer
-// cursor: lib.Vec2 = .{ .row = 0, .col = 0 },
+// cursor: Cursor,
 // desired: lib.Vec2 = .{ .row = 0, .col = 0 },
 
-/// Must be arena allocated, will not be freed
 filename: []const u8,
 hasbackingfile: bool,
 
@@ -52,7 +57,6 @@ input_state: km.KeySequence = .{
 },
 mode: km.ModeId = km.ModeId.Normal,
 
-/// TODO: move to the buffer structure
 repeating: Repeating = .{},
 
 pub const Line = std.ArrayListUnmanaged(u8);
@@ -99,6 +103,8 @@ pub fn init(
     global_keymap: *km.Keymap,
     filename: []const u8,
 ) !Buffer {
+    const roper = rope.Rope{ .allocator = a };
+
     var lines = std.ArrayList(Line).init(a);
 
     if (std.fs.cwd().openFile(filename, .{})) |file| {
@@ -122,7 +128,9 @@ pub fn init(
         .filename = filename,
         .hasbackingfile = true,
         .lines = lines.moveToUnmanaged(),
-        .undos = Undo.UndoHistory.init(a),
+        .content = roper,
+        .undos = undo.UndoHistory.init(a),
+        .undoing = false,
         .global_keymap = global_keymap,
         .local_keymap = km.Keymap.init(a),
         .alloc = a,
@@ -134,6 +142,8 @@ pub fn deinit(buffer: *Buffer) void {
         line.deinit(buffer.alloc);
     }
     buffer.lines.deinit(buffer.alloc);
+    buffer.content.destroy();
+
     buffer.undos.deinit();
     buffer.local_keymap.deinit();
 
@@ -161,7 +171,9 @@ pub fn position(buffer: *Buffer) lib.Vec2 {
 }
 
 pub fn insertCharacter(buffer: *Buffer, ch: u8) !void {
-    try buffer.undos.recordInsert(buffer.position(), &.{ch});
+    if (!buffer.undoing) {
+        try buffer.undos.recordInsert(buffer.position(), &.{ch});
+    }
     if (ch == '\n') {
         try buffer.newlineInsert(buffer.alloc);
         return;
@@ -175,7 +187,7 @@ pub fn insertCharacter(buffer: *Buffer, ch: u8) !void {
     // state.cur_undo.end = buffer.cursor;
 }
 
-pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
+pub fn delete_character(buffer: *Buffer, a: std.mem.Allocator) !void {
     if (buffer.col == 0 and buffer.row == 0) {
         // nothing to delete
         return;
@@ -183,8 +195,10 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
 
     if (buffer.col == 0) {
         // get the coluimn now before its length changes
-        const deleted_text = &.{'\n'};
-        try buffer.undos.recordDelete(buffer.position(), buffer.position(), deleted_text);
+        if (!buffer.undoing) {
+            const deleted_text = &.{'\n'};
+            try buffer.undos.recordDelete(buffer.position(), buffer.position(), deleted_text);
+        }
         buffer.col = buffer.lines.items[buffer.row - 1].items.len;
 
         // delete the last character of the previous line
@@ -198,8 +212,10 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
         buffer.row -= 1;
     } else {
         // delete the character before the cursor
-        const deleted_char = buffer.lines.items[buffer.row].items[buffer.col - 1];
-        try buffer.undos.recordDelete(buffer.position(), buffer.position(), &.{deleted_char});
+        if (!buffer.undoing) {
+            const deleted_char = buffer.lines.items[buffer.row].items[buffer.col - 1];
+            try buffer.undos.recordDelete(buffer.position(), buffer.position(), &.{deleted_char});
+        }
 
         buffer.col -= 1;
 
@@ -208,49 +224,13 @@ pub fn bufferDelete(buffer: *Buffer, a: std.mem.Allocator) !void {
     }
 }
 
-// pub fn buffer_delete_ch(buffer: *Buffer, state: *State) void {
-//     _ = buffer; // autofix
-//     _ = state; // autofix
-//     var undo = Undo{ };
-//     undo.type = .INSERT_CHARS;
-//     undo.start = buffer.cursor;
-//     state.cur_undo = undo;
-//     reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-//     buffer_yank_char(buffer, state);
-//     buffer_delete_char(buffer, state);
-//     state.*.cur_undo.end = buffer.*.cursor;
-//     undo_push(state, &state.*.undo_stack, state.*.cur_undo);
-// }
+pub fn insertText(buffer: *Buffer, text: []const u8, location: Cursor) !void {
+    _ = buffer;
+    _ = text;
+    _ = location;
 
-// pub fn buffer_insert_selection(arg_buffer: *Buffer, arg_selection: *Data, arg_start: usize) void {
-//     var buffer = arg_buffer;
-//     _ = &buffer;
-//     var selection = arg_selection;
-//     _ = &selection;
-//     var start = arg_start;
-//     _ = &start;
-//     buffer.*.cursor = start;
-//     var size: usize = selection.*.count;
-//     _ = &size;
-//     if ((buffer.*.data.count +% size) >= buffer.*.data.capacity) {
-//         buffer.*.data.capacity +%= size *% @as(usize, @bitCast(@as(c_long, @as(c_int, 2))));
-//         buffer.*.data.data = @as(*u8, @ptrCast(@alignCast(realloc(@as(?*anyopaque, @ptrCast(buffer.*.data.data)), (@sizeOf(u8) *% buffer.*.data.capacity) +% @as(c_ulong, @bitCast(@as(c_long, @as(c_int, 1))))))));
-//         while (true) {
-//             if (!(buffer.*.data.data != @as(*u8, @ptrCast(@alignCast(@as(?*anyopaque, @ptrFromInt(@as(c_int, 0)))))))) {
-//                 frontend_end();
-//                 _ = fprintf(stderr, "%s:%d: ASSERTION FAILED: ", "src/buffer.c", @as(c_int, 187));
-//                 _ = fprintf(stderr, "could not alloc");
-//                 _ = fprintf(stderr, "\n");
-//                 exit(@as(c_int, 1));
-//             }
-//             if (!false) break;
-//         }
-//  }
-//     _ = memmove(@as(?*anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor +% size])), @as(?*const anyopaque, @ptrCast(&buffer.*.data.data[buffer.*.cursor])), buffer.*.data.count -% buffer.*.cursor);
-//     _ = strncpy(&buffer.*.data.data[buffer.*.cursor], selection.*.data, size);
-//     buffer.*.data.count +%= size;
-//     buffer_calculate_rows(buffer);
-// }
+    @panic("TODO");
+}
 
 /// Takes a point `start` and moves it right `count` units in the buffers space
 pub fn moveRight(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
@@ -397,6 +377,15 @@ pub fn gettarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
 }
 
 pub fn delete(buffer: *Buffer, target: Visual) !void {
+    if (!buffer.undoing) {
+        const text_to_delete = buffer.gettarget(target) catch {
+            // TODO: handle error, for now just don't record undo
+            return;
+        };
+        defer text_to_delete.deinit();
+        const normalized_target = target.normalize();
+        buffer.undos.recordDelete(normalized_target.start, normalized_target.end, text_to_delete.items) catch {}; // TODO: handle error
+    }
     const targ = target.normalize();
 
     std.debug.assert(targ.start.row <= targ.end.row);

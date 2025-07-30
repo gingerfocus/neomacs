@@ -25,6 +25,8 @@ pub fn init(a: std.mem.Allocator, modes: *km.Keymap) !void {
     try initToVisualKeys(a, &normal);
     try initMotionKeys(a, &normal);
     try initModifyingKeys(a, &normal);
+    try normal.put(a, norm('u'), km.KeyFunction.initstate(functions.undo));
+    try normal.put(a, ctrl('r'), km.KeyFunction.initstate(functions.redo));
     // try initNormalKeys(a, &normal);
 }
 
@@ -53,7 +55,7 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
     try maps.put(a, norm('h'), km.KeyFunction.initstate(targeters.target_left));
 
     try maps.put(a, norm('G'), km.KeyFunction.initstate(targeters.target_bottom));
-    try maps.put(a, '$', km.KeyFunction.initbuffer(motions.end_of_line));
+    try maps.put(a, '\n', km.KeyFunction.initbuffer(motions.end_of_line));
     try maps.put(a, '0', km.KeyFunction.initstate(targeters.motion_start));
 
     try maps.put(a, norm('w'), km.KeyFunction.initstate(targeters.motion_word_start));
@@ -159,7 +161,7 @@ fn initNormalKeys(a: std.mem.Allocator, normal: *km.Keymap.Appender) !void {
     //                 {
     //                     var i: usize = 0;
     //                     _ = &i;
-    //                     while (i < state.*.repeating.repeating_count) : (i +%= 1) {
+    //                     while (i < state.*.repeating.repeating_count) : (i += 1) {
     //                         buffer_yank_line(buffer, state, i);
     //                     }
     //                 }
@@ -629,6 +631,16 @@ const visuals = struct {
 };
 
 const functions = struct {
+    fn undo(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+        buffer.undos.undo(buffer);
+    }
+
+    fn redo(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+        buffer.undos.redo(buffer);
+    }
+
     fn yank(state: *State, _: km.KeyFunctionDataValue) !void {
         _ = state.takeRepeating();
         const buffer = state.getCurrentBuffer();

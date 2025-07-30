@@ -11,6 +11,7 @@ pub const Vec2 = struct {
     row: usize = 0,
     col: usize = 0,
 
+    /// Compare one vector to another prioritizing row
     pub fn cmp(a: Vec2, b: Vec2) std.math.Order {
         if (a.row < b.row) return .lt;
         if (a.row > b.row) return .gt;
