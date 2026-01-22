@@ -136,7 +136,7 @@ fn neomacs() !void {
     try s.setup();
 
     while (!s.config.QUIT) {
-        try Component.draw(s);
+        try s.draw();
 
         const ev = s.backend.pollEvent(10000);
 

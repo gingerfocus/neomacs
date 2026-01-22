@@ -1,10 +1,21 @@
 # Neomacs
 ![Neomacs Banner Logo](./etc/branding/logo.jpg)
 
-A combination of many small projects I have worked on.
-
 Overall, this project aims to be everything but a web browser but at least a
 replacement for vim (and maybe the terminal you run it in).
+
+Combinines many small projects I have worked on:
+- **shade**: a reference shader visualizer for wgsl
+- **graphi**: graphics library
+- **luma**: idea managment software
+- **vfoot**: [!] a modified version of foot that can be embedded
+- **surf**: [!] an embeddable browser to bridge compatability for old websites
+- **zimv**: [!] image viewer
+- **imvr**: [!] image viewer
+
+Other projects:
+- Take inspiration from [orca](https://github.com/orca-app/orca).
+- Uses some templating from [jot](https://github.com/shashwatah/jot).
 
 # User Installation
 ```sh
@@ -19,10 +30,13 @@ nix build github:gingerfocus/neomacs
 ```
 
 ## Why
-Neovim is great but does too many things for vim compatability. I want to see
-how many features I can strip and still have a functional editor. I also kinda
-want to see how extensible I can make it by allowing more complex rendering
-from plugins.
+Neovim is great but does too many things for vim compatability. By breaking
+compatability with certain core features but maintaining the main data flow I
+think I can cut the maintence base of code by lots.
+
+Emacs is great but does too many things.
+
+I also kinda allow complex rendering for plugins for both.
 
 ## Commands
 Commands are very different from vim but are designed to feel like they "just
@@ -35,7 +49,7 @@ straight lua meaning that there is no second syntax to learn and you can type
 
 # Devolopment
 ## Binary Size
-By default, compile to a static, 772k binary with:
+By default, compile to a static, 240k binary with:
 ```sh
 zig build --release=small
 ```

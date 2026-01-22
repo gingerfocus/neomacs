@@ -363,12 +363,12 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
             }
             line.deinit(a);
         } else {
-            line.replaceRangeAssumeCapacity(a, start, end - start, &.{}); // never allocates
+            line.replaceRangeAssumeCapacity(start, end - start, &.{});
         }
     }
 
     if (remove_range_begin) |rrange| {
-        buffer.lines.replaceRangeAssumeCapacity(a, rrange, remove_range_len, &.{}); // never allocates
+        buffer.lines.replaceRangeAssumeCapacity(rrange, remove_range_len, &.{});
     }
 
     buffer.movecursor(targ.start);

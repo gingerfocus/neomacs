@@ -184,7 +184,6 @@ pub fn makeComponents(state: *State) !void {
     }
 }
 
-
 pub const sidebarWidth = 3;
 pub const statusbarHeight = 2;
 
@@ -202,6 +201,12 @@ const MainEditor = @import("components/MainEditor.zig");
 const CommandLine = @import("components/CommandLine.zig");
 
 pub fn draw(state: *State) !void {
+
+    // var iter = s.components.iterator();
+    // while (iter.next()) |component| {
+    //     component.value_ptr.comp.vtable.renderFn(&component.value_ptr.comp, s, &s.backend, component.value_ptr.view);
+    // }
+
     if (state.resized) {
         // TODO: impl
         state.resized = false;
@@ -439,8 +444,8 @@ pub fn bufferPrev(state: *State) void {
 }
 
 const Mountable = struct {
-    view: component.View,
-    comp: component.Component,
+    view: Component.View,
+    comp: Component,
 };
 
 pub const Config = struct {
