@@ -21,6 +21,8 @@ pub const Vec2 = struct {
     }
 };
 
+// pub const Vec4 = @Vector(4, usize);
+
 pub const Vec4 = struct {
     x: usize = 0,
     y: usize = 0,

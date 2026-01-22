@@ -18,7 +18,7 @@ pub const lua = @import("lua.zig");
 pub const zss = @import("zss.zig");
 pub const keys = @import("keys/root.zig");
 pub const alloc = @import("alloc.zig");
-pub const component = @import("component.zig");
+pub const Component = @import("Component.zig");
 
 // pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
 
@@ -136,7 +136,7 @@ fn neomacs() !void {
     try s.setup();
 
     while (!s.config.QUIT) {
-        try component.draw(s);
+        try Component.draw(s);
 
         const ev = s.backend.pollEvent(10000);
 

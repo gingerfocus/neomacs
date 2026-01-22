@@ -593,7 +593,8 @@ const inserts = struct {
         const buffer = state.getCurrentBuffer();
 
         buffer.col = 0;
-        try buffer.newlineInsert(state.a);
+
+        try buffer.text_insert(buffer.position(), &.{'\n'});
 
         root.log(@src(), .debug, "number of lines: {d}", .{buffer.lines.items.len});
 
@@ -608,7 +609,7 @@ const inserts = struct {
         const line = &buffer.lines.items[buffer.row];
 
         buffer.col = line.items.len;
-        try buffer.newlineInsert(state.a);
+        try buffer.text_insert(buffer.position(), &.{'\n'});
 
         buffer.repeating.reset();
         buffer.setMode(ModeId.Insert);
@@ -666,12 +667,12 @@ const functions = struct {
         const buffer = state.getCurrentBuffer();
 
         if (buffer.target) |target| {
-            try buffer.delete(target);
+            try buffer.text_delete(target);
             buffer.target = null;
         } else {
             const start = buffer.position();
             const end = targeters.end_of_line(buffer, count);
-            try buffer.delete(.{ .start = start, .end = end });
+            try buffer.text_delete(.{ .start = start, .end = end });
         }
     }
 
@@ -680,11 +681,11 @@ const functions = struct {
         const buffer = state.getCurrentBuffer();
 
         if (buffer.target) |target| {
-            try buffer.delete(target);
+            try buffer.text_delete(target);
         } else {
             const start = buffer.position();
             const end = targeters.end_of_line(buffer, count);
-            try buffer.delete(.{ .start = start, .end = end });
+            try buffer.text_delete(.{ .start = start, .end = end });
         }
         buffer.setMode(ModeId.Insert);
     }
@@ -703,7 +704,7 @@ const functions = struct {
             }
             break :blk Buffer.Visual{ .start = start, .end = end };
         };
-        try buffer.replace(target, ch.character);
+        try buffer.text_replace(target, ch.character);
     }
 };
 

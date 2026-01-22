@@ -9,7 +9,7 @@ const keys = root.keys;
 const Buffer = root.Buffer;
 const Args = root.Args;
 
-const component = root.component;
+const Component = root.Component;
 const Backend = @import("backend/Backend.zig");
 
 const State = @This();
@@ -109,7 +109,116 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
 pub fn setup(state: *State) !void {
     lua.setup(state.L);
     try keys.init(state.a, state.global_keymap);
-    try component.init(state);
+    try makeComponents(state);
+}
+
+pub fn makeComponents(state: *State) !void {
+    const View = Component.View;
+    const size = state.backend.getSize();
+    const rootView =
+        // View{ 0, 0, size.row, size.col };
+        View{ .x = 0, .y = 0, .w = size.row, .h = size.col };
+
+    {
+        const statusBarView = View{
+            .x = 0,
+            .y = rootView.h - statusbarHeight,
+            .w = rootView.w,
+            .h = statusbarHeight,
+        };
+        const statusBar = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = StatusBar.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = statusBar, .view = statusBarView });
+    }
+
+    {
+        const lineNumbersView = View{
+            .x = 0,
+            .y = 0,
+            .w = sidebarWidth,
+            .h = rootView.h - statusbarHeight,
+        };
+        const lineNumbers = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = LineNumbers.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = lineNumbers, .view = lineNumbersView });
+    }
+
+    {
+        const mainView = View{
+            .x = sidebarWidth,
+            .y = 0,
+            .w = rootView.w - sidebarWidth,
+            .h = rootView.h - statusbarHeight,
+        };
+        const mainEditor = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = MainEditor.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = mainEditor, .view = mainView });
+    }
+
+    {
+        const commandView = View{
+            .x = 0,
+            .y = rootView.h - 1, // Bottom line of status bar
+            .w = rootView.w,
+            .h = 1,
+        };
+        const commandLine = Component{
+            .dataptr = undefined,
+            .vtable = &.{
+                .renderFn = CommandLine.render,
+            },
+        };
+        try state.components.put(state.a, id.next(), .{ .comp = commandLine, .view = commandView });
+    }
+}
+
+
+pub const sidebarWidth = 3;
+pub const statusbarHeight = 2;
+
+const id = struct {
+    var static: usize = 0;
+    pub fn next() usize {
+        static += 1;
+        return static;
+    }
+};
+
+const StatusBar = @import("components/StatusBar.zig");
+const LineNumbers = @import("components/LineNumbers.zig");
+const MainEditor = @import("components/MainEditor.zig");
+const CommandLine = @import("components/CommandLine.zig");
+
+pub fn draw(state: *State) !void {
+    if (state.resized) {
+        // TODO: impl
+        state.resized = false;
+    }
+
+    state.backend.render(.begin);
+    defer state.backend.render(.end);
+
+    var iter = state.components.iterator();
+    while (iter.next()) |v| {
+        const comp = v.value_ptr.comp;
+        const view = v.value_ptr.view;
+
+        if (view.w == 0 or view.h == 0) continue; // Skip empty components
+
+        comp.vtable.renderFn(comp.dataptr, state, &state.backend, view);
+    }
 }
 
 pub fn deinit(state: *State) void {

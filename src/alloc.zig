@@ -3,13 +3,14 @@ const std = root.std;
 // const ts = root.ts;
 
 const static = struct {
-    var alloc: std.heap.GeneralPurposeAllocator(.{}) = .{};
+    var alloc: std.heap.DebugAllocator(.{}) = .init;
     var galloc = static.alloc.allocator();
 };
 
 pub fn init() void {
     // ts.ts_set_allocator(malloc, calloc, realloc, free);
 }
+
 pub fn deinit() std.heap.Check {
     return static.alloc.deinit();
 }

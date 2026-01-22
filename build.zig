@@ -170,7 +170,6 @@ pub fn build(b: *std.Build) !void {
 
     // -------------------------------------------------------------------------
     //
-    // default to false
     // const usekennel = b.option(bool, "usekennel", "compile the with support for literate programming") orelse true;
     //
     // const kennel = b.addModule("kennel", .{

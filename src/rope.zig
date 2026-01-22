@@ -26,17 +26,19 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-/// The minimum number of bytes stored in a splay tree node.
-const min_bytes = 64;
+// TODO: make it so that each node keeps track of weather it is a newline or
+// not and make it so that
 
+/// The minimum number of bytes stored in a splay tree node.
+const MIN_BYTES = 64;
 /// The capacity of a splay tree node in bytes.
-const cap_bytes = 127;
+const CAP_BYTES = 127;
 
 comptime {
-    if (min_bytes < 1 or min_bytes * 2 != cap_bytes + 1) {
+    if (MIN_BYTES < 1 or MIN_BYTES * 2 != CAP_BYTES + 1) {
         @compileError("min_bytes must be half of cap_bytes + 1");
     }
-    if (cap_bytes >= 128) {
+    if (CAP_BYTES >= 128) {
         @compileError("cap_bytes must be less than 128 to do arithmetic");
     }
 }
@@ -48,7 +50,7 @@ const Node = struct {
     nodes: u64 = 1,
     size: u64 = 0,
     len: u8 = 0,
-    data: [cap_bytes]u8 = undefined,
+    data: [CAP_BYTES]u8 = undefined,
 
     fn dir(self: *const Node) u1 {
         return if (self.parent) |p| @intFromBool(p.child[1] == self) else 0;
@@ -141,14 +143,14 @@ fn access(node: *Node, index: u64) *Node {
 
 /// Allocate a pre-balanced tree of nodes from a data slice.
 fn createTree(allocator: Allocator, data: []const u8) Allocator.Error!*Node {
-    std.debug.assert(data.len >= min_bytes);
+    std.debug.assert(data.len >= MIN_BYTES);
     var node: *Node = undefined;
-    if (data.len <= cap_bytes) {
+    if (data.len <= CAP_BYTES) {
         node = try allocator.create(Node);
         node.* = .{ .len = @intCast(data.len) };
         memcpy(node.data[0..data.len], data);
     } else {
-        const blocks = data.len / cap_bytes;
+        const blocks = data.len / CAP_BYTES;
         if (blocks < 2) {
             // node
             //    \
@@ -162,23 +164,23 @@ fn createTree(allocator: Allocator, data: []const u8) Allocator.Error!*Node {
             //    node
             //    /  \
             // left   ...
-            node = try createTree(allocator, data[cap_bytes..]);
+            node = try createTree(allocator, data[CAP_BYTES..]);
             errdefer node.destroy(allocator);
             std.debug.assert(node.child[0] == null);
-            const left = try createTree(allocator, data[0..cap_bytes]);
+            const left = try createTree(allocator, data[0..CAP_BYTES]);
             Node.connect(node, left, 0);
         } else {
             //    node
             //    /  \
             // left  right
-            const start_idx = (blocks / 2) * cap_bytes;
-            node = try createTree(allocator, data[start_idx .. start_idx + cap_bytes]);
+            const start_idx = (blocks / 2) * CAP_BYTES;
+            node = try createTree(allocator, data[start_idx .. start_idx + CAP_BYTES]);
             errdefer node.destroy(allocator);
             std.debug.assert(node.child[0] == null);
             std.debug.assert(node.child[1] == null);
             const left = try createTree(allocator, data[0..start_idx]);
             errdefer left.destroy(allocator);
-            const right = try createTree(allocator, data[start_idx + cap_bytes ..]);
+            const right = try createTree(allocator, data[start_idx + CAP_BYTES ..]);
             Node.connect(node, left, 0);
             Node.connect(node, right, 1);
         }
@@ -201,7 +203,7 @@ fn concat_front(dest: []u8, src: []u8) void {
 /// Mem-copy that doest care about length
 fn memcpy(dst: []u8, src: []const u8) void {
     const len = @min(dst.len, src.len);
-    @memcpy(dst[0..len], src[0..len]);
+    std.mem.copyForwards(u8, dst[0..len], src[0..len]);
 }
 
 pub const Rope = struct {
@@ -211,7 +213,7 @@ pub const Rope = struct {
     allocator: Allocator,
     root: ?*Node = null,
     suf_len: u8 = 0,
-    suf_buf: [min_bytes - 1]u8 = undefined,
+    suf_buf: [MIN_BYTES - 1]u8 = undefined,
 
     /// Create a new, pre-balanced rope from a byte slice.
     pub fn create(allocator: Allocator, bytes: []const u8) !*Rope {
@@ -220,9 +222,9 @@ pub const Rope = struct {
         rope.* = .{ .allocator = allocator };
 
         // Use only a suffix if the rope is too small.
-        if (bytes.len < min_bytes) {
+        if (bytes.len < MIN_BYTES) {
             rope.suf_len = @intCast(bytes.len);
-            memcpy(rope.suf_buf[0..bytes.len], bytes);
+            @memcpy(rope.suf_buf[0..bytes.len], bytes);
             return rope;
         }
         rope.root = try createTree(allocator, bytes);
@@ -263,11 +265,11 @@ pub const Rope = struct {
         if (other.root == null) {
             // Concatenate a small buffer onto the end of self.
             const total = self.suf_len + other.suf_len;
-            if (total < min_bytes) {
-                memcpy(self.suf_buf[self.suf_len..], other.suf_buf[0..other.suf_len]);
+            if (total < MIN_BYTES) {
+                @memcpy(self.suf_buf[self.suf_len..total], other.suf_buf[0..other.suf_len]);
                 self.suf_len = total;
             } else {
-                std.debug.assert(total <= cap_bytes);
+                std.debug.assert(total <= CAP_BYTES);
                 const node = try self.allocator.create(Node);
                 node.* = .{ .len = total };
                 memcpy(node.data[0..self.suf_len], self.suf_buf[0..self.suf_len]);
@@ -284,18 +286,18 @@ pub const Rope = struct {
             var root = other.root.?;
             std.debug.assert(root.child[0] == null);
             const total = root.len + self.suf_len;
-            if (total < cap_bytes) {
+            if (total < CAP_BYTES) {
                 root.len += self.suf_len;
                 concat_front(root.data[0..root.len], self.suf_buf[0..self.suf_len]);
             } else {
-                std.debug.assert(root.len >= min_bytes);
+                std.debug.assert(root.len >= MIN_BYTES);
                 const node = try self.allocator.create(Node);
-                node.* = .{ .len = min_bytes };
+                node.* = .{ .len = MIN_BYTES };
 
                 memcpy(node.data[0..], self.suf_buf[0..self.suf_len]);
-                memcpy(node.data[self.suf_len..], root.data[0 .. min_bytes - self.suf_len]);
-                memcpy(root.data[0..], root.data[min_bytes - self.suf_len .. root.len]);
-                root.len -= min_bytes - self.suf_len;
+                memcpy(node.data[self.suf_len..], root.data[0 .. MIN_BYTES - self.suf_len]);
+                memcpy(root.data[0..], root.data[MIN_BYTES - self.suf_len .. root.len]);
+                root.len -= MIN_BYTES - self.suf_len;
                 root.update();
 
                 Node.connect(node, root, 1);
@@ -348,7 +350,7 @@ pub const Rope = struct {
         const pivot: u8 = @intCast(index - left_len);
 
         // Copy the left half of the node's data and establish the a new root.
-        if (index - left_len >= min_bytes) { // doesn't fit in self.suf_buf
+        if (index - left_len >= MIN_BYTES) { // doesn't fit in self.suf_buf
             const new_root = try self.allocator.create(Node);
             new_root.* = .{ .len = pivot };
             memcpy(new_root.data[0..], root.data[0..pivot]);
@@ -371,7 +373,7 @@ pub const Rope = struct {
 
         // We could just set `rope.root = root;` now, but we need to check and
         // fix one more invariant: each node has `len >= min_bytes`.
-        if (root.len >= min_bytes) {
+        if (root.len >= MIN_BYTES) {
             rope.root = root;
         } else if (root.child[1]) |right_child| {
             // Splay the next inorder node to the top and do a left concatenation.
@@ -380,13 +382,13 @@ pub const Rope = struct {
             const new_root = access(right_child, 0);
             std.debug.assert(new_root.child[0] == null);
             rope.root = new_root;
-            if (root.len + new_root.len <= cap_bytes) {
+            if (root.len + new_root.len <= CAP_BYTES) {
                 new_root.len += root.len;
                 concat_front(new_root.data[0..new_root.len], root.data[0..root.len]);
                 new_root.update();
                 root.destroy(self.allocator);
             } else {
-                const copy_len = min_bytes - root.len;
+                const copy_len = MIN_BYTES - root.len;
                 memcpy(root.data[root.len..], new_root.data[0..copy_len]);
                 memcpy(new_root.data[0..], new_root.data[copy_len..new_root.len]);
                 root.len += copy_len;
@@ -395,9 +397,9 @@ pub const Rope = struct {
                 root.update();
                 new_root.update();
             }
-        } else if (rope.suf_len + root.len >= min_bytes) {
+        } else if (rope.suf_len + root.len >= MIN_BYTES) {
             // Concatenate the suffix onto the node directly.
-            std.debug.assert(rope.suf_len + root.len <= cap_bytes);
+            std.debug.assert(rope.suf_len + root.len <= CAP_BYTES);
             memcpy(root.data[root.len..], rope.suf_buf[0..rope.suf_len]);
             root.len += rope.suf_len;
             root.update();
@@ -533,6 +535,7 @@ pub const Rope = struct {
     }
 };
 
+/// Iterator over a rope
 pub const Chunks = struct {
     const block_size = 1024; // 65536
 
@@ -556,7 +559,7 @@ pub const Chunks = struct {
         while (i < len) {
             const slice = self.rope.get_scan(self.start + i).?;
             const k = @min(slice.len, len - i);
-            memcpy(self.buf[i..], slice[0..k]);
+            @memcpy(self.buf[i .. i + k], slice[0..k]);
             i += k;
         }
         self.start += len;

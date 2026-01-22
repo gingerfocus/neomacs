@@ -8,10 +8,7 @@ const rope = @import("rope.zig");
 const State = root.State;
 
 const Buffer = @This();
-const Cursor = lib.Vec2;
-
 const LineStructure = struct { beg: usize, end: usize };
-const usenewthinger = false;
 
 alloc: std.mem.Allocator,
 
@@ -66,6 +63,11 @@ repeating: Repeating = .{},
 
 pub const Line = std.ArrayListUnmanaged(u8);
 
+/// This, alongside [`Visual`] should be the main way to interact with the
+/// buffer and hopefully be largely opaque structures to allow me to change the
+/// api over time
+const Cursor = lib.Vec2; // @Vector(2, usize)
+
 pub const VisualMode = Visual.Mode;
 pub const Visual = struct {
     pub const Mode = enum { Range, Line, Block };
@@ -90,15 +92,28 @@ pub const Visual = struct {
     }
 };
 
-pub fn setMode(buffer: *Buffer, mode: km.ModeId) void {
-    buffer.mode = mode;
+pub const Repeating = struct {
+    is: bool = false,
+    count: usize = 0,
 
-    buffer.input_state.mode = mode;
-    // is this corrent?
-    buffer.input_state.len = 0;
+    pub inline fn reset(self: *Repeating) void {
+        self.is = false;
+        self.count = 0;
+    }
 
-    buffer.target = null;
-}
+    pub inline fn take(self: *Repeating) usize {
+        const count = self.some() orelse 1;
+        std.debug.assert(count != 0);
+
+        self.reset();
+        return count;
+    }
+
+    pub inline fn some(self: *Repeating) ?usize {
+        if (self.is) return self.count;
+        return null;
+    }
+};
 
 pub fn init(
     a: std.mem.Allocator,
@@ -125,12 +140,13 @@ pub fn init(
             try roperlines.append(a, .{ .beg = index, .end = index + line.len });
             index += line.len;
         }
-    } else |_| {}
+    } else |err| root.log(@src(), .debug, "failed to open file: {}", .{err});
 
     return Buffer{
         .id = idgen.next(),
         .filename = filename,
         .hasbackingfile = true,
+
         .lines = lines.moveToUnmanaged(),
 
         .content = roper,
@@ -158,9 +174,25 @@ pub fn deinit(buffer: *Buffer) void {
     buffer.* = undefined;
 }
 
+pub fn position(buffer: *Buffer) lib.Vec2 {
+    if (buffer.target) |t| return t.end;
+    return .{ .row = buffer.row, .col = buffer.col };
+}
+
+pub fn setMode(buffer: *Buffer, mode: km.ModeId) void {
+    buffer.mode = mode;
+    buffer.input_state.mode = mode;
+
+    // is this correct?
+    buffer.input_state.len = 0;
+
+    buffer.target = null;
+}
+
 pub fn updateTarget(buffer: *Buffer, mode: Visual.Mode, start: lib.Vec2, end: lib.Vec2) void {
     if (buffer.target) |*t| {
-        // if (t.start.cmp(start) == .gt) t.start = start;
+        // if (start.cmp(t.start) == .lt) t.start = start;
+
         t.end = end;
         t.mode = mode;
     } else {
@@ -172,106 +204,8 @@ pub fn updateTarget(buffer: *Buffer, mode: Visual.Mode, start: lib.Vec2, end: li
     }
 }
 
-pub fn position(buffer: *Buffer) lib.Vec2 {
-    if (buffer.target) |t| return t.end;
-
-    return .{ .row = buffer.row, .col = buffer.col };
-}
-
-/// Convertes a cursor into and index into the rope buffer.
-fn getIndex(buffer: *const Buffer, cursor: Cursor) usize {
-    _ = buffer;
-    _ = cursor;
-
-    unreachable;
-}
-
-pub fn insertCharacter(buffer: *Buffer, ch: u8) !void {
-    if (usenewthinger) {
-        const index = getIndex(buffer, buffer.position());
-        try buffer.content.insert(index, &.{ch});
-
-        // split the line
-        if (ch == '\n') {
-            const row = &buffer.contentlines.items[buffer.row];
-
-            const end = row.end;
-            row.end = row.beg + buffer.col;
-
-            try buffer.contentlines.insert(buffer.alloc, buffer.row, .{ .beg = row.end, .end = end });
-        }
-
-        buffer.contentlines.items[buffer.row].end += 1;
-        // TODO: use reactive programing to lazyily calculate the rows by just making each subsequent row depend on the last
-        for (buffer.contentlines.items[buffer.row + 1 ..]) |*r| {
-            r.beg += 1;
-            r.end += 1;
-        }
-    }
-
-    if (!buffer.undoing) {
-        try buffer.undos.recordInsert(buffer.position(), &.{ch});
-    }
-    if (ch == '\n') {
-        try buffer.newlineInsert(buffer.alloc);
-        return;
-    }
-
-    var line = &buffer.lines.items[buffer.row];
-    try line.insert(buffer.alloc, buffer.col, ch);
-    // root.log(@src(), .debug, "inserted character {c} at row {d}, col {d}", .{ ch, buffer.row, buffer.col });
-    buffer.col += 1;
-
-    // state.cur_undo.end = buffer.cursor;
-}
-
-pub fn delete_character(buffer: *Buffer, a: std.mem.Allocator) !void {
-    if (buffer.col == 0 and buffer.row == 0) {
-        // nothing to delete
-        return;
-    }
-
-    if (buffer.col == 0) {
-        // get the coluimn now before its length changes
-        if (!buffer.undoing) {
-            const deleted_text = &.{'\n'};
-            try buffer.undos.recordDelete(buffer.position(), buffer.position(), deleted_text);
-        }
-        buffer.col = buffer.lines.items[buffer.row - 1].items.len;
-
-        // delete the last character of the previous line
-        const line = &buffer.lines.items[buffer.row];
-        const prev = &buffer.lines.items[buffer.row - 1];
-        try prev.appendSlice(a, line.items);
-
-        var oldline = buffer.lines.orderedRemove(buffer.row);
-        oldline.deinit(a);
-
-        buffer.row -= 1;
-    } else {
-        // delete the character before the cursor
-        if (!buffer.undoing) {
-            const deleted_char = buffer.lines.items[buffer.row].items[buffer.col - 1];
-            try buffer.undos.recordDelete(buffer.position(), buffer.position(), &.{deleted_char});
-        }
-
-        buffer.col -= 1;
-
-        var line = &buffer.lines.items[buffer.row];
-        _ = line.orderedRemove(buffer.col);
-    }
-}
-
-pub fn insertText(buffer: *Buffer, text: []const u8, location: Cursor) !void {
-    _ = buffer;
-    _ = text;
-    _ = location;
-
-    @panic("TODO");
-}
-
 /// Takes a point `start` and moves it right `count` units in the buffers space
-pub fn moveRight(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
+pub fn moveRight(buffer: *const Buffer, start: Cursor, count: usize) lib.Vec2 {
     var end = start;
 
     var c = count;
@@ -296,7 +230,7 @@ pub fn moveRight(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
     return end;
 }
 
-pub fn moveLeft(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
+pub fn moveLeft(buffer: *const Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
     var end = start;
 
     var c = count;
@@ -320,23 +254,6 @@ pub fn moveLeft(buffer: *Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
     return end;
 }
 
-pub fn newlineInsert(buffer: *Buffer, a: std.mem.Allocator) !void {
-    var line = &buffer.lines.items[buffer.row];
-
-    const after = try a.dupe(u8, line.items[buffer.col..]);
-
-    line.items.len = buffer.col;
-
-    const nl = Line{ .items = after, .capacity = after.len };
-
-    buffer.row += 1;
-    buffer.col = 0;
-
-    try buffer.lines.insert(a, buffer.row, nl);
-
-    // TODO: indent the cursor
-}
-
 pub fn save(buffer: *Buffer) !void {
     if (buffer.filename.len == 0) return;
 
@@ -349,82 +266,57 @@ pub fn save(buffer: *Buffer) !void {
     }
 }
 
-/// using static for id assignment
-pub const idgen = struct {
-    var count: usize = 0;
-    pub fn next() usize {
-        count += 1;
-        return count;
+pub fn text_insert(buffer: *Buffer, cursor: Cursor, text: []const u8) !void {
+    var hasnewline: bool = false;
+    for (text) |ch| {
+        hasnewline = hasnewline or (ch == '\n');
+
+        // compat while switching to rope
+        try buffer.__old_lines_insert_character(cursor, ch);
     }
-};
 
-pub fn replace(buffer: *Buffer, target: Visual, ch: u8) !void {
-    const targ = target.normalize();
+    const index = getIndex(buffer, cursor);
+    try buffer.content.insert(index, text);
 
-    var row: usize = targ.start.row;
-    while (row <= targ.end.row) : (row += 1) {
-        const line: *Buffer.Line = &buffer.lines.items[row];
+    if (hasnewline) {
+        root.log(@src(), .warn, "NYI", .{});
 
-        var start = switch (targ.mode) {
-            .Line => 0,
-            .Range => if (row == targ.start.row) targ.start.col else 0,
-            .Block => targ.start.col,
-        };
-        start = @min(start, line.items.len);
-
-        const end = switch (targ.mode) {
-            .Line => line.items.len,
-            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
-            .Block => targ.end.col,
-        };
-
-        for (line.items[start..end]) |*och| {
-            och.* = ch;
-        }
+        // pub fn recalculate_rows(buffer: *Buffer) !void {
+        //     buffer.contentlines.clearRetainingCapacity();
+        //     var chunks = buffer.content.chunks(0, buffer.content.len());
+        //     var index: usize = 0;
+        //     while (chunks.next()) |chunk| {
+        //         var lines = std.mem.splitScalar(u8, chunk, '\n');
+        //         while (lines.next()) |line| {
+        //             try buffer.contentlines.append(buffer.alloc, .{ .beg = index, .end = index + line.len });
+        //             index += line.len;
+        //         }
+        //     }
+        // }
+    } else {
+        shift_indices(buffer, cursor, text.len);
     }
 }
 
-pub fn gettarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
+/// TODO: there is problem when you hvae
+/// ```
+///  afa
+/// |aaf
+/// ```
+/// the cursor moves but the lines arnt combined
+///
+pub fn text_delete(buffer: *Buffer, target: Visual) !void {
+    root.log(@src(), .warn, "TODO: rope support", .{});
     const targ = target.normalize();
 
-    var buf = std.ArrayList(u8).init(buffer.alloc);
-
-    var row: usize = targ.start.row;
-    while (row <= targ.end.row) : (row += 1) {
-        if (row != targ.start.row) try buf.append('\n');
-
-        const line: *Buffer.Line = &buffer.lines.items[row];
-
-        var start = switch (targ.mode) {
-            .Line => 0,
-            .Range => if (row == targ.start.row) targ.start.col else 0,
-            .Block => targ.start.col,
-        };
-        start = @min(start, line.items.len);
-
-        const end = switch (targ.mode) {
-            .Line => line.items.len,
-            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
-            .Block => targ.end.col,
-        };
-
-        try buf.appendSlice(line.items[start..end]);
-    }
-
-    return buf;
-}
-
-pub fn delete(buffer: *Buffer, target: Visual) !void {
     if (!buffer.undoing) {
         const text_to_delete = buffer.gettarget(target) catch {
             // TODO: handle error, for now just don't record undo
             return;
         };
         defer text_to_delete.deinit();
-        const normalized_target = target.normalize();
-        buffer.undos.recordDelete(normalized_target.start, normalized_target.end, text_to_delete.items) catch {}; // TODO: handle error
+        buffer.undos.recordDelete(targ.start, targ.end, text_to_delete.items) catch {}; // TODO: handle error
     }
-    const targ = target.normalize();
 
     std.debug.assert(targ.start.row <= targ.end.row);
     if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
@@ -471,51 +363,158 @@ pub fn delete(buffer: *Buffer, target: Visual) !void {
             }
             line.deinit(a);
         } else {
-            line.replaceRange(a, start, end - start, &.{}) catch unreachable; // never allocates
+            line.replaceRangeAssumeCapacity(a, start, end - start, &.{}); // never allocates
         }
     }
 
     if (remove_range_begin) |rrange| {
-        buffer.lines.replaceRange(a, rrange, remove_range_len, &.{}) catch unreachable; // never allocates
+        buffer.lines.replaceRangeAssumeCapacity(a, rrange, remove_range_len, &.{}); // never allocates
     }
 
     buffer.movecursor(targ.start);
 }
 
-pub fn movecursor(buffer: *Buffer, pos: lib.Vec2) void {
-    // TODO: set desired and compute from their
-    buffer.row = pos.row;
-    buffer.col = pos.col;
+pub fn text_replace(buffer: *Buffer, target: Visual, ch: u8) !void {
+    const targ = target.normalize();
+
+    var row: usize = targ.start.row;
+    while (row <= targ.end.row) : (row += 1) {
+        const line: *Buffer.Line = &buffer.lines.items[row];
+
+        var start = switch (targ.mode) {
+            .Line => 0,
+            .Range => if (row == targ.start.row) targ.start.col else 0,
+            .Block => targ.start.col,
+        };
+        start = @min(start, line.items.len);
+
+        const end = switch (targ.mode) {
+            .Line => line.items.len,
+            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
+            .Block => targ.end.col,
+        };
+
+        for (line.items[start..end]) |*och| {
+            och.* = ch;
+        }
+    }
 }
 
-pub fn getchar(buffer: *Buffer, pos: lib.Vec2) ?u8 {
-    if (pos.row >= buffer.lines.items.len) return null;
+pub fn text_change(buffer: *Buffer, target: Visual, text: []const u8) !void {
+    _ = buffer;
+    _ = target;
+    _ = text;
 
-    const line = &buffer.lines.items[pos.row];
-    if (pos.col >= line.items.len) return null;
-
-    return line.items[pos.col];
+    @compileError("NYI");
 }
 
-pub const Repeating = struct {
-    is: bool = false,
-    count: usize = 0,
+/// I dont like this function as it is too vague, I think proviing a yank
+/// functionality might be it
+pub fn gettarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
+    const targ = target.normalize();
 
-    pub inline fn reset(self: *Repeating) void {
-        self.is = false;
-        self.count = 0;
+    var buf = std.ArrayList(u8).init(buffer.alloc);
+
+    var row: usize = targ.start.row;
+    while (row <= targ.end.row) : (row += 1) {
+        if (row != targ.start.row) try buf.append('\n');
+
+        const line: *Buffer.Line = &buffer.lines.items[row];
+
+        var start = switch (targ.mode) {
+            .Line => 0,
+            .Range => if (row == targ.start.row) targ.start.col else 0,
+            .Block => targ.start.col,
+        };
+        start = @min(start, line.items.len);
+
+        const end = switch (targ.mode) {
+            .Line => line.items.len,
+            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
+            .Block => targ.end.col,
+        };
+
+        try buf.appendSlice(line.items[start..end]);
     }
 
-    pub inline fn take(self: *Repeating) usize {
-        const count = self.some() orelse 1;
-        std.debug.assert(count != 0);
+    return buf;
+}
 
-        self.reset();
+pub fn movecursor(buffer: *Buffer, cursor: Cursor) void {
+    // TODO: set desired and compute from there
+    buffer.row = cursor.row;
+    buffer.col = cursor.col;
+}
+
+/// No consumers so far
+pub fn get(buffer: *Buffer, cursor: Cursor) ?u8 {
+    const index = buffer.getIndex(cursor);
+    return buffer.content.get(index);
+}
+
+/// using static for id assignment
+pub const idgen = struct {
+    var count: usize = 0;
+    pub fn next() usize {
+        count += 1;
         return count;
     }
-
-    pub inline fn some(self: *Repeating) ?usize {
-        if (self.is) return self.count;
-        return null;
-    }
 };
+
+// ----------------------------------------------------------------------------
+
+/// Convertes a cursor into and index into the rope buffer.
+fn getIndex(buffer: *const Buffer, cursor: Cursor) usize {
+    // std.debug.assert(cursor.row < buffer.contentlines.items.len);
+    const line = buffer.contentlines.items[cursor.row];
+    // std.debug.assert(line.beg + cursor.col < line.end);
+    return line.beg + cursor.col;
+}
+
+/// Helper function
+fn shift_indices(buffer: *Buffer, cursor: Cursor, count: usize) void {
+    buffer.contentlines.items[cursor.row].end += count;
+    // TODO: use reactive programing to lazyily calculate the rows by just
+    // making each subsequent row depend on the last
+    for (buffer.contentlines.items[cursor.row + 1 ..]) |*r| {
+        r.beg += count;
+        r.end += count;
+    }
+}
+
+/// DEPRICATED: just insert the text
+fn __old_lines_insert_newline(buffer: *Buffer, a: std.mem.Allocator) !void {
+    var line = &buffer.lines.items[buffer.row];
+
+    const after = try a.dupe(u8, line.items[buffer.col..]);
+
+    line.items.len = buffer.col;
+
+    const nl = Line{ .items = after, .capacity = after.len };
+
+    buffer.row += 1;
+    buffer.col = 0;
+
+    try buffer.lines.insert(a, buffer.row, nl);
+
+    // TODO: indent the cursor
+}
+
+/// DEPRICATED: see text_insert
+fn __old_lines_insert_character(buffer: *Buffer, cursor: Cursor, ch: u8) !void {
+    if (ch == '\n') {
+        root.log(@src(), .warn, "`insert_character` should not be used for newlines", .{});
+        try buffer.__old_lines_insert_newline(buffer.alloc);
+        return;
+    }
+
+    if (!buffer.undoing) {
+        try buffer.undos.recordInsert(buffer.position(), &.{ch});
+    }
+
+    var line = &buffer.lines.items[cursor.row];
+    try line.insert(buffer.alloc, cursor.col, ch);
+    buffer.col += 1;
+
+    // state.cur_undo.end = buffer.cursor;
+}

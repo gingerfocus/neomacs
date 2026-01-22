@@ -25,13 +25,10 @@ pub const UndoAction = struct {
 
         switch (undoaction.data) {
             .insert => |*insert| {
-                buffer.movecursor(insert.position);
-                for (insert.text) |char| {
-                    buffer.insertCharacter(char) catch {}; // TODO: handle error
-                }
+                buffer.text_insert(insert.position, insert.text) catch {};
             },
             .delete => |*delete| {
-                buffer.delete(.{ .start = delete.start, .end = delete.end }) catch {}; // TODO: handle error
+                buffer.text_delete(.{ .start = delete.start, .end = delete.end }) catch {}; // TODO: handle error
             },
         }
     }

@@ -49,17 +49,15 @@ pub fn init(
 
 fn deleteBufferCharacter(state: *State, _: km.KeyFunctionDataValue) !void {
     const buffer = state.getCurrentBuffer();
-    try buffer.delete_character(state.a);
-}
-
-fn insertTab(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
-    for (0..4) |_| try buffer.insertCharacter(' ');
+    const end = buffer.position();
+    const start = buffer.moveLeft(end, 1);
+    try buffer.text_delete(.{ .start = start, .end = end });
 }
 
 fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
     try insert.put(a, norm(Ks.Backspace.toBits()), km.KeyFunction.initstate(deleteBufferCharacter));
 
-    try insert.put(a, norm(Ks.Tab.toBits()), km.KeyFunction.initbuffer(insertTab));
+    try insert.put(a, norm(Ks.Tab.toBits()), km.KeyFunction.initbuffer(insertsfn.tab));
 
     // try insert.put(a, ctrl('s'), km.KeyFunction.initstate({
     //     handle_save(buffer);
@@ -508,7 +506,7 @@ pub const actions = struct {
 
     pub fn delete(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
         if (buffer.target) |target| {
-            try buffer.delete(target);
+            try buffer.text_delete(target);
         }
         buffer.target = null;
 
@@ -518,7 +516,7 @@ pub const actions = struct {
 
     pub fn change(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
         if (buffer.target) |target| {
-            try buffer.delete(target);
+            try buffer.text_delete(target);
         }
         buffer.target = null;
 
@@ -530,7 +528,11 @@ const insertsfn = struct {
     fn append(s: *State, _: km.KeyFunctionDataValue) !void {
         if (s.ch.modifiers.bits() == 0) {
             const buf = s.getCurrentBuffer();
-            try buf.insertCharacter(s.ch.character);
+            try buf.text_insert(buf.position(), &.{s.ch.character});
         }
+    }
+
+    fn tab(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
+        try buffer.text_insert(buffer.position(), "    ");
     }
 };

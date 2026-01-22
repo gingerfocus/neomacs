@@ -1,0 +1,19 @@
+.{
+    .name = .futureproof,
+    .version = "0.0.0",
+    .fingerprint = 0x946c464dd75b0eb3, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{
+        .@"wgpu-native" = .{
+            .url = "https://github.com/bronter/wgpu_native_zig/archive/refs/tags/v6.2.0.tar.gz",
+            .hash = "wgpu_native_zig-6.2.0-B9jeDMszAwDC_kDLa9gZMZp1NNQ6VE7blZ7OEcBUXycW",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        //"LICENSE",
+        //"README.md",
+    },
+}

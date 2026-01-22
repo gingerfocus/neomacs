@@ -1,12 +1,15 @@
 {
-  inputs.nixpkgs.url = "nixpkgs-unstable"; # "nixpkgs";
+  inputs.nixpkgs.url = "nixpkgs"; # "nixpkgs";
   inputs.zig.url = "github:mitchellh/zig-overlay/6f9a3c160daca2a701a638a7ea7b0e675c1a1848";
   inputs.zig.inputs.nixpkgs.follows = "nixpkgs";
+  # inputs.zls.url = "github:zigtools/zls/7485feeeda45d1ad09422ae83af73307ab9e6c9e";
+  # inputs.zls.inputs.nixpkgs.follows = "nixpkgs";
 
   outputs = {
     self,
     nixpkgs,
     zig,
+    # zls,
   }: let
     lib = nixpkgs.lib;
     systems = ["aarch64-linux" "x86_64-linux"];
@@ -29,25 +32,30 @@
       devShells.default = pkgs.mkShell {
         inputsFrom = with neon; [neomacs zss];
 
-        packages = [
-          pkgs.pkg-config
-          pkgs.zon2nix
+        packages =
+          [
+            pkgs.pkg-config
+            pkgs.zon2nix
 
-          ## Literate Programming Dependencies
-          # pkgs.python3
-          # pkgs.pyright
+            ## Literate Programming Dependencies
+            # pkgs.python3
+            # pkgs.pyright
 
-          ## Networking Dependencies
-          pkgs.bearssl
+            ## Networking Dependencies
+            pkgs.bearssl
 
-          # Development
-          pkgs.alejandra
-          pkgs.stylua
-          pkgs.lua-language-server
-          pkgs.cloc
-          # wgpu-utils
-
-        ];
+            # Development
+            pkgs.alejandra
+            pkgs.stylua
+            pkgs.lua-language-server
+            pkgs.cloc
+            # wgpu-utils
+            pkgs.zls_0_14
+          ]
+          ++ [
+            zig.packages."${system}"."0.14.0"
+            # zls.packages."${system}".default
+          ];
 
         # HACK: Allow for local development despite presence of zig.hook
         shellHook = ''

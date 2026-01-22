@@ -25,6 +25,9 @@ pub const LuaRef = c_int;
 
 // TODO: make this an opaque struct with associated methods
 pub const State = sys.lua_State;
+// pub const State = opaque {
+//    fn todo() void {}
+// };
 
 pub fn init() *State {
     root.log(@src(), .debug, "creating lua state", .{});
