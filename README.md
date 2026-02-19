@@ -49,13 +49,12 @@ straight lua meaning that there is no second syntax to learn and you can type
 
 # Devolopment
 ## Binary Size
-By default, compile to a static, 240k binary with:
+Recomended compilation is to a static, 780k binary with:
 ```sh
-zig build --release=small
+zig build -Dstatic=true -Dwayland=false --release=small
 ```
 
-
-## All features
+## Windowing
 You can also install a fully capable editor by using the recomeneded flags:
 ```bash
 zig build install --release=safe --prefix ~/.local -Dwayland=true
@@ -69,4 +68,3 @@ I very much dont like maintaining code so I just dont write it. I am hard
 limiting myself to 10k lines of zig code (currently 4493). More lua code can be
 written but to me all lua code can be replaced at runtime so it is not
 premanent.
-

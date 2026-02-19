@@ -43,16 +43,13 @@ fn getSurface(instance: *wgpu.Instance, window: *c.GLFWwindow) !*wgpu.Surface {
                 });
                 return instance.createSurface(&description).?;
             } else if (c.glfwGetPlatform() == c.GLFW_PLATFORM_X11) {
-                unreachable;
-                // const display = c.glfwGetX11Display();
-                // const window_handle = c.glfwGetX11Window(window);
-                // return instance.createSurface(&wgpu.SurfaceDescriptor{
-                //     .label = "x11 surface",
-                //     .source = wgpu.SurfaceSource.xlibWindow(wgpu.SurfaceSourceXlibWindow{
-                //         .display = display,
-                //         .window = window_handle,
-                //     }),
-                // });
+                const display = c.glfwGetX11Display();
+                const surface = c.glfwGetX11Window(window);
+                return instance.createSurface(&wgpu.surfaceDescriptorFromXlibWindow(.{
+                    .label = "x11 surface",
+                    .display = display,
+                    .window = surface,
+                }));
             }
             return error.UnsupportedPlatform;
         },
