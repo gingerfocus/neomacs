@@ -4,10 +4,12 @@
 # For 0.1.2
 - [X] Motions W/E/B + a/i
 - [x] Undo
-- [ ] Test Suite
-- [ ] Fix t/f motions getting stuck
+- [X] Test Suite
+- [X] Fix t/f motions
+- [X] Implement F/T motions
 - [ ] Build on Windows + MacOS
-- [ ] Update to newest zig
+- [ ] Update to Newest Zig
+- [ ] Fix Rope Crashes
 
 # For 0.2.0
 - [ ] Lua API

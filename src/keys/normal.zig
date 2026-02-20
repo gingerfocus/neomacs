@@ -17,6 +17,17 @@ const Ks = trm.KeySymbol;
 
 const ModeId = km.ModeId;
 
+const testing = std.testing;
+
+const testvalues = struct {
+    var keymaps: km.Keymap = .{
+        .fallbacks = .{},
+        .targeters = .{},
+        .alloc = testing.allocator,
+        .bindings = .{},
+    };
+};
+
 pub fn init(a: std.mem.Allocator, modes: *km.Keymap) !void {
     var normal = modes.appender(km.ModeId.Normal);
     normal.targeter(km.KeyFunction.initstate(keys.actions.move));
@@ -70,12 +81,17 @@ pub fn initMotionKeys(a: std.mem.Allocator, maps: *km.Keymap.Appender) !void {
     try f.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
     f.fallback(km.KeyFunction.initbuffer(targeters.jump_letter));
 
-    // use the higher states targeter, so in normal it is chill and visual it keeps
-    // the thing
+    var F = try maps.then(norm('F'));
+    try F.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
+    F.fallback(km.KeyFunction.initbuffer(targeters.jump_letter_back));
 
     var t = try maps.then(norm('t'));
     try t.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
     t.fallback(km.KeyFunction.initbuffer(targeters.jump_letter_before));
+
+    var T = try maps.then(norm('T'));
+    try T.put(a, Ks.Esc.toBits(), km.KeyFunction.initsetmod(ModeId.Normal));
+    T.fallback(km.KeyFunction.initbuffer(targeters.jump_letter_before_back));
 
     var g = try maps.then(norm('g'));
     g.targeter(km.KeyFunction.initstate(keys.actions.move));
@@ -237,9 +253,15 @@ pub const motions = struct {
 };
 
 /// A collection of key targeters that can be applied in different contexts.
-const targeters = struct {
+pub const targeters = struct {
+    fn jump_letter_before_back(buffer: *Buffer, ctx: km.KeyFunctionDataValue) !void {
+        try jump_letter_back(buffer, ctx);
+        if (buffer.target) |*target| {
+            target.end = buffer.moveRight(target.end, 1);
+        }
+    }
+
     fn jump_letter_before(buffer: *Buffer, ctx: km.KeyFunctionDataValue) !void {
-        // TODO: count
         try jump_letter(buffer, ctx);
         if (buffer.target) |*target| {
             target.end = buffer.moveLeft(target.end, 1);
@@ -250,14 +272,41 @@ const targeters = struct {
         const ch = ctx.character.character;
 
         const beg = buffer.position();
-        var end = beg;
+        var end = buffer.moveRight(beg, 1);
 
         while (buffer.getChar(end.row, end.col) != null and buffer.getChar(end.row, end.col).? != ch) {
             end = buffer.moveRight(end, 1);
-            // no match found
             if (end.row >= buffer.numLines()) return;
         }
 
+        if (buffer.getChar(end.row, end.col) != null) {
+            end = buffer.moveRight(end, 1);
+        }
+        buffer.updateTarget(Buffer.Visual.Mode.Range, beg, end);
+    }
+
+    fn jump_letter_back(buffer: *Buffer, ctx: km.KeyFunctionDataValue) !void {
+        const ch = ctx.character.character;
+
+        const beg = buffer.position();
+        var end = buffer.moveLeft(beg, 1);
+
+        while (true) {
+            const c = buffer.getChar(end.row, end.col);
+            if (c == null) return;
+            if (c.? == ch) break;
+            if (end.col > 0) {
+                end.col -= 1;
+            } else if (end.row > 0) {
+                end.row -= 1;
+                end.col = buffer.getLineLen(end.row);
+                if (end.col > 0) end.col -= 1;
+            } else {
+                return;
+            }
+        }
+
+        end = buffer.moveRight(end, 1);
         buffer.updateTarget(Buffer.Visual.Mode.Range, beg, end);
     }
 
@@ -725,3 +774,105 @@ const functions = struct {
 // pub fn shift_str_left(arg_str: *u8, arg_str_s: *usize, arg_index_1: usize) void {
 // pub fn shift_str_right(arg_str: *u8, arg_str_s: *usize, arg_index_1: usize) void {
 // pub fn find_opposite_brace(arg_opening: u8) Brace {
+
+test "f motion finds next occurrence" {
+    const a = testing.allocator;
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "abcadef");
+    defer buffer.deinit();
+
+    buffer.row = 0;
+    buffer.col = 0;
+
+    const ctx = km.KeyFunctionDataValue{ .character = .{ .character = 'a' }, .dataptr = null };
+    try targeters.jump_letter(&buffer, ctx);
+
+    try testing.expect(buffer.target != null);
+    const target = buffer.target.?;
+    try testing.expectEqual(@as(usize, 0), target.beg.col);
+    try testing.expectEqual(@as(usize, 4), target.end.col);
+}
+
+test "f motion skips current character" {
+    const a = testing.allocator;
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "aaab");
+    defer buffer.deinit();
+
+    buffer.row = 0;
+    buffer.col = 0;
+
+    const ctx = km.KeyFunctionDataValue{ .character = .{ .character = 'a' }, .dataptr = null };
+    try targeters.jump_letter(&buffer, ctx);
+
+    try testing.expect(buffer.target != null);
+    const target = buffer.target.?;
+    try testing.expectEqual(@as(usize, 0), target.beg.col);
+    try testing.expectEqual(@as(usize, 2), target.end.col);
+}
+
+test "t motion stops before target" {
+    const a = testing.allocator;
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "abc");
+    defer buffer.deinit();
+
+    buffer.row = 0;
+    buffer.col = 0;
+
+    const ctx = km.KeyFunctionDataValue{ .character = .{ .character = 'b' }, .dataptr = null };
+    try targeters.jump_letter_before(&buffer, ctx);
+
+    try testing.expect(buffer.target != null);
+    const target = buffer.target.?;
+    try testing.expectEqual(@as(usize, 0), target.beg.col);
+    try testing.expectEqual(@as(usize, 1), target.end.col);
+}
+
+test "F motion finds previous occurrence" {
+    const a = testing.allocator;
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "abcda");
+    defer buffer.deinit();
+
+    buffer.row = 0;
+    buffer.col = 4;
+
+    const ctx = km.KeyFunctionDataValue{ .character = .{ .character = 'a' }, .dataptr = null };
+    try targeters.jump_letter_back(&buffer, ctx);
+
+    try testing.expect(buffer.target != null);
+    const target = buffer.target.?;
+    try testing.expectEqual(@as(usize, 4), target.beg.col);
+    try testing.expectEqual(@as(usize, 1), target.end.col);
+}
+
+test "F motion skips current character" {
+    const a = testing.allocator;
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "baaa");
+    defer buffer.deinit();
+
+    buffer.row = 0;
+    buffer.col = 3;
+
+    const ctx = km.KeyFunctionDataValue{ .character = .{ .character = 'a' }, .dataptr = null };
+    try targeters.jump_letter_back(&buffer, ctx);
+
+    try testing.expect(buffer.target != null);
+    const target = buffer.target.?;
+    try testing.expectEqual(@as(usize, 3), target.beg.col);
+    try testing.expectEqual(@as(usize, 3), target.end.col);
+}
+
+test "T motion stops after target backward" {
+    const a = testing.allocator;
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "abc");
+    defer buffer.deinit();
+
+    buffer.row = 0;
+    buffer.col = 2;
+
+    const ctx = km.KeyFunctionDataValue{ .character = .{ .character = 'b' }, .dataptr = null };
+    try targeters.jump_letter_before_back(&buffer, ctx);
+
+    try testing.expect(buffer.target != null);
+    const target = buffer.target.?;
+    try testing.expectEqual(@as(usize, 2), target.beg.col);
+    try testing.expectEqual(@as(usize, 2), target.end.col);
+}
