@@ -378,17 +378,69 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
         buffer.undos.recordDelete(targ.beg, targ.end, text_to_delete.items) catch {};
     }
 
-    std.debug.assert(targ.beg.row <= targ.end.row);
-    if (targ.beg.row == targ.end.row) std.debug.assert(targ.beg.col <= targ.end.col);
+    var del_beg = targ.beg;
+    var del_end = targ.end;
 
-    const beg_index = getIndex(buffer, targ.beg);
-    const end_index = getIndex(buffer, targ.end);
+    switch (targ.mode) {
+        .Range => {
+            std.debug.assert(del_beg.row <= del_end.row);
+            if (del_beg.row == del_end.row) std.debug.assert(del_beg.col <= del_end.col);
+            const beg_index = getIndex(buffer, del_beg);
+            const end_index = getIndex(buffer, del_end);
+            buffer.content.delete_range(beg_index, end_index);
+        },
+        .Line => {
+            del_beg = .{ .row = del_beg.row, .col = 0 };
+            del_end = .{ .row = del_end.row + 1, .col = 0 };
+            const beg_index = getIndex(buffer, del_beg);
+            const end_index = getIndex(buffer, del_end);
+            buffer.content.delete_range(beg_index, end_index);
+        },
+        .Block => {
+            const start_col = @min(del_beg.col, del_end.col);
+            const end_col = @max(del_beg.col, del_end.col);
+            const start_row = @min(del_beg.row, del_end.row);
+            const end_row = @max(del_beg.row, del_end.row);
 
-    buffer.content.delete_range(beg_index, end_index);
+            if (start_row == end_row) {
+                const line_len = buffer.getLineLen(start_row);
+                const sc = @min(start_col, line_len);
+                const ec = @min(end_col, line_len);
+                if (sc < ec) {
+                    const beg_idx = getIndex(buffer, .{ .row = start_row, .col = sc });
+                    const end_idx = getIndex(buffer, .{ .row = start_row, .col = ec });
+                    buffer.content.delete_range(beg_idx, end_idx);
+                }
+            } else {
+                var row = end_row;
+                while (row > start_row) : (row -= 1) {
+                    const line_len = buffer.getLineLen(row);
+                    const sc = @min(start_col, line_len);
+                    const ec = @min(end_col, line_len);
+                    if (sc < ec) {
+                        const beg_idx = getIndex(buffer, .{ .row = row, .col = sc });
+                        const end_idx = getIndex(buffer, .{ .row = row, .col = ec });
+                        buffer.content.delete_range(beg_idx, end_idx);
+                    }
+                }
+                {
+                    const line_len = buffer.getLineLen(start_row);
+                    const sc = @min(start_col, line_len);
+                    const ec = @min(end_col, line_len);
+                    if (sc < ec) {
+                        const beg_idx = getIndex(buffer, .{ .row = start_row, .col = sc });
+                        const end_idx = getIndex(buffer, .{ .row = start_row, .col = ec });
+                        buffer.content.delete_range(beg_idx, end_idx);
+                    }
+                }
+            }
+            del_beg = .{ .row = start_row, .col = start_col };
+        },
+    }
 
     try recalculate_contentlines(buffer);
 
-    buffer.movecursor(targ.beg);
+    buffer.movecursor(del_beg);
 }
 
 pub fn text_replace(buffer: *Buffer, target: Visual, ch: u8) !void {
@@ -428,14 +480,33 @@ pub fn gettarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
 
     var buf = std.ArrayList(u8).init(buffer.alloc);
 
-    // TODO: handle targ.mode
-
-    const start_index = getIndex(buffer, targ.beg);
-    const end_index = getIndex(buffer, .{ .row = targ.end.row, .col = targ.end.col });
-
-    var chunks = buffer.content.chunks(start_index, end_index);
-    while (chunks.next()) |chunk| {
-        try buf.appendSlice(chunk);
+    switch (targ.mode) {
+        .Range => {
+            const start_index = getIndex(buffer, targ.beg);
+            const end_index = getIndex(buffer, targ.end);
+            var chunks = buffer.content.chunks(start_index, end_index);
+            while (chunks.next()) |chunk| {
+                try buf.appendSlice(chunk);
+            }
+        },
+        .Line => {
+            for (targ.beg.row..targ.end.row + 1) |row| {
+                if (row > targ.beg.row) try buf.append('\n');
+                const line = try buffer.getLine(row);
+                defer line.deinit();
+                try buf.appendSlice(line.items);
+            }
+        },
+        .Block => {
+            for (targ.beg.row..targ.end.row + 1) |row| {
+                if (row > targ.beg.row) try buf.append('\n');
+                const line = try buffer.getLine(row);
+                defer line.deinit();
+                const start = @min(targ.beg.col, line.items.len);
+                const end = @min(targ.end.col, line.items.len);
+                if (start < end) try buf.appendSlice(line.items[start..end]);
+            }
+        },
     }
 
     return buf;
@@ -466,10 +537,10 @@ pub const idgen = struct {
 
 /// Convertes a cursor into and index into the rope buffer.
 fn getIndex(buffer: *const Buffer, cursor: Cursor) usize {
-    // std.debug.assert(cursor.row < buffer.contentlines.items.len);
+    if (cursor.row >= buffer.contentlines.items.len) return 0;
     const line = buffer.contentlines.items[cursor.row];
-    // std.debug.assert(line.beg + cursor.col < line.end);
-    return line.beg + cursor.col;
+    const col = @min(cursor.col, line.end - line.beg);
+    return line.beg + col;
 }
 
 /// Helper function
@@ -580,7 +651,6 @@ test "buffer delete single character" {
     try testing.expectEqualStrings("hllo", line0.items);
 }
 
-
 test "linewise delete works" {
     const a = testing.allocator;
     const global_keymap = try a.create(km.Keymap);
@@ -617,6 +687,68 @@ test "buffer delete across lines" {
     const line0 = try buffer.getLine(0);
     defer line0.deinit();
     try testing.expectEqualStrings("helld", line0.items);
+}
+
+test "buffer delete line mode multiple lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\nline2\nline3");
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 1, .col = 0 }, .mode = .Line });
+
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("line3", line0.items);
+}
+
+test "buffer delete block mode single line" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abcdef");
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 1 }, .end = .{ .row = 0, .col = 3 }, .mode = .Block });
+
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("adef", line0.items);
+}
+
+test "buffer delete block mode multiple lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "aaa\nbbb\nccc");
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 2, .col = 2 }, .mode = .Block });
+
+    try testing.expectEqual(@as(usize, 3), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("a", line0.items);
+    const line1 = try buffer.getLine(1);
+    defer line1.deinit();
+    try testing.expectEqualStrings("b", line1.items);
+    const line2 = try buffer.getLine(2);
+    defer line2.deinit();
+    try testing.expectEqualStrings("c", line2.items);
 }
 
 test "buffer line count" {
