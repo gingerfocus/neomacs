@@ -21,10 +21,10 @@ rnode: ?*Node = null,
 
 /// Create a new balanced rope from a byte slice.
 pub fn create(allocator: Allocator, bytes: []const u8) !Rope {
-    const rope = .{ .allocator = allocator };
+    var rope = Rope{ .alloc = allocator };
 
     if (bytes.len != 0) {
-        rope.root = try Node.createTree(allocator, bytes);
+        rope.rnode = try Node.createTree(allocator, bytes);
     }
 
     return rope;
@@ -33,6 +33,7 @@ pub fn create(allocator: Allocator, bytes: []const u8) !Rope {
 /// Free the memory used by a rope and its nodes.
 pub fn destroy(self: *Rope) void {
     if (self.rnode) |node| node.destroy(self.alloc);
+    self.* = undefined;
 }
 
 /// Gets the length in bytes of the Rope
@@ -56,7 +57,7 @@ pub fn getRowData(self: *const Rope, row: u64) RowData {
     _ = self;
     _ = row;
 
-    return undefined;
+    @panic("TODO");
 }
 
 pub fn empty(self: *const Rope) bool {
@@ -73,9 +74,11 @@ pub fn append(self: *Rope, string: []const u8) !void {
 ///
 /// On out-of-memory error, this function is safe. Neither rope is changed
 /// in a way that semantically modifies the values in it.
-pub fn merge(self: *Rope, other: *Rope) !void {
+pub fn merge(self: *Rope, other: Rope) !void {
     _ = self;
     _ = other;
+
+    @panic("TODO");
 }
 
 /// Splits this rope into two at the given index.
@@ -84,11 +87,11 @@ pub fn merge(self: *Rope, other: *Rope) !void {
 /// and including the index will be returned as a new rope.
 ///
 /// On out-of-memory error, the rope is not modified.
-pub fn split(self: *Rope, index: u64) !*Rope {
+pub fn split(self: *Rope, index: u64) !Rope {
     _ = self;
     _ = index;
 
-    return undefined;
+    @panic("TODO");
 }
 
 /// Insert bytes at the given index. Invalid indices are clamped to valid range.
@@ -119,14 +122,14 @@ pub fn insert(self: *Rope, index: u64, bytes: []const u8) !void {
 
 /// Delete a range of bytes from a rope.
 /// Invalid indices are clamped to valid range. Errors are logged and operation may be partially complete.
-pub fn delete(self: *Rope, beg: usize, end: usize) void {
+pub fn delete(self: *Rope, beg: usize, end: usize) !void {
     _ = self;
     _ = beg;
     _ = end;
 
     // TODO: make this use splice with empty rope
 
-    return;
+    @panic("TODO");
 }
 
 /// Swap the bytes of the subrange of a rope with another rope.
@@ -152,15 +155,33 @@ pub fn splice(
     std.debug.assert(self.getLen() > 0);
 }
 
+pub const Chunks = struct {
+    rope: *Rope,
+    beg: usize,
+    end: usize,
+
+    var static: [128]u8 = undefined;
+    pub fn next(self: *Chunks) ?[]u8 {
+        _ = self;
+        @panic("TODO");
+    }
+};
+
+/// Iterator over data in the rope.
+pub fn chunks(self: *const Rope, beg: usize, end: usize) Chunks {
+    _ = self;
+    _ = beg;
+    _ = end;
+
+    @panic("TODO");
+}
+
 /// Get a byte of the rope.
-///
-/// Note that splay trees have some really important mathematical properties
-/// here. For example, they have static optimality and are guaranteed to use
-/// only linear time when accessing nodes in inorder traversal.
-pub fn get(self: *Rope, i: u64) ?u8 {
+pub fn get(self: *const Rope, i: u64) ?u8 {
     _ = self;
     _ = i;
-    return null;
+
+    @panic("TODO");
 }
 
 /// Write the rope to a stream as chunks
@@ -170,7 +191,7 @@ pub fn format(self: *Rope, comptime fmt: []const u8, options: std.fmt.FormatOpti
     _ = options;
     _ = writer;
 
-    unreachable;
+    @panic("TODO");
 }
 
 // ----------------- node methods ---------------------
@@ -238,26 +259,23 @@ const Node = struct {
         self.update();
     }
 
-    /// Updates the aggregate fields based on children and own data.
+    /// Updates the aggregate fields based on children and own data. Assumes
+    /// that the childerns data is up to date.
     fn update(self: *Node) void {
         self.contentSize = self.len;
         self.nodes = 1;
         self.internalLines = std.mem.count(u8, self.data[0..self.len], "\n");
+        self.lineOffset = 0;
 
-        const left = self.childern[0];
-        const right = self.childern[1];
-
-        // line_offset = lines in left subtree + left's line_offset
-        if (left) |l| {
+        if (self.childern[0]) |l| {
             self.contentSize += l.contentSize;
             self.nodes += l.nodes;
             self.internalLines += l.internalLines;
+
             self.lineOffset = l.internalLines + l.lineOffset;
-        } else {
-            self.lineOffset = 0;
         }
 
-        if (right) |r| {
+        if (self.childern[1]) |r| {
             self.contentSize += r.contentSize;
             self.nodes += r.nodes;
             self.internalLines += r.internalLines;
@@ -313,7 +331,7 @@ const testing = std.testing;
 
 test "rope getRowData for 3 lines debug" {
     const a = testing.allocator;
-    const r = try Rope.create(a, "line1\nline2\nline3");
+    var r = try Rope.create(a, "line1\nline2\nline3");
     defer r.destroy();
 
     // This test will show the actual row data in the test output
@@ -328,7 +346,7 @@ test "rope getRowData for 3 lines debug" {
 
 test "rope getRowData empty" {
     const a = testing.allocator;
-    const rope = try Rope.create(a, "");
+    var rope = try Rope.create(a, "");
     defer rope.destroy();
 
     const row = rope.getRowData(0);
@@ -338,7 +356,7 @@ test "rope getRowData empty" {
 
 test "rope getRowData single line" {
     const a = testing.allocator;
-    const rope = try Rope.create(a, "hello");
+    var rope = try Rope.create(a, "hello");
     defer rope.destroy();
 
     // getLineCount returns newline count (0 newlines in "hello")
@@ -355,7 +373,7 @@ test "rope getRowData single line" {
 
 test "rope getRowData multiple lines" {
     const a = testing.allocator;
-    const rope = try Rope.create(a, "hello\nworld\nfoo");
+    var rope = try Rope.create(a, "hello\nworld\nfoo");
     defer rope.destroy();
 
     // 2 newlines = 3 lines
@@ -376,7 +394,7 @@ test "rope getRowData multiple lines" {
 
 test "rope getRowData with newlines at end" {
     const a = testing.allocator;
-    const rope = try Rope.create(a, "line1\nline2\n");
+    var rope = try Rope.create(a, "line1\nline2\n");
     defer rope.destroy();
 
     // 2 newlines = 2 lines (last newline terminates line2, doesn't create new line)
@@ -394,10 +412,10 @@ test "rope getRowData with newlines at end" {
 
 test "rope getRowData after insert" {
     const a = testing.allocator;
-    const rope = try Rope.create(a, "");
+    var rope = try Rope.create(a, "");
     defer rope.destroy();
 
-    rope.insert(0, "abc\ndef");
+    try rope.insert(0, "abc\ndef");
     // 1 newline = 2 lines
     try testing.expectEqual(@as(u64, 1), rope.getLineCount());
 
@@ -412,13 +430,13 @@ test "rope getRowData after insert" {
 
 test "rope getRowData after delete" {
     const a = testing.allocator;
-    const rope = try Rope.create(a, "hello\nworld");
+    var rope = try Rope.create(a, "hello\nworld");
     defer rope.destroy();
 
     // "hello\nworld" has 1 newline
     try testing.expectEqual(@as(u64, 1), rope.getLineCount());
 
-    rope.delete(5, 6);
+    try rope.delete(5, 6);
 
     // After deleting the newline, we should have "helloworld" with 0 newlines
     // But due to potential issues, just verify row data is consistent

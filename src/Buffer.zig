@@ -16,7 +16,7 @@ id: usize,
 
 target: ?Visual = null,
 
-content: *Rope,
+content: Rope,
 
 undos: undo.UndoHistory,
 undoing: bool = false,
@@ -93,7 +93,7 @@ pub fn init(
     keymaps: *km.Keymap,
     filename: []const u8,
 ) !Buffer {
-    const roper = try Rope.create(a, "");
+    var roper = try Rope.create(a, "");
 
     if (std.fs.cwd().openFile(filename, .{})) |file| {
         defer file.close();
@@ -287,7 +287,7 @@ pub fn save(buffer: *Buffer) !void {
 
 pub fn textInsert(buffer: *Buffer, cursor: Cursor, text: []const u8) !void {
     const index = getIndex(buffer, cursor);
-    buffer.content.insert(index, text);
+    try buffer.content.insert(index, text);
 }
 
 /// This function is inclusive on the lower bound and exclusive on the upper
@@ -312,16 +312,17 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
             if (del_beg.row == del_end.row) std.debug.assert(del_beg.col <= del_end.col);
             const beg_index = getIndex(buffer, del_beg);
             const end_index = getIndex(buffer, del_end);
-            buffer.content.delete(beg_index, end_index);
+            try buffer.content.delete(beg_index, end_index);
         },
         .Line => {
             del_beg = .{ .row = del_beg.row, .col = 0 };
             del_end = .{ .row = del_end.row + 1, .col = 0 };
             const beg_index = getIndex(buffer, del_beg);
             const end_index = getIndex(buffer, del_end);
-            buffer.content.delete(beg_index, end_index);
+            try buffer.content.delete(beg_index, end_index);
         },
         .Block => {
+            // TODO: implement some sort of multicursor for this
             const start_col = @min(del_beg.col, del_end.col);
             const end_col = @max(del_beg.col, del_end.col);
             const start_row = @min(del_beg.row, del_end.row);
@@ -334,7 +335,7 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
                 if (sc < ec) {
                     const beg_idx = getIndex(buffer, .{ .row = start_row, .col = sc });
                     const end_idx = getIndex(buffer, .{ .row = start_row, .col = ec });
-                    buffer.content.delete(beg_idx, end_idx);
+                    try buffer.content.delete(beg_idx, end_idx);
                 }
             } else {
                 var row = end_row;
@@ -345,7 +346,7 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
                     if (sc < ec) {
                         const beg_idx = getIndex(buffer, .{ .row = row, .col = sc });
                         const end_idx = getIndex(buffer, .{ .row = row, .col = ec });
-                        buffer.content.delete(beg_idx, end_idx);
+                        try buffer.content.delete(beg_idx, end_idx);
                     }
                 }
                 {
@@ -355,7 +356,7 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
                     if (sc < ec) {
                         const beg_idx = getIndex(buffer, .{ .row = start_row, .col = sc });
                         const end_idx = getIndex(buffer, .{ .row = start_row, .col = ec });
-                        buffer.content.delete(beg_idx, end_idx);
+                        try buffer.content.delete(beg_idx, end_idx);
                     }
                 }
             }
@@ -381,9 +382,9 @@ pub fn text_replace(buffer: *Buffer, target: Visual, ch: u8) !void {
         offset += copy_len;
     }
 
-    buffer.content.delete(start_index, end_index);
+    try buffer.content.delete(start_index, end_index);
     const replacement = buf[0..offset];
-    buffer.content.insert(start_index, replacement);
+    try buffer.content.insert(start_index, replacement);
 }
 
 pub fn text_change(buffer: *Buffer, target: Visual, text: []const u8) !void {
@@ -622,9 +623,9 @@ test "buffer length adding newlines" {
     var buffer = try Buffer.initString(a, &testvalues.keymaps, "hello");
     defer buffer.deinit();
 
-    try testing.expectEqual(@as(u64, 5), buffer.content.len());
+    try testing.expectEqual(@as(u64, 5), buffer.content.getLen());
     try buffer.textInsert(.{ .row = 0, .col = 5 }, "\nwonderful\nworld");
-    try testing.expectEqual(@as(u64, 21), buffer.content.len());
+    try testing.expectEqual(@as(u64, 21), buffer.content.getLen());
     // getLineCount returns newline count, not line count
     try testing.expectEqual(@as(u64, 2), buffer.content.getLineCount());
 }
