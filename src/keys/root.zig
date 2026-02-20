@@ -4,7 +4,7 @@ const scu = root.scu;
 const trm = root.trm;
 const lib = root.lib;
 // const rc = root.rc;
-const lua = root.lua;
+const Lua = root.Lua;
 const km = root.km;
 const State = root.State;
 const Buffer = root.Buffer;
@@ -23,6 +23,7 @@ const Ks = trm.KeySymbol;
 pub fn init(
     a: std.mem.Allocator,
     modes: *km.Keymap,
+    lua: Lua,
 ) !void {
     var insert = modes.appender(km.ModeId.Insert);
     insert.targeter(km.KeyFunction.initstate(actions.move));
@@ -44,14 +45,14 @@ pub fn init(
     try visual.put(a, norm('d'), km.KeyFunction.initbuffer(actions.delete));
 
     // command
-    try command.init(a, modes);
+    try command.init(a, modes, lua.enabled);
 }
 
 fn deleteBufferCharacter(state: *State, _: km.KeyFunctionDataValue) !void {
     const buffer = state.getCurrentBuffer();
     const beg = buffer.position();
     const end = buffer.moveLeft(beg, 1);
-    try buffer.text_delete(.{ .beg = beg , .end = end });
+    try buffer.text_delete(.{ .beg = beg, .end = end });
 }
 
 fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
@@ -528,11 +529,11 @@ const insertsfn = struct {
     fn append(s: *State, _: km.KeyFunctionDataValue) !void {
         if (s.ch.modifiers.bits() == 0) {
             const buf = s.getCurrentBuffer();
-            try buf.text_insert(buf.position(), &.{s.ch.character});
+            try buf.textInsert(buf.position(), &.{s.ch.character});
         }
     }
 
     fn tab(buffer: *Buffer, _: km.KeyFunctionDataValue) !void {
-        try buffer.text_insert(buffer.position(), "    ");
+        try buffer.textInsert(buffer.position(), "    ");
     }
 };

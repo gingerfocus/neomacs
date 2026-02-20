@@ -16,7 +16,6 @@ const thunk = struct {
     }
 };
 
-
 pub const KeyDataPtr = lib.types.TypeErasedData;
 // pub const KeyDataPtr = anyopaque;
 
@@ -89,13 +88,15 @@ pub fn run(self: Self, state: *State) anyerror!void {
             try fc(state, .{ .character = state.ch, .dataptr = self.dataptr });
         },
         .lua_function => |id| {
+            if (!state.L.enabled) return;
             std.debug.assert(id > 0);
 
-            Lua.sys.lua_rawgeti(state.L, Lua.sys.LUA_REGISTRYINDEX, id);
+            if (comptime Lua.compiled_in) {
+                Lua.sys.lua_rawgeti(state.L.state, Lua.sys.LUA_REGISTRYINDEX, id);
 
-            if (Lua.sys.lua_pcall(state.L, 0, 0, 0) != 0) {
-                // nlua_error(lstate, _("Error executing vim.schedule Lua callback: %.*s"));
-                return error.ExecuteLuaCallback;
+                if (Lua.sys.lua_pcall(state.L.state, 0, 0, 0) != 0) {
+                    return error.ExecuteLuaCallback;
+                }
             }
         },
         // TODO: this can be run as a coroutine as it only takes buffer state

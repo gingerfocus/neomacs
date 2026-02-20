@@ -27,6 +27,7 @@ pub fn init(a: std.mem.Allocator, modes: *km.Keymap) !void {
     try initModifyingKeys(a, &normal);
     try normal.put(a, norm('u'), km.KeyFunction.initstate(functions.undo));
     try normal.put(a, ctrl('r'), km.KeyFunction.initstate(functions.redo));
+    try normal.put(a, norm('Z'), km.KeyFunction.initstate(functions.writeQuit));
     // try initNormalKeys(a, &normal);
 }
 
@@ -594,7 +595,7 @@ const inserts = struct {
 
         buffer.col = 0;
 
-        try buffer.text_insert(buffer.position(), &.{'\n'});
+        try buffer.textInsert(buffer.position(), &.{'\n'});
 
         root.log(@src(), .debug, "number of lines: {d}", .{buffer.numLines()});
 
@@ -609,7 +610,7 @@ const inserts = struct {
         const line_len = buffer.getLineLen(buffer.row);
 
         buffer.col = line_len;
-        try buffer.text_insert(buffer.position(), &.{'\n'});
+        try buffer.textInsert(buffer.position(), &.{'\n'});
 
         buffer.repeating.reset();
         buffer.setMode(ModeId.Insert);
@@ -646,7 +647,7 @@ const functions = struct {
         _ = state.takeRepeating();
         const buffer = state.getCurrentBuffer();
         if (buffer.target) |target| {
-            const selection = try buffer.gettarget(target);
+            const selection = try buffer.getTarget(target);
             defer selection.deinit();
 
             root.log(@src(), .debug, "yank: {s}", .{selection.items});
@@ -705,6 +706,19 @@ const functions = struct {
             break :blk Buffer.Visual{ .beg = start, .end = end };
         };
         try buffer.text_replace(target, ch.character);
+    }
+
+    fn quit(state: *State, _: km.KeyFunctionDataValue) !void {
+        state.config.QUIT = true;
+    }
+
+    fn writeQuit(state: *State, _: km.KeyFunctionDataValue) !void {
+        const buffer = state.getCurrentBuffer();
+        buffer.save() catch {
+            // root.log(@src(), .err, "could not save buffer {s}: {any}", .{ buffer.filename, err });
+            // return;
+        };
+        state.config.QUIT = true;
     }
 };
 

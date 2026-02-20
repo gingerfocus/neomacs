@@ -5,6 +5,7 @@ pub fn build(b: *std.Build) !void {
     const usegtk = b.option(bool, "gtk", "compile the gtk backend") orelse false;
     const usewayland = b.option(bool, "wayland", "compile the wayland backend") orelse true;
     const usewgpu = b.option(bool, "wgpu", "compile the wgpu backend") orelse false;
+    const uselua = b.option(bool, "lua", "compile with lua scripting") orelse true;
 
     const needsdyn = usegtk or usewayland or usewgpu;
 
@@ -22,6 +23,7 @@ pub fn build(b: *std.Build) !void {
     options.addOption(bool, "usegtk", usegtk);
     options.addOption(bool, "usewayland", usewayland);
     options.addOption(bool, "usewgpu", usewgpu);
+    options.addOption(bool, "uselua", uselua);
 
     // std.debug.print("using options: \n{any}\n", .{.{ .gtk = usegtk, .wayland = usewayland, .static = static }});
 
@@ -58,7 +60,9 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    addLuaImport(b, neon, staticlua, target, optimize);
+    if (uselua) {
+        addLuaImport(b, neon, staticlua, target, optimize);
+    }
 
     // ---------
 

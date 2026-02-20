@@ -28,7 +28,7 @@ pub const UndoAction = struct {
 
         switch (undoaction.data) {
             .insert => |*insert| {
-                buffer.text_insert(insert.position, insert.text) catch {};
+                buffer.textInsert(insert.position, insert.text) catch {};
             },
             .delete => |*delete| {
                 buffer.text_delete(.{ .beg = delete.beg, .end = delete.end }) catch {}; // TODO: handle error

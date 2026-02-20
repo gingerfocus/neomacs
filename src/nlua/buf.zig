@@ -1,28 +1,27 @@
 const std = @import("std");
 
 const root = @import("../root.zig");
-const lua = root.lua;
+const Lua = root.Lua;
 
-pub fn write(_: ?*lua.State) callconv(.C) c_int {
+pub fn write(_: ?*Lua.State) callconv(.C) c_int {
     const state = root.state();
 
     const buffer = state.getCurrentBuffer();
-    if (!buffer.hasbackingfile) return 0;
 
-    buffer.save() catch |err| {
-        root.log(@src(), .err, "could not save buffer {s}: {any}", .{ buffer.filename, err });
+    buffer.save() catch {
+        // root.log(@src(), .err, "could not save buffer {s}: {any}", .{ buffer.filename, err });
         return 0;
     };
 
     return 0;
 }
 
-pub fn open(L: ?*lua.State) callconv(.C) c_int {
+pub fn open(L: ?*Lua.State) callconv(.C) c_int {
     const state = root.state();
 
     root.log(@src(), .err, "opne", .{});
 
-    const file = lua.check(L, 1, []const u8) orelse {
+    const file = Lua.check(L, 1, []const u8) orelse {
         root.log(@src(), .err, "no file provided", .{});
         // TODO: make a prompt thing that requests it from the user
         return 0;
@@ -31,7 +30,7 @@ pub fn open(L: ?*lua.State) callconv(.C) c_int {
     const nbuf = state.a.create(root.Buffer) catch return 0;
 
     // TODO: make sure its the scratch buffer
-    nbuf.* = root.Buffer.init(state.a, state.global_keymap, file) catch {
+    nbuf.* = root.Buffer.init(state.a, state.keymaps, file) catch {
         state.a.destroy(nbuf);
         root.log(@src(), .err, "File Not Found: {s}", .{file});
         return 0;
@@ -45,23 +44,23 @@ pub fn open(L: ?*lua.State) callconv(.C) c_int {
     return 0;
 }
 
-pub fn next(_: ?*lua.State) callconv(.C) c_int {
+pub fn next(_: ?*Lua.State) callconv(.C) c_int {
     root.state().bufferNext();
     return 0;
 }
 
-pub fn prev(_: ?*lua.State) callconv(.C) c_int {
+pub fn prev(_: ?*Lua.State) callconv(.C) c_int {
     root.state().bufferPrev();
     return 0;
 }
 
-pub fn name(L: ?*lua.State) callconv(.C) c_int {
+pub fn name(L: ?*Lua.State) callconv(.C) c_int {
     const state = root.state();
     const buffer = state.getCurrentBuffer();
-    lua.push(L, buffer.filename);
+    Lua.push(L, buffer.filename orelse "*unnamed*");
     return 1;
 }
 
-pub fn create(_: ?*lua.State) callconv(.C) c_int {
+pub fn create(_: ?*Lua.State) callconv(.C) c_int {
     @panic("not implemented");
 }

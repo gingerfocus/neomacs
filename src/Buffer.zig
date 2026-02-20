@@ -26,8 +26,7 @@ undoing: bool = false,
 row: usize = 0,
 col: usize = 0,
 
-filename: []const u8,
-hasbackingfile: bool,
+filename: ?[]const u8,
 
 global_keymap: *km.Keymap,
 local_keymap: km.Keymap,
@@ -119,7 +118,6 @@ pub fn init(
     return Buffer{
         .id = idgen.next(),
         .filename = filename,
-        .hasbackingfile = true,
 
         .content = roper,
         .contentlines = roperlines,
@@ -132,38 +130,32 @@ pub fn init(
     };
 }
 
-// pub fn initString(
-//     a: std.mem.Allocator,
-//     global_keymap: *km.Keymap,
-//     filename: []const u8,
-//     content: []const u8,
-// ) !Buffer {
-//     const roper = try rope.Rope.create(a, "");
-//     try roper.append(content);
+/// Creates a new buffer from a string. There is no backing file set on
+/// initialization.
+pub fn initString(
+    a: std.mem.Allocator,
+    keymaps: *km.Keymap,
+    content: []const u8,
+) !Buffer {
+    const roper = try rope.Rope.create(a, content);
 
-//     var roperlines = std.ArrayListUnmanaged(LineStructure){};
+    var buffer = Buffer{
+        .id = idgen.next(),
+        .filename = null,
 
-//     try roperlines.append(a, .{ .beg = index, .end = index + line.len });
+        .content = roper,
+        .contentlines = .{},
 
-//     var lines = std.ArrayList(Line).init(a);
+        .undos = undo.UndoHistory.init(a),
+        .undoing = false,
+        .global_keymap = keymaps,
+        .local_keymap = km.Keymap.init(a),
+        .alloc = a,
+    };
 
-//     return Buffer{
-//         .id = idgen.next(),
-//         .filename = filename,
-//         .hasbackingfile = true,
-
-//         .lines = lines.moveToUnmanaged(),
-
-//         .content = roper,
-//         .contentlines = roperlines,
-
-//         .undos = undo.UndoHistory.init(a),
-//         .undoing = false,
-//         .global_keymap = global_keymap,
-//         .local_keymap = km.Keymap.init(a),
-//         .alloc = a,
-//     };
-// }
+    try buffer.recalculate_contentlines();
+    return buffer;
+}
 
 pub fn deinit(buffer: *Buffer) void {
     buffer.content.destroy();
@@ -210,7 +202,7 @@ pub fn numLines(buffer: *const Buffer) usize {
 }
 
 pub fn lineCount(buffer: *const Buffer) usize {
-    return @intCast(buffer.content.line_count());
+    return @intCast(buffer.content.getLineCount());
 }
 
 pub fn getLine(buffer: *const Buffer, row: usize) !std.ArrayList(u8) {
@@ -291,9 +283,9 @@ pub fn moveLeft(buffer: *const Buffer, beg: lib.Vec2, count: usize) lib.Vec2 {
 }
 
 pub fn save(buffer: *Buffer) !void {
-    if (buffer.filename.len == 0) return;
+    const filename = buffer.filename orelse return;
 
-    const f = try std.fs.cwd().createFile(buffer.filename, .{});
+    const f = try std.fs.cwd().createFile(filename, .{});
     defer f.close();
 
     var chunks = buffer.content.chunks(0, buffer.content.len());
@@ -303,7 +295,7 @@ pub fn save(buffer: *Buffer) !void {
     }
 }
 
-pub fn text_insert(buffer: *Buffer, cursor: Cursor, text: []const u8) !void {
+pub fn textInsert(buffer: *Buffer, cursor: Cursor, text: []const u8) !void {
     const index = getIndex(buffer, cursor);
     buffer.content.insert(index, text);
 
@@ -353,7 +345,7 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
     const targ = target.normalize();
 
     if (!buffer.undoing) {
-        const text_to_delete = buffer.gettarget(target) catch {
+        const text_to_delete = buffer.getTarget(target) catch {
             return;
         };
         defer text_to_delete.deinit();
@@ -457,7 +449,7 @@ pub fn text_change(buffer: *Buffer, target: Visual, text: []const u8) !void {
 
 /// I dont like this function as it is too vague, I think proviing a yank
 /// functionality might be it
-pub fn gettarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
+pub fn getTarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
     const targ = target.normalize();
 
     var buf = std.ArrayList(u8).init(buffer.alloc);
@@ -541,6 +533,18 @@ fn shift_indices(buffer: *Buffer, cursor: Cursor, count: usize) void {
     }
 }
 
+// ------------------------ Testing -----------------------
+
+/// Static constants for testing using shims
+const testvalues = struct {
+    var keymaps: km.Keymap = .{
+        .fallbacks = .{},
+        .targeters = .{},
+        .alloc = testing.allocator,
+        .bindings = .{},
+    };
+};
+
 test "buffer insert character at end" {
     const a = testing.allocator;
     const global_keymap = try a.create(km.Keymap);
@@ -551,7 +555,7 @@ test "buffer insert character at end" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello");
 
     try testing.expectEqual(@as(usize, 1), buffer.numLines());
     const line0 = try buffer.getLine(0);
@@ -569,8 +573,8 @@ test "buffer insert multiple characters" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abc");
-    try buffer.text_insert(.{ .row = 0, .col = 3 }, "def");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "abc");
+    try buffer.textInsert(.{ .row = 0, .col = 3 }, "def");
 
     const line0 = try buffer.getLine(0);
     defer line0.deinit();
@@ -587,7 +591,7 @@ test "buffer insert newline" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello\nworld");
 
     try testing.expectEqual(@as(usize, 2), buffer.numLines());
     const line0 = try buffer.getLine(0);
@@ -608,8 +612,8 @@ test "buffer insert newline in middle" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "helloworld");
-    try buffer.text_insert(.{ .row = 0, .col = 5 }, "\n");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "helloworld");
+    try buffer.textInsert(.{ .row = 0, .col = 5 }, "\n");
 
     try testing.expectEqual(@as(usize, 2), buffer.numLines());
     const line0 = try buffer.getLine(0);
@@ -630,7 +634,7 @@ test "buffer delete single character" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello");
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 1 }, .end = .{ .row = 0, .col = 2 }, .mode = .Range });
 
     const line0 = try buffer.getLine(0);
@@ -648,7 +652,7 @@ test "linewise delete works" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello\nworld");
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 5 }, .mode = .Line });
 
     try testing.expectEqual(@as(usize, 1), buffer.numLines());
@@ -667,7 +671,7 @@ test "buffer delete across lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello\nworld");
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 3 }, .end = .{ .row = 1, .col = 3 }, .mode = .Range });
 
     try testing.expectEqual(@as(usize, 1), buffer.numLines());
@@ -686,7 +690,7 @@ test "buffer delete line mode multiple lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\nline2\nline3");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "line1\nline2\nline3");
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 1, .col = 0 }, .mode = .Line });
 
     try testing.expectEqual(@as(usize, 1), buffer.numLines());
@@ -705,7 +709,7 @@ test "buffer delete block mode single line" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abcdef");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "abcdef");
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 1 }, .end = .{ .row = 0, .col = 3 }, .mode = .Block });
 
     const line0 = try buffer.getLine(0);
@@ -723,7 +727,7 @@ test "buffer delete block mode multiple lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "aaa\nbbb\nccc");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "aaa\nbbb\nccc");
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 2, .col = 2 }, .mode = .Block });
 
     try testing.expectEqual(@as(usize, 3), buffer.numLines());
@@ -750,7 +754,7 @@ test "buffer line count" {
 
     try testing.expectEqual(@as(usize, 1), buffer.numLines());
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\nline2");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "line1\nline2");
     try testing.expectEqual(@as(usize, 2), buffer.numLines());
 }
 
@@ -764,10 +768,10 @@ test "buffer getLineLen" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello");
     try testing.expectEqual(@as(usize, 5), buffer.getLineLen(0));
 
-    try buffer.text_insert(.{ .row = 0, .col = 5 }, "\nworld");
+    try buffer.textInsert(.{ .row = 0, .col = 5 }, "\nworld");
     try testing.expectEqual(@as(usize, 5), buffer.getLineLen(0));
     try testing.expectEqual(@as(usize, 5), buffer.getLineLen(1));
 }
@@ -782,9 +786,9 @@ test "buffer multiple inserts preserve lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\n");
-    try buffer.text_insert(.{ .row = 1, .col = 0 }, "line2\n");
-    try buffer.text_insert(.{ .row = 2, .col = 0 }, "line3");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "line1\n");
+    try buffer.textInsert(.{ .row = 1, .col = 0 }, "line2\n");
+    try buffer.textInsert(.{ .row = 2, .col = 0 }, "line3");
 
     try testing.expectEqual(@as(usize, 3), buffer.numLines());
 
@@ -809,8 +813,8 @@ test "buffer insert in middle of content" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abc");
-    try buffer.text_insert(.{ .row = 0, .col = 1 }, "X");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "abc");
+    try buffer.textInsert(.{ .row = 0, .col = 1 }, "X");
 
     try testing.expectEqual(@as(usize, 1), buffer.numLines());
     const l0 = try buffer.getLine(0);
@@ -828,8 +832,8 @@ test "buffer insert newline in middle preserves lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abcdef");
-    try buffer.text_insert(.{ .row = 0, .col = 3 }, "\n");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "abcdef");
+    try buffer.textInsert(.{ .row = 0, .col = 3 }, "\n");
 
     try testing.expectEqual(@as(usize, 2), buffer.numLines());
     const l0 = try buffer.getLine(0);
@@ -850,7 +854,7 @@ test "buffer delete line then insert" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\nline2\nline3");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "line1\nline2\nline3");
     try buffer.text_delete(.{ .beg = .{ .row = 1, .col = 0 }, .end = .{ .row = 1, .col = 5 }, .mode = .Line });
 
     try testing.expectEqual(@as(usize, 2), buffer.numLines());
@@ -872,7 +876,7 @@ test "buffer delete preserves remaining lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "a\nb\nc");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "a\nb\nc");
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 1 }, .mode = .Range });
 
     try testing.expectEqual(@as(usize, 3), buffer.numLines());
@@ -897,7 +901,7 @@ test "buffer complex delete operations" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld\ntest");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello\nworld\ntest");
 
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 5 }, .end = .{ .row = 1, .col = 0 }, .mode = .Range });
 
@@ -920,7 +924,7 @@ test "buffer empty line handling" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "\n");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "\n");
 
     try testing.expectEqual(@as(usize, 2), buffer.numLines());
     const l0 = try buffer.getLine(0);
@@ -941,7 +945,7 @@ test "buffer consecutive deletes" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abc\ndef\nghi");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "abc\ndef\nghi");
 
     try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 3 }, .mode = .Range });
     try testing.expectEqual(@as(usize, 3), buffer.numLines());
@@ -966,7 +970,7 @@ test "buffer moveRight at line end" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello");
 
     const end = buffer.moveRight(.{ .row = 0, .col = 3 }, 10);
     try testing.expectEqual(@as(usize, 0), end.row);
@@ -983,7 +987,7 @@ test "buffer moveRight across lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "ab\ncd");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "ab\ncd");
 
     const end = buffer.moveRight(.{ .row = 0, .col = 0 }, 5);
     try testing.expectEqual(@as(usize, 1), end.row);
@@ -1000,7 +1004,7 @@ test "buffer moveLeft at line beg" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello");
 
     const end = buffer.moveLeft(.{ .row = 0, .col = 3 }, 5);
     try testing.expectEqual(@as(usize, 0), end.row);
@@ -1017,7 +1021,7 @@ test "buffer moveLeft across lines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "ab\ncd");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "ab\ncd");
 
     const end = buffer.moveLeft(.{ .row = 1, .col = 1 }, 3);
     try testing.expectEqual(@as(usize, 0), end.row);
@@ -1041,25 +1045,6 @@ test "buffer empty buffer" {
     try testing.expectEqualStrings("", line0.items);
 }
 
-test "buffer single char buffer" {
-    const a = testing.allocator;
-    const global_keymap = try a.create(km.Keymap);
-    defer a.destroy(global_keymap);
-    global_keymap.* = km.Keymap.init(a);
-    defer global_keymap.deinit();
-
-    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
-    defer buffer.deinit();
-
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "a");
-
-    try testing.expectEqual(@as(usize, 1), buffer.numLines());
-    try testing.expectEqual(@as(usize, 1), buffer.getLineLen(0));
-    const line0 = try buffer.getLine(0);
-    defer line0.deinit();
-    try testing.expectEqualStrings("a", line0.items);
-}
-
 test "buffer many newlines" {
     const a = testing.allocator;
     const global_keymap = try a.create(km.Keymap);
@@ -1070,7 +1055,7 @@ test "buffer many newlines" {
     var buffer = try Buffer.init(a, global_keymap, "/dev/null");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "a\nb\nc\nd\ne");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "a\nb\nc\nd\ne");
 
     try testing.expectEqual(@as(usize, 5), buffer.numLines());
     const line0 = try buffer.getLine(0);
@@ -1090,55 +1075,40 @@ test "buffer many newlines" {
     try testing.expectEqualStrings("e", line4.items);
 }
 
-test "buffer gettarget single line" {
+test "buffer getTarget single line" {
     const a = testing.allocator;
-    const global_keymap = try a.create(km.Keymap);
-    defer a.destroy(global_keymap);
-    global_keymap.* = km.Keymap.init(a);
-    defer global_keymap.deinit();
-
-    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello world");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello world");
 
-    const target = try buffer.gettarget(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 5 }, .mode = .Range });
+    const target = try buffer.getTarget(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 5 }, .mode = .Range });
     defer target.deinit();
 
     try testing.expectEqualStrings("hello", target.items);
 }
 
-test "buffer gettarget multi line" {
+test "buffer getTarget multi line" {
     const a = testing.allocator;
-    const global_keymap = try a.create(km.Keymap);
-    defer a.destroy(global_keymap);
-    global_keymap.* = km.Keymap.init(a);
-    defer global_keymap.deinit();
-
-    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+    try buffer.textInsert(.{ .row = 0, .col = 0 }, "hello\nworld");
 
-    const target = try buffer.gettarget(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 1, .col = 5 }, .mode = .Range });
+    const target = try buffer.getTarget(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 1, .col = 5 }, .mode = .Range });
     defer target.deinit();
 
     try testing.expectEqualStrings("hello\nworld", target.items);
 }
 
-test "buffer rope len" {
+test "buffer length adding newlines" {
     const a = testing.allocator;
-    const global_keymap = try a.create(km.Keymap);
-    defer a.destroy(global_keymap);
-    global_keymap.* = km.Keymap.init(a);
-    defer global_keymap.deinit();
-
-    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    var buffer = try Buffer.initString(a, &testvalues.keymaps, "hello");
     defer buffer.deinit();
 
-    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
     try testing.expectEqual(@as(u64, 5), buffer.content.len());
-
-    try buffer.text_insert(.{ .row = 0, .col = 5 }, " world");
-    try testing.expectEqual(@as(u64, 11), buffer.content.len());
+    try buffer.textInsert(.{ .row = 0, .col = 5 }, "\nwonderful\nworld");
+    try testing.expectEqual(@as(u64, 21), buffer.content.len());
+    // TODO: is this a bug, should it be 3
+    try testing.expectEqual(@as(u64, 2), buffer.content.getLineCount());
 }

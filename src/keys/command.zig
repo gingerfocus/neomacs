@@ -1,14 +1,16 @@
 const root = @import("../root.zig");
 const std = root.std;
 const trm = root.trm;
-const lua = root.lua;
+const Lua = root.Lua;
 const km = root.km;
 const State = root.State;
 
 const norm = trm.keys.norm;
 const ctrl = trm.keys.ctrl;
 
-pub fn init(a: std.mem.Allocator, modes: *km.Keymap) !void {
+pub fn init(a: std.mem.Allocator, modes: *km.Keymap, lua_enabled: bool) !void {
+    if (!lua_enabled) return;
+
     var normal = modes.appender(km.ModeId.Normal);
     try normal.put(a, norm(':'), .initsetmod(km.ModeId.Command));
 
@@ -46,9 +48,13 @@ const commandline = struct {
 
         std.log.debug("running command: {s}", .{cmd});
 
-        lua.run(state.L, cmd) catch |err| {
-            root.log(@src(), .err, "lua command line error: {}", .{err});
-        };
+        if (state.L.enabled) {
+            if (comptime Lua.compiled_in) {
+                Lua.run(state.L.state, cmd) catch |err| {
+                    root.log(@src(), .err, "lua command line error: {}", .{err});
+                };
+            }
+        }
 
         std.log.debug("running done: {s}", .{cmd});
 

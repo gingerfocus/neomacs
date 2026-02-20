@@ -26,9 +26,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-// TODO: make it so that each node keeps track of weather it is a newline or
-// not and make it so that
-
 /// The minimum number of bytes stored in a splay tree node.
 const MIN_BYTES = 64;
 /// The capacity of a splay tree node in bytes.
@@ -217,6 +214,10 @@ pub const Rope = struct {
     root: ?*Node = null,
     suf_len: u8 = 0,
     suf_buf: [MIN_BYTES - 1]u8 = undefined,
+    // TODO: see if using a std.io.FixedBufferStream can manage both the feilds above
+
+    /// Internal state to repersent how many lines are in the overflow buffer in
+    /// this structure. To get the real line count see [`getLineCount`]
     lines: u64 = 0,
 
     /// Create a new, pre-balanced rope from a byte slice.
@@ -249,7 +250,8 @@ pub const Rope = struct {
         return self.suf_len + if (self.root) |r| r.size else 0;
     }
 
-    pub fn line_count(self: *const Rope) u64 {
+    /// Gets the total number of lines in the rope.
+    pub fn getLineCount(self: *const Rope) u64 {
         return self.lines + if (self.root) |r| r.lines else 0;
     }
 

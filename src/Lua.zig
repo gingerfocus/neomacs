@@ -1,29 +1,28 @@
 const root = @import("root.zig");
 const std = root.std;
 
-// const kennel = @import("kennel/root.zig");
-pub const sys = @import("syslua");
-
-const nlua = @import("nlua/root.zig");
 const options = @import("options");
+
+const compiledin = options.uselua;
+pub const compiled_in = compiledin;
+
+pub const sys = if (compiledin) @import("syslua") else opaque {};
+const nlua = if (compiledin) @import("nlua/root.zig") else opaque {};
 
 const Lua = @This();
 
-const compiledin = options.uselua;
+pub const InnerState = if (compiledin) sys.lua_State else anyopaque;
 
-pub const InnerState = sys.lua_State;
-
-/// For backwards compatibilty, idealy removed over time
-pub const State = sys.lua_State;
+pub const State = if (compiledin) sys.lua_State else anyopaque;
 
 pub const LuaRef = c_int;
 
-enabled: if (compiledin) bool else void,
-state: if (compiledin) *InnerState else void,
+enabled: bool,
+state: if (compiledin) *InnerState else *anyopaque,
 
 pub fn init(enabled: bool) Lua {
-    if (!compiledin) return .{ .enabled = void, .state = void };
-    if (!enabled) return .{ .enabled = false, .state = false };
+    if (!compiledin) return .{ .enabled = false, .state = undefined };
+    if (!enabled) return .{ .enabled = false, .state = undefined };
 
     root.log(@src(), .debug, "creating lua state", .{});
 
@@ -38,81 +37,51 @@ pub fn setup(self: *Lua) void {
     const L = self.state;
     sys.luaL_openlibs(L);
 
-    // const a = root.alloc.galloc();
-    // sys.lua_setallocf(L, &nlua.alloc, @ptrCast(a));
-
-    // Neomacs Object This is the entire api
-    push(L, .{
-        .ui = .{
-            // .input = nluaUiInput,
-            // .prompt =
-        },
-        .loop = .{
-            .stat = nlua.loop.stat,
-            // .exec = nluaLoopExec,
-            // .mkdir
-            // .dirname
-        },
-        .api = .{
-            .quit = nlua.api.quit,
-            // .executable = nluaApiExecutable,
-        },
-        .win = .{
-            // .open = nluaWinOpen,
-        },
-        .buf = .{
-            .next = nlua.buf.next,
-            .prev = nlua.buf.prev,
-            .edit = nlua.buf.open,
-            .name = nlua.buf.name,
-            .write = nlua.buf.write,
-            .create = nlua.buf.create,
-        },
-        .opt = .{
-            .__metatable = .{
-                .__index = nlua.optIndex,
-                .__newindex = nlua.optNewIndex,
+    if (comptime compiledin) {
+        push(L, .{
+            .loop = .{
+                .stat = nlua.loop.stat,
             },
-        },
-        .keymap = .{
-            .del = nlua.keymap.del,
-            .set = nlua.keymap.set,
-            // .mode = nluaKeymapMode,
-        },
-        .cmd = .{
-            // .tutor = nluaTutor,
-            // .help = nluaHelp,
-        },
-        .treesitter = .{},
-        // .notify = nluaNotify,
-        .print = nlua.prettyPrint,
-        // .schedule = nluaSchedule
-    });
-    sys.lua_setglobal(L, "neon");
+            .api = .{
+                .quit = nlua.api.quit,
+            },
+            .buf = .{
+                .next = nlua.buf.next,
+                .prev = nlua.buf.prev,
+                .edit = nlua.buf.open,
+                .name = nlua.buf.name,
+                .write = nlua.buf.write,
+                .create = nlua.buf.create,
+            },
+            .opt = .{
+                .__metatable = .{
+                    .__index = nlua.optIndex,
+                    .__newindex = nlua.optNewIndex,
+                },
+            },
+            .keymap = .{
+                .del = nlua.keymap.del,
+                .set = nlua.keymap.set,
+            },
+            .treesitter = .{},
+            .print = nlua.prettyPrint,
+        });
+        sys.lua_setglobal(L, "neon");
 
-    // overwrite print implementation
-    sys.lua_pushcfunction(L, nlua.print);
-    sys.lua_setglobal(L, "print");
+        sys.lua_pushcfunction(L, nlua.print);
+        sys.lua_setglobal(L, "print");
 
-    // TODO: patch require(...) to a different function for profiling
+        root.log(@src(), .debug, "running init.lua state", .{});
 
-    // if (options.usekennel) {
-    //     kennel.lua.hook(L);
-    // }
+        if (sys.luaL_loadstring(L, SYSINIT) != 0)
+            unreachable;
 
-    // -----------------
-    root.log(@src(), .debug, "running init.lua state", .{});
-
-    if (sys.luaL_loadstring(L, SYSINIT) != 0)
-        unreachable; // embeded file is always the same
-
-    if (sys.lua_pcall(L, 0, sys.LUA_MULTRET, 0) != 0) {
-        var len: usize = undefined;
-        const c = sys.lua_tolstring(L, -1, &len);
-        root.log(@src(), .err, "could not run lua init:\n {s}", .{c[0..len]});
+        if (sys.lua_pcall(L, 0, sys.LUA_MULTRET, 0) != 0) {
+            var len: usize = undefined;
+            const c = sys.lua_tolstring(L, -1, &len);
+            root.log(@src(), .err, "could not run lua init:\n {s}", .{c[0..len]});
+        }
     }
-    // -----------------
-
 }
 
 pub fn deinit(self: Lua) void {
@@ -122,24 +91,10 @@ pub fn deinit(self: Lua) void {
     sys.lua_close(self.state);
 }
 
-// TODO: i dont like this
-var static: [256]u8 = undefined;
-fn tmpCString(str: []const u8) [:0]const u8 {
-    @memcpy(static[0..str.len], str);
-    static[str.len] = 0;
-    return static[0..str.len :0];
-}
-
 pub fn run(L: *InnerState, cmd: [:0]const u8) !void {
-    var iter = std.mem.splitScalar(u8, cmd, ' ');
+    if (comptime !compiledin) @compileError("Lua not compiled in");
 
-    // var isCommand = true;
-    // for (cmd) |c| {
-    //     if (!std.ascii.isAlphabetic(c)) {
-    //         isCommand = false;
-    //         break;
-    //     }
-    // }
+    var iter = std.mem.splitScalar(u8, cmd, ' ');
 
     if (cmd[0] == '?') {
         if (sys.luaL_loadstring(L, cmd[1..]) != 0) {
@@ -152,11 +107,7 @@ pub fn run(L: *InnerState, cmd: [:0]const u8) !void {
         }
         return;
     }
-    // return true;
-    // const isCommand = all(u8, cmd, std.ascii.isAlphabetic);
-    // if (std.mem.indexOfScalarPos(u8, cmd, 0, ' ')) |_| isCommand = false;
 
-    // if (isCommand) {
     const zfunc = iter.next() orelse return;
     const func: [:0]const u8 = tmpCString(zfunc);
 
@@ -186,7 +137,6 @@ pub fn run(L: *InnerState, cmd: [:0]const u8) !void {
         },
         sys.LUA_TNIL => {
             sys.lua_pop(L, -1);
-            // fall through to the execute case
         },
         else => {
             const name = sys.lua_typename(L, sys.lua_type(L, -1));
@@ -196,12 +146,18 @@ pub fn run(L: *InnerState, cmd: [:0]const u8) !void {
     }
 
     std.log.warn("[loop] ending loop", .{});
-
-    return;
 }
 
-// https://raw.githubusercontent.com/daurnimator/zig-autolua/refs/heads/master/src/autolua.zig
+var static: [256]u8 = undefined;
+fn tmpCString(str: []const u8) [:0]const u8 {
+    @memcpy(static[0..str.len], str);
+    static[str.len] = 0;
+    return static[0..str.len :0];
+}
+
 pub fn push(L: ?*InnerState, value: anytype) void {
+    if (comptime !compiledin) @compileError("Lua not compiled in");
+
     const Value = @TypeOf(value);
     const typeInfo = @typeInfo(Value);
 
@@ -247,8 +203,9 @@ pub fn push(L: ?*InnerState, value: anytype) void {
     }
 }
 
-/// Gets idx as a type T, if you are not sure will match then use ?T
 pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
+    if (comptime !compiledin) @compileError("Lua not compiled in");
+
     const luat = sys.lua_type(L, idx);
 
     switch (@typeInfo(T)) {
@@ -267,9 +224,7 @@ pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
             if (sys.lua_isnumber(L, idx) == 0) return null;
             return @floatCast(sys.lua_tonumber(L, idx));
         },
-        //         .array => return sys.lua_istable(L, idx),
         .array => |arr| {
-            // assume it is a table
             var A: T = undefined;
             for (&A, 0..) |*p, i| {
                 _ = sys.lua_geti(L, idx, @intCast(i + 1));
@@ -278,18 +233,6 @@ pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
             }
             return A;
         },
-        //         .pointer => |ptrdata| {
-        //             if (T == []const u8) {
-        //                 return sys.lua_isstring(L, idx) != 0;
-        //             }
-        //
-        //             _ = ptrdata;
-        //             // if (T == *anyopaque) {
-        //             //     return sys.lua_topointer(L, idx);
-        //             // }
-        //
-        //             @compileError("NYI");
-        //         },
         .pointer => |_| switch (T) {
             *anyopaque => {
                 return sys.lua_topointer(L, idx);
@@ -304,10 +247,6 @@ pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
                 return @as(T, @alignCast(@ptrCast(ptr)));
             },
         },
-        //         .optional => |N| {
-        //             if (sys.lua_isnoneornil(L, idx)) return true;
-        //             return is(L, idx, N.child);
-        //         },
         .optional => |N| {
             if (sys.lua_isnoneornil(L, idx)) {
                 return null;
@@ -319,11 +258,7 @@ pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
     }
 }
 
-/// Wraps an arbitrary function in a Lua C-API using version
 pub fn wrap(comptime func: fn (L: *InnerState) anyerror!c_int) sys.lua_CFunction {
-    // const Args: type = std.meta.ArgsTuple(@TypeOf(func));
-
-    // See https://github.com/ziglang/zig/issues/229
     return struct {
         fn thunk(lua: ?*InnerState) callconv(.C) c_int {
             const L = lua orelse unreachable;
@@ -334,25 +269,10 @@ pub fn wrap(comptime func: fn (L: *InnerState) anyerror!c_int) sys.lua_CFunction
                 sys.lua_pushlstring(L, msg.ptr, msg.len);
                 return sys.lua_error(L);
             };
-
-            // var args: Args = undefined;
-            // comptime var i = 0;
-            // inline while (i < args.len) : (i += 1) {
-            //     args[i] = check(L, i + 1, @TypeOf(args[i]));
-            // }
-            // const result = @call(.auto, func, args);
-            //
-            // if (@TypeOf(result) == void) {
-            //     return 0;
-            // } else {
-            //     // state.lua.check(result);
-            //     return 0; // 1
-            // }
         }
     }.thunk;
 }
 
-// TODO: find the runtime path in zig code when setting up the opts
 const SYSINIT =
     \\local runtime = os.getenv("NEONRUNTIME")
     \\if not runtime then

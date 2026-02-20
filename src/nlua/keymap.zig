@@ -30,23 +30,23 @@ pub fn set(L: ?*Lua.State) callconv(.C) c_int {
         root.log(@src(), .err, "neomacs.keymap.set: expected lhs", .{});
         return 0;
     };
-    const rhs = root.km.KeyFunction.initlua(L, 3) catch |err| {
-        root.log(@src(), .err, "neomacs.keymap.set: expected rhs", .{});
-        std.debug.print("error: {any}\n", .{err});
 
-        Lua.sys.lua_pushstring(L, "vim.schedule: expected function");
-        return Lua.sys.lua_error(L);
-        // return 0; // 1?
-    };
+    // TODO: implement initlua in KeyFunction.zig to enable this
+    // const rhs = root.km.KeyFunction.initlua(L, 3) catch |err| {
+    //     root.log(@src(), .err, "neomacs.keymap.set: expected rhs", .{});
+    //     std.debug.print("error: {any}\n", .{err});
+
+    //     Lua.sys.lua_pushstring(L, "vim.schedule: expected function");
+    //     return Lua.sys.lua_error(L);
+    //     // return 0; // 1?
+    // };
 
     // TODO: get opts
-
-    const state = root.state();
-    const mode = root.km.ModeId.from(modestr);
-
-    const keyseq = km.KeySequence.init(mode, lhs);
-    state.global_keymap.put(state.a, keyseq, rhs) catch {};
-    root.log(@src(), .debug, "neomacs.keymap.set: mode {s} lhs {s} rhs {any}", .{ modestr, lhs, rhs });
+    // const state = root.state();
+    // const mode = root.km.ModeId.from(modestr);
+    // const keyseq = km.KeySequence.init(mode, lhs);
+    // state.keymaps.put(state.a, keyseq, rhs) catch {};
+    root.log(@src(), .debug, "neomacs.keymap.set: mode {s} lhs {s}", .{ modestr, lhs });
 
     return 0;
 }

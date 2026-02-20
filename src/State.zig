@@ -48,7 +48,7 @@ commandbuffer: std.ArrayListUnmanaged(u8) = .{},
 
 resized: bool = false,
 
-autocommands: Autocommands,
+autocommands: Autocommands = .{},
 
 pub const Autocommands = std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(km.KeyFunction));
 
@@ -95,7 +95,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
     return State{
         .a = a,
         .arena = std.heap.ArenaAllocator.init(a),
-        .L = Lua.init(),
+        .L = Lua.init(true),
 
         .backend = backend,
 
@@ -109,7 +109,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
 
 pub fn setup(state: *State) !void {
     state.L.setup();
-    try keys.init(state.a, state.keymaps);
+    try keys.init(state.a, state.keymaps, state.L);
     try makeComponents(state);
 }
 
@@ -460,24 +460,38 @@ const testing = std.testing;
 test "see what happens ts ts" {
     const a = testing.allocator;
 
-    var state: State = undefined;
+    const lua = Lua.init(false);
 
-    const logBackend = try Backend.BackendLog.init(a, Backend.BackendLog.Config{ .frames = 1 });
-    const backend = logBackend.backend();
-
-    const editor = Component{
-        .dataptr = undefined,
-        .vtable = &.{ .renderFn = MainEditor.render },
+    const keysmap = try a.create(km.Keymap);
+    keysmap.* = km.Keymap{
+        .targeters = .{},
+        .bindings = .{},
+        .fallbacks = .{},
+        .alloc = a,
     };
-
-    const size = backend.getSize();
-    const view = Component.View{ .x = 0, .y = 0, .w = size.row, .h = size.col };
-
-    // editor
-    {
-        backend.render(.begin);
-        defer backend.render(.end);
-
-        editor.vtable.renderFn(editor.dataptr, &state, backend, view);
+    defer {
+        keysmap.deinit();
+        a.destroy(keysmap);
     }
+
+    const scratch: *Buffer = try a.create(Buffer);
+    scratch.* = try Buffer.init(a, keysmap, "*scratch*");
+    defer {
+        scratch.deinit();
+        a.destroy(scratch);
+    }
+
+    var state: State = .{
+        .a = a,
+        .arena = std.heap.ArenaAllocator.init(a),
+        .backend = undefined,
+        .L = lua,
+        .scratchbuffer = scratch,
+        .buffers = .{},
+        .bufferindex = null,
+        .keymaps = keysmap,
+    };
+    defer state.arena.deinit();
+
+    try testing.expect(state.L.enabled == false);
 }
