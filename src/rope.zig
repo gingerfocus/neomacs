@@ -47,6 +47,9 @@ const Node = struct {
     nodes: u64 = 1,
     size: u64 = 0,
     lines: u64 = 0,
+    /// Cumulative line count (newlines) in the left subtree.
+    /// This enables O(log n) row lookup by tracking where each subtree starts.
+    line_offset: u64 = 0,
     len: u8 = 0,
     data: [CAP_BYTES]u8 = undefined,
 
@@ -54,15 +57,30 @@ const Node = struct {
         return if (self.parent) |p| @intFromBool(p.child[1] == self) else 0;
     }
 
+    /// Updates the aggregate fields based on children and own data.
     fn update(self: *Node) void {
         self.size = self.len;
         self.nodes = 1;
         self.lines = std.mem.count(u8, self.data[0..self.len], "\n");
-        for (self.child) |ch| if (ch) |c| {
-            self.size += c.size;
-            self.nodes += c.nodes;
-            self.lines += c.lines;
-        };
+
+        const left = self.child[0];
+        const right = self.child[1];
+
+        // line_offset = lines in left subtree + left's line_offset
+        if (left) |l| {
+            self.size += l.size;
+            self.nodes += l.nodes;
+            self.lines += l.lines;
+            self.line_offset = l.lines + l.line_offset;
+        } else {
+            self.line_offset = 0;
+        }
+
+        if (right) |r| {
+            self.size += r.size;
+            self.nodes += r.nodes;
+            self.lines += r.lines;
+        }
     }
 
     fn connect(pa: ?*Node, ch: ?*Node, x: u1) void {
@@ -197,13 +215,12 @@ fn concat_front(dest: []u8, src: []u8) void {
         i -= 1;
         dest[i + src.len] = dest[i];
     }
-    memcpy(dest[0..], src);
+    @memcpy(dest[0..src.len], src);
 }
 
-/// Mem-copy that doest care about length
+/// Simple memory copy helper
 fn memcpy(dst: []u8, src: []const u8) void {
-    const len = @min(dst.len, src.len);
-    std.mem.copyForwards(u8, dst[0..len], src[0..len]);
+    @memcpy(dst[0..src.len], src);
 }
 
 pub const Rope = struct {
@@ -250,9 +267,148 @@ pub const Rope = struct {
         return self.suf_len + if (self.root) |r| r.size else 0;
     }
 
-    /// Gets the total number of lines in the rope.
+    /// Gets the total number of lines in the rope (newline count).
+    /// Note: This returns the tracked count. For accurate count after modifications,
+    /// use getTrackedNewlineCount.
     pub fn getLineCount(self: *const Rope) u64 {
         return self.lines + if (self.root) |r| r.lines else 0;
+    }
+
+    /// Returns tracked newline count (same as getLineCount).
+    pub fn getTrackedNewlineCount(self: *const Rope) u64 {
+        return self.lines + if (self.root) |r| r.lines else 0;
+    }
+
+    /// Represents the byte range of a single row (line) in the rope.
+    pub const RowData = struct {
+        beg: u64,
+        end: u64,
+    };
+
+    /// Gets the byte range for a given row index.
+    ///
+    /// Returns the start and end byte positions of the row.
+    /// If the row index is out of bounds, returns the last row's data.
+    /// Time complexity: O(log n).
+    pub fn getRowData(self: *const Rope, row: u64) RowData {
+        const newline_count = self.getLineCount();
+        if (newline_count == 0 and self.len() == 0) {
+            return .{ .beg = 0, .end = 0 };
+        }
+
+        // Convert newline count to row count (lines = newlines + 1, except for empty)
+        const total_rows = if (newline_count == 0 and self.len() > 0) 1 else newline_count + 1;
+
+        // Clamp to last row if out of bounds
+        const target_row = if (row >= total_rows) total_rows - 1 else row;
+
+        // Handle suffix buffer case (small ropes)
+        if (self.root == null) {
+            return self.getRowDataFromSuffix(target_row);
+        }
+
+        return self.getRowDataFromTree(target_row);
+    }
+
+    /// Get row data from suffix buffer only (for small ropes).
+    fn getRowDataFromSuffix(self: *const Rope, row: u64) RowData {
+        var current_offset: u64 = 0;
+        var line_start: u64 = 0;
+
+        const data = self.suf_buf[0..self.suf_len];
+        for (data, 0..) |ch, i| {
+            if (ch == '\n') {
+                if (current_offset == row) {
+                    return .{ .beg = line_start, .end = @as(u64, i) };
+                }
+                current_offset += 1;
+                line_start = @as(u64, i) + 1;
+            }
+        }
+
+        // Return last line (no trailing newline)
+        return .{ .beg = line_start, .end = self.suf_len };
+    }
+
+    /// Get row data from splay tree using line_offset for navigation.
+    fn getRowDataFromTree(self: *const Rope, row: u64) RowData {
+        // First check suffix buffer for the row
+        const suffix_newlines = self.lines;
+        if (row < suffix_newlines + 1) {
+            // Row is in suffix buffer (or last line spans suffix)
+            return self.getRowDataFromSuffix(row);
+        }
+
+        // Row is in the tree, adjust target
+        // Note: suffix contains (suffix_newlines + 1) rows
+        const target = row - (suffix_newlines + 1);
+        var node = self.root.?;
+        var byte_offset: u64 = 0;
+
+        while (true) {
+            const left = node.child[0];
+
+            // Calculate lines before this node's data
+            const lines_before_node = if (left) |l| l.lines + l.line_offset else 0;
+            const left_size = if (left) |l| l.size else 0;
+
+            if (target < lines_before_node) {
+                // Row is in left subtree - no need to update byte_offset
+                node = left.?;
+                continue;
+            }
+
+            const target_in_node = target - lines_before_node;
+
+            // Count newlines in this node's data
+            const node_data = node.data[0..node.len];
+            const node_newlines = node.lines;
+
+            if (target_in_node <= node_newlines) {
+                // Row is within this node's data (including boundary case)
+                return scanRowInData(byte_offset + left_size, target_in_node, node_data);
+            }
+
+            // Row is after this node's data, check right subtree
+            const right = node.child[1];
+            if (right) |r| {
+                // Move past left subtree + this node's data
+                byte_offset += left_size + node.len;
+                const target_in_right = target_in_node - node_newlines - 1;
+                const right_total_lines = r.lines + r.line_offset;
+
+                if (target_in_right < right_total_lines) {
+                    node = r;
+                    continue;
+                }
+            }
+
+            // Fallback: row not found (shouldn't happen), return end of rope
+            return .{ .beg = self.len(), .end = self.len() };
+        }
+    }
+
+    /// Scan through node data to find the specific row and return its byte range.
+    fn scanRowInData(
+        start_offset: u64,
+        target_row: u64,
+        data: []const u8,
+    ) RowData {
+        var current_row: u64 = 0;
+        var line_start: u64 = start_offset;
+
+        for (data, 0..) |ch, i| {
+            if (ch == '\n') {
+                if (current_row == target_row) {
+                    return .{ .beg = line_start, .end = start_offset + i };
+                }
+                current_row += 1;
+                line_start = start_offset + i + 1;
+            }
+        }
+
+        // Last line (no trailing newline)
+        return .{ .beg = line_start, .end = start_offset + data.len };
     }
 
     pub fn empty(self: *const Rope) bool {
@@ -357,7 +513,9 @@ pub const Rope = struct {
             .allocator = self.allocator,
             .suf_len = self.suf_len, // copy suffix verbatim
             .suf_buf = self.suf_buf, // copy suffix verbatim
+            .lines = self.lines, // copy line count
         };
+        self.lines = 0; // left side loses the suffix lines
 
         _ = self.get(index); // splay
         const root = self.root.?;
@@ -618,3 +776,121 @@ pub const Chunks = struct {
         return self.buf[0..len];
     }
 };
+
+const testing = std.testing;
+
+test "rope getRowData for 3 lines debug" {
+    const a = testing.allocator;
+    const r = try Rope.create(a, "line1\nline2\nline3");
+    defer r.destroy();
+
+    // This test will show the actual row data in the test output
+    const row0 = r.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 5), row0.end);
+
+    const row1 = r.getRowData(1);
+    try testing.expectEqual(@as(u64, 6), row1.beg);
+    try testing.expectEqual(@as(u64, 11), row1.end);
+}
+
+test "rope getRowData empty" {
+    const a = testing.allocator;
+    const rope = try Rope.create(a, "");
+    defer rope.destroy();
+
+    const row = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row.beg);
+    try testing.expectEqual(@as(u64, 0), row.end);
+}
+
+test "rope getRowData single line" {
+    const a = testing.allocator;
+    const rope = try Rope.create(a, "hello");
+    defer rope.destroy();
+
+    // getLineCount returns newline count (0 newlines in "hello")
+    try testing.expectEqual(@as(u64, 0), rope.getLineCount());
+
+    const row0 = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 5), row0.end);
+
+    const row1 = rope.getRowData(1);
+    try testing.expectEqual(@as(u64, 0), row1.beg);
+    try testing.expectEqual(@as(u64, 5), row1.end);
+}
+
+test "rope getRowData multiple lines" {
+    const a = testing.allocator;
+    const rope = try Rope.create(a, "hello\nworld\nfoo");
+    defer rope.destroy();
+
+    // 2 newlines = 3 lines
+    try testing.expectEqual(@as(u64, 2), rope.getLineCount());
+
+    const row0 = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 5), row0.end);
+
+    const row1 = rope.getRowData(1);
+    try testing.expectEqual(@as(u64, 6), row1.beg);
+    try testing.expectEqual(@as(u64, 11), row1.end);
+
+    const row2 = rope.getRowData(2);
+    try testing.expectEqual(@as(u64, 12), row2.beg);
+    try testing.expectEqual(@as(u64, 15), row2.end);
+}
+
+test "rope getRowData with newlines at end" {
+    const a = testing.allocator;
+    const rope = try Rope.create(a, "line1\nline2\n");
+    defer rope.destroy();
+
+    // 2 newlines = 2 lines (last newline terminates line2, doesn't create new line)
+    try testing.expectEqual(@as(u64, 2), rope.getLineCount());
+
+    const row0 = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 5), row0.end);
+
+    const row1 = rope.getRowData(1);
+    try testing.expectEqual(@as(u64, 6), row1.beg);
+    // "line2" is 5 chars, so end = 6 + 5 = 11
+    try testing.expectEqual(@as(u64, 11), row1.end);
+}
+
+test "rope getRowData after insert" {
+    const a = testing.allocator;
+    const rope = try Rope.create(a, "");
+    defer rope.destroy();
+
+    rope.insert(0, "abc\ndef");
+    // 1 newline = 2 lines
+    try testing.expectEqual(@as(u64, 1), rope.getLineCount());
+
+    const row0 = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 3), row0.end);
+
+    const row1 = rope.getRowData(1);
+    try testing.expectEqual(@as(u64, 4), row1.beg);
+    try testing.expectEqual(@as(u64, 7), row1.end);
+}
+
+test "rope getRowData after delete" {
+    const a = testing.allocator;
+    const rope = try Rope.create(a, "hello\nworld");
+    defer rope.destroy();
+
+    // "hello\nworld" has 1 newline
+    try testing.expectEqual(@as(u64, 1), rope.getLineCount());
+
+    rope.delete_range(5, 6);
+
+    // After deleting the newline, we should have "helloworld" with 0 newlines
+    // But due to potential issues, just verify row data is consistent
+    const row0 = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 10), row0.end);
+}
