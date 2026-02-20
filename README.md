@@ -1,5 +1,5 @@
-# Neomacs
-![Neomacs Banner Logo](./etc/branding/logo.jpg)
+# Neon
+![Neon Banner Logo](./etc/branding/logo.jpg)
 
 Overall, this project aims to be everything but a web browser but at least a
 replacement for vim (and maybe the terminal you run it in).

@@ -33,9 +33,7 @@ buffers: std.ArrayListUnmanaged(*Buffer),
 /// null selects the scratch buffer
 bufferindex: ?usize,
 
-global_keymap: *km.Keymap,
-
-// resized: bool = true,
+keymaps: *km.Keymap,
 
 components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 
@@ -101,14 +99,14 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
         .scratchbuffer = scratch,
         .buffers = buffers,
         .bufferindex = if (args.files.len > 0) 0 else null,
-        .global_keymap = keysmap,
-        .autocommands = .{},
+        .keymaps = keysmap,
+        // .autocommands = .{},
     };
 }
 
 pub fn setup(state: *State) !void {
     lua.setup(state.L);
-    try keys.init(state.a, state.global_keymap);
+    try keys.init(state.a, state.keymaps);
     try makeComponents(state);
 }
 
@@ -231,8 +229,8 @@ pub fn deinit(state: *State) void {
 
     state.commandbuffer.deinit(state.a);
 
-    for (state.autocommands.values()) |list| for (list.items) |*kf| kf.deinit(state.L, state.a);
-    state.autocommands.deinit(state.a);
+    // for (state.autocommands.values()) |list| for (list.items) |*kf| kf.deinit(state.L, state.a);
+    // state.autocommands.deinit(state.a);
 
     state.scratchbuffer.deinit();
     state.a.destroy(state.scratchbuffer);
@@ -243,8 +241,8 @@ pub fn deinit(state: *State) void {
     }
     state.buffers.deinit(state.a);
 
-    state.global_keymap.deinit();
-    state.a.destroy(state.global_keymap);
+    state.keymaps.deinit();
+    state.a.destroy(state.keymaps);
 
     state.components.deinit(state.a);
 
@@ -262,10 +260,6 @@ pub fn triggerAutocommands(state: *State, name: []const u8) !void {
         for (list.items) |*kf| try kf.run(state);
     }
 }
-
-// pub fn getBuffer(state: *const State) *Buffer {
-//     return state.buffers.items[state.bufferindex];
-// }
 
 pub fn getCurrentBuffer(state: *State) *Buffer {
     const idx = state.bufferindex orelse return state.scratchbuffer;
@@ -298,20 +292,10 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
         none,
     };
 
-    var foundmatch: bool = false;
-
     const thunk = struct {
         fn itermaps(argstate: *State, maps: *km.Keymap.StorageList, nextstate: *const km.KeySequence, foundprefix: *bool) !bool {
             const keysitems = maps.items(.keys);
             for (keysitems, 0..) |k, i| {
-                // switch (nextstate.better(nextstate.len, k)) {
-                //     .better => unreachable,
-                //     .equal => {
-                //         // run function
-                //     },
-                //     .worse => continue,
-                // }
-
                 // can't possibly match
                 if (!k.mode.eql(nextstate.mode)) continue;
 
@@ -339,11 +323,13 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
         }
     };
 
+    var foundmatch: bool = false;
+
     // zig bug: error targets tag token
     blkrun: switch (BlockState.binding) {
         .binding => if (try thunk.itermaps(state, &buffer.local_keymap.bindings, &newstate, &foundmatch)) {
             continue :blkrun BlockState.targeter;
-        } else if (try thunk.itermaps(state, &state.global_keymap.bindings, &newstate, &foundmatch)) {
+        } else if (try thunk.itermaps(state, &state.keymaps.bindings, &newstate, &foundmatch)) {
             continue :blkrun BlockState.targeter;
         } else {
             continue :blkrun BlockState.fallback;
@@ -352,7 +338,7 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
         // only a fallback
         .fallback => if (try thunk.itermaps(state, &buffer.local_keymap.fallbacks, &oldstate, &foundmatch)) {
             continue :blkrun BlockState.targeter;
-        } else if (try thunk.itermaps(state, &state.global_keymap.fallbacks, &oldstate, &foundmatch)) {
+        } else if (try thunk.itermaps(state, &state.keymaps.fallbacks, &oldstate, &foundmatch)) {
             continue :blkrun BlockState.targeter;
         } else if (foundmatch) {
             // we could still find something
@@ -369,15 +355,15 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
             var bestlen: u8 = 0;
             var bestkey: ?km.KeyFunction = null;
 
-            const gkeyslice = state.global_keymap.targeters.items(.keys);
+            const gkeyslice = state.keymaps.targeters.items(.keys);
             for (gkeyslice, 0..) |keyseq, i| switch (oldstate.better(bestlen, keyseq)) {
                 .better => {
                     bestlen = keyseq.len;
-                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                    bestkey = state.keymaps.targeters.items(.func)[i];
                 },
                 .equal => {
                     bestlen = keyseq.len;
-                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                    bestkey = state.keymaps.targeters.items(.func)[i];
                     break;
                 },
                 .worse => continue,
@@ -387,11 +373,11 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
             for (bkeyslice, 0..) |keyseq, i| switch (oldstate.better(bestlen, keyseq)) {
                 .better => {
                     bestlen = keyseq.len;
-                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                    bestkey = state.keymaps.targeters.items(.func)[i];
                 },
                 .equal => {
                     bestlen = keyseq.len;
-                    bestkey = state.global_keymap.targeters.items(.func)[i];
+                    bestkey = state.keymaps.targeters.items(.func)[i];
                     break;
                 },
                 .worse => continue,
@@ -415,7 +401,7 @@ pub fn press(state: *State, key: trm.KeyEvent) !void {
     }
 }
 
-/// DEPRECATED: use `state.takeRepeating()` instead.
+/// DEPRECATED: use `buffer.repeating.take()` instead.
 pub fn takeRepeating(state: *State) usize {
     const buffer = state.getCurrentBuffer();
     return buffer.repeating.take();
@@ -463,3 +449,32 @@ pub const Config = struct {
     // lang: []const u8 = "",
     // background_color: c_int = -1,
 };
+
+// --------------- End to End Tests ----------------
+
+const testing = std.testing;
+
+test "see what happens ts ts" {
+    const a = testing.allocator;
+
+    var state: State = undefined;
+
+    const logBackend = try Backend.BackendLog.init(a, Backend.BackendLog.Config{ .frames = 1 });
+    const backend = logBackend.backend();
+
+    const editor = Component{
+        .dataptr = undefined,
+        .vtable = &.{ .renderFn = MainEditor.render },
+    };
+
+    const size = backend.getSize();
+    const view = Component.View{ .x = 0, .y = 0, .w = size.row, .h = size.col };
+
+    // editor
+    {
+        backend.render(.begin);
+        defer backend.render(.end);
+
+        editor.vtable.renderFn(editor.dataptr, &state, backend, view);
+    }
+}

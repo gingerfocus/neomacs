@@ -1,31 +1,44 @@
+//! A Backend that logs all data it is passed for debug purposes. Also records
+//! much of its state and makes it accessable for tests to do integration testing.
+
 const root = @import("../root.zig");
 const lib = root.lib;
 const std = root.std;
 
 const Backend = @import("Backend.zig");
 
-const FileBackend = @This();
 const Self = @This();
 
 const WIDTH: usize = 80;
 const HEIGHT: usize = 24;
 
 a: std.mem.Allocator,
-file: std.fs.File,
 buffer: *[WIDTH * HEIGHT]u8,
+config: Config,
 
-pub fn init(a: std.mem.Allocator, path: []const u8) !*Self {
+pub const Config = struct {
+    /// How many frames accept before closing. Used in testing if you want to
+    /// test how something reacts to the backend closing.
+    frames: ?usize = null,
+};
+
+pub fn init(a: std.mem.Allocator, config: Config) !*Self {
     const data = try a.create(Self);
-
-    const file = try std.fs.cwd().createFile(path, .{ .truncate = true });
 
     const buffer = try a.create([WIDTH * HEIGHT]u8);
     data.* = .{
         .a = a,
-        .file = file,
         .buffer = buffer,
+        .config = config,
     };
     return data;
+}
+
+/// For testing purposes.
+///
+/// Gets the internal state of the render buffer.
+pub fn getBuffer(self: *Self) []u8 {
+    return self.buffer[0..];
 }
 
 const thunk = struct {
@@ -37,12 +50,8 @@ const thunk = struct {
                 @memset(self.buffer, ' ');
             },
             .end => {
-                for (0..HEIGHT) |row| {
-                    self.file.writeAll(self.buffer[row * WIDTH .. row * WIDTH + WIDTH]) catch {};
-                    self.file.writeAll("\n") catch {};
-                }
-                // Add a separator for the next frame
-                self.file.writeAll("--- FRAME ---\n") catch {};
+                // decriment frame counter if needed
+                if (self.config.frames) |*fr| fr -= 1;
             },
         }
     }
@@ -52,25 +61,24 @@ const thunk = struct {
 
         if (pos.row >= HEIGHT or pos.col >= WIDTH) return;
 
-        // Simple text-based drawing for now.
         switch (node.content) {
             .Text => |ch| {
                 self.buffer[pos.row * WIDTH + pos.col] = ch;
             },
-            .Image => |_| {
-                // Images not supported in this backend
-            },
+            .Image => |_| {},
             .Shader => |_| {},
             .None => {},
         }
     }
 
     fn pollEvent(ptr: *anyopaque, timeout: i32) Backend.Event {
-        _ = ptr;
-        _ = timeout;
-        // This backend is not interactive, so we don't poll for events.
-        // For now, we can return an error to signal we are done.
-        return Backend.Event.End;
+        const self = @as(*Self, @ptrCast(@alignCast(ptr)));
+
+        if (self.config.frames) |frm|
+            if (frm == 0) return Backend.Event.End;
+
+        std.time.sleep(timeout * 1000);
+        return Backend.Event.None;
     }
 
     fn getSize(ptr: *anyopaque) lib.Vec2 {
@@ -78,18 +86,18 @@ const thunk = struct {
         return .{ .row = HEIGHT, .col = WIDTH };
     }
 
-    fn deinit(ptr: *anyopaque) void {
-        const self = @as(*Self, @ptrCast(@alignCast(ptr)));
-        self.file.close();
-        self.a.destroy(self.buffer);
-        self.a.destroy(self);
-    }
-
     fn setCursor(ptr: *anyopaque, pos: lib.Vec2, ty: Backend.VTable.CursorType) void {
         _ = ptr;
         _ = pos;
         _ = ty;
     }
+
+    fn deinit(ptr: *anyopaque) void {
+        const self = @as(*Self, @ptrCast(@alignCast(ptr)));
+        self.a.destroy(self.buffer);
+        self.a.destroy(self);
+    }
+
 };
 
 pub fn backend(self: *Self) Backend {

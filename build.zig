@@ -26,7 +26,7 @@ pub fn build(b: *std.Build) !void {
     // std.debug.print("using options: \n{any}\n", .{.{ .gtk = usegtk, .wayland = usewayland, .static = static }});
 
     const install_step = b.getInstallStep();
-    const run_step = b.step("run", "run neomacs");
+    const run_step = b.step("run", "run neon");
 
     // ---------
 
@@ -41,24 +41,24 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    // build neomacs
-    const neomacs = b.addModule("neomacs", .{
+    // build neon
+    const neon = b.addModule("neon", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
     const terminal = b.dependency("terminal", .{ .target = target, .optimize = optimize });
-    neomacs.addImport("scured", terminal.module("scured"));
-    neomacs.addImport("thermit", terminal.module("thermit"));
-    neomacs.addImport("options", options.createModule());
+    neon.addImport("scured", terminal.module("scured"));
+    neon.addImport("thermit", terminal.module("thermit"));
+    neon.addImport("options", options.createModule());
 
-    neomacs.link_libc = true;
+    neon.link_libc = true;
 
     // neomacsExe.linkSystemLibrary("tree-sitter");
 
     // ---------
 
-    addLuaImport(b, neomacs, staticlua, target, optimize);
+    addLuaImport(b, neon, staticlua, target, optimize);
 
     // ---------
 
@@ -71,12 +71,12 @@ pub fn build(b: *std.Build) !void {
         privateCodeCommand.addFileArg(b.path("etc/share/xdg-shell.xml"));
         const privateCode = privateCodeCommand.addOutputFileArg("xdg-shell-protocol.c");
 
-        neomacs.addCSourceFile(.{ .file = privateCode });
-        neomacs.addIncludePath(clientHeader.dirname());
+        neon.addCSourceFile(.{ .file = privateCode });
+        neon.addIncludePath(clientHeader.dirname());
 
-        neomacs.linkSystemLibrary("wayland-client", .{});
-        neomacs.linkSystemLibrary("xkbcommon", .{});
-        neomacs.linkSystemLibrary("cairo", .{});
+        neon.linkSystemLibrary("wayland-client", .{});
+        neon.linkSystemLibrary("xkbcommon", .{});
+        neon.linkSystemLibrary("cairo", .{});
     }
 
     if (usewgpu) {
@@ -85,17 +85,17 @@ pub fn build(b: *std.Build) !void {
             .optimize = optimize,
             .link_mode = .static,
         })) |wgpu| {
-            neomacs.addImport("wgpu", wgpu.module("wgpu"));
+            neon.addImport("wgpu", wgpu.module("wgpu"));
         }
-        neomacs.linkSystemLibrary("glfw", .{});
+        neon.linkSystemLibrary("glfw", .{});
     }
 
     if (usegtk) {
-        neomacs.linkSystemLibrary("gtk-3", .{});
-        neomacs.linkSystemLibrary("gdk-3", .{});
-        neomacs.linkSystemLibrary("atk-1.0", .{});
-        neomacs.linkSystemLibrary("cairo", .{});
-        neomacs.linkSystemLibrary("gobject-2.0", .{});
+        neon.linkSystemLibrary("gtk-3", .{});
+        neon.linkSystemLibrary("gdk-3", .{});
+        neon.linkSystemLibrary("atk-1.0", .{});
+        neon.linkSystemLibrary("cairo", .{});
+        neon.linkSystemLibrary("gobject-2.0", .{});
     }
 
     // ---------
@@ -105,7 +105,7 @@ pub fn build(b: *std.Build) !void {
     //     .optimize = optimize,
     //     .@"emit-man-pages" = true,
     // });
-    // neomacs.addImport("xev", xev.module("xev"));
+    // neon.addImport("xev", xev.module("xev"));
 
     // ---------
 
@@ -113,17 +113,17 @@ pub fn build(b: *std.Build) !void {
     //     .target = target,
     //     .optimize = optimize,
     // });
-    // neomacs.addImport("zigrc", zigrc.artifact("zig-rc").root_module);
+    // neon.addImport("zigrc", zigrc.artifact("zig-rc").root_module);
 
     // ---------
 
     const neomacsExe = b.addExecutable(.{
-        .name = "neomacs",
-        .root_module = neomacs,
+        .name = "neon",
+        .root_module = neon,
         .linkage = if (static) .static else .dynamic,
     });
 
-    // install neomacs as default
+    // install neon as default
     b.installArtifact(neomacsExe);
 
     const neomacs_exe_run = b.addRunArtifact(neomacsExe);
@@ -139,7 +139,7 @@ pub fn build(b: *std.Build) !void {
     //     .target = target,
     //     .optimize = optimize,
     // });
-    // neomacs.addImport("tree-sitter", treesitter.module("tree-sitter"));
+    // neon.addImport("tree-sitter", treesitter.module("tree-sitter"));
 
     // -------------------------------------------------------------------------
 
@@ -163,7 +163,7 @@ pub fn build(b: *std.Build) !void {
 
     const testStep = b.step("test", "Run tests");
     const tests = b.addTest(.{
-        .root_module = neomacs,
+        .root_module = neon,
     });
     const run_unit_tests = b.addRunArtifact(tests);
     testStep.dependOn(&run_unit_tests.step);
@@ -179,7 +179,7 @@ pub fn build(b: *std.Build) !void {
     //
     // options.addOption(bool, "usekennel", usekennel);
     // if (usekennel) {
-    //     neomacs.addImport("kennel", kennel);
+    //     neon.addImport("kennel", kennel);
     // }
     //
     // -------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 .{
-    .name = .neomacs,
-    .fingerprint = 0x23b0098f58addd0,
+    .name = .neon,
+    .fingerprint = 0xfcce6dd0eeb54e1d,
     .version = "0.1.0",
     .paths = .{
         "src",

@@ -9,7 +9,7 @@ const options = @import("options");
 const BackendTerminal = @import("BackendTerminal.zig");
 const BackendWayland = @import("BackendWaylandCairo.zig");
 const BackendGtk = @import("BackendGtk.zig");
-const BackendFile = @import("BackendFile.zig");
+pub const BackendLog = @import("BackendLog.zig");
 const BackendHeadless = @import("BackendHeadless.zig");
 // const BackendWgpu = @import("BackendGlfwWgpu.zig");
 
@@ -23,8 +23,10 @@ const Self = @This();
 pub fn init(a: std.mem.Allocator, args: root.Args) !Self {
     switch (args.backend) {
         .Snapshot => |path| {
-            const file = try BackendFile.init(a, path);
-            return file.backend();
+            _ = path;
+            // const file = try BackendFile.init(a, path);
+            // return file.backend();
+            unreachable;
         },
         .Terminal => {
             const term = try BackendTerminal.init(a);

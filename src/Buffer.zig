@@ -226,24 +226,6 @@ pub fn getLine(buffer: *const Buffer, row: usize) !std.ArrayList(u8) {
     return result;
 }
 
-pub fn getLineBytes(buffer: *const Buffer, row: usize, out_buf: []u8) []u8 {
-    if (row >= buffer.contentlines.items.len) return &.{};
-    const line = buffer.contentlines.items[row];
-    const len = line.end - line.beg;
-    if (len == 0) return &.{};
-    var slice = buffer.content.chunks(line.beg, line.end);
-    var remaining = len;
-    var offset: usize = 0;
-    while (slice.next()) |chunk| {
-        const copy_len = @min(chunk.len, remaining);
-        @memcpy(out_buf[offset .. offset + copy_len], chunk[0..copy_len]);
-        offset += copy_len;
-        remaining -= copy_len;
-        if (remaining == 0) break;
-    }
-    return out_buf[0..len];
-}
-
 pub fn getLineLen(buffer: *const Buffer, row: usize) usize {
     if (row >= buffer.contentlines.items.len) return 0;
     const line = buffer.contentlines.items[row];
@@ -353,7 +335,7 @@ fn recalculate_contentlines(buffer: *Buffer) !void {
         byte_index += slice.len;
     }
 
-    if (line_beg < buffer.content.len()) {
+    if (line_beg <= buffer.content.len()) {
         try buffer.contentlines.append(buffer.alloc, .{
             .beg = line_beg,
             .end = buffer.content.len(),
@@ -535,9 +517,14 @@ pub const idgen = struct {
 
 // ----------------------------------------------------------------------------
 
-/// Convertes a cursor into and index into the rope buffer.
+/// Convertes a cursor into an index into the rope buffer.
 fn getIndex(buffer: *const Buffer, cursor: Cursor) usize {
-    if (cursor.row >= buffer.contentlines.items.len) return 0;
+    if (buffer.contentlines.items.len == 0) return 0;
+
+    if (cursor.row >= buffer.contentlines.items.len) {
+        return buffer.content.len();
+    }
+
     const line = buffer.contentlines.items[cursor.row];
     const col = @min(cursor.col, line.end - line.beg);
     return line.beg + col;
@@ -783,6 +770,190 @@ test "buffer getLineLen" {
     try buffer.text_insert(.{ .row = 0, .col = 5 }, "\nworld");
     try testing.expectEqual(@as(usize, 5), buffer.getLineLen(0));
     try testing.expectEqual(@as(usize, 5), buffer.getLineLen(1));
+}
+
+test "buffer multiple inserts preserve lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\n");
+    try buffer.text_insert(.{ .row = 1, .col = 0 }, "line2\n");
+    try buffer.text_insert(.{ .row = 2, .col = 0 }, "line3");
+
+    try testing.expectEqual(@as(usize, 3), buffer.numLines());
+
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("line1", l0.items);
+    const l1 = try buffer.getLine(1);
+    defer l1.deinit();
+    try testing.expectEqualStrings("line2", l1.items);
+    const l2 = try buffer.getLine(2);
+    defer l2.deinit();
+    try testing.expectEqualStrings("line3", l2.items);
+}
+
+test "buffer insert in middle of content" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abc");
+    try buffer.text_insert(.{ .row = 0, .col = 1 }, "X");
+
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("aXbc", l0.items);
+}
+
+test "buffer insert newline in middle preserves lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abcdef");
+    try buffer.text_insert(.{ .row = 0, .col = 3 }, "\n");
+
+    try testing.expectEqual(@as(usize, 2), buffer.numLines());
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("abc", l0.items);
+    const l1 = try buffer.getLine(1);
+    defer l1.deinit();
+    try testing.expectEqualStrings("def", l1.items);
+}
+
+test "buffer delete line then insert" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\nline2\nline3");
+    try buffer.text_delete(.{ .beg = .{ .row = 1, .col = 0 }, .end = .{ .row = 1, .col = 5 }, .mode = .Line });
+
+    try testing.expectEqual(@as(usize, 2), buffer.numLines());
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("line1", l0.items);
+    const l1 = try buffer.getLine(1);
+    defer l1.deinit();
+    try testing.expectEqualStrings("line3", l1.items);
+}
+
+test "buffer delete preserves remaining lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "a\nb\nc");
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 1 }, .mode = .Range });
+
+    try testing.expectEqual(@as(usize, 3), buffer.numLines());
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("", l0.items);
+    const l1 = try buffer.getLine(1);
+    defer l1.deinit();
+    try testing.expectEqualStrings("b", l1.items);
+    const l2 = try buffer.getLine(2);
+    defer l2.deinit();
+    try testing.expectEqualStrings("c", l2.items);
+}
+
+test "buffer complex delete operations" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld\ntest");
+
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 5 }, .end = .{ .row = 1, .col = 0 }, .mode = .Range });
+
+    try testing.expectEqual(@as(usize, 2), buffer.numLines());
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("helloworld", l0.items);
+    const l1 = try buffer.getLine(1);
+    defer l1.deinit();
+    try testing.expectEqualStrings("test", l1.items);
+}
+
+test "buffer empty line handling" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "\n");
+
+    try testing.expectEqual(@as(usize, 2), buffer.numLines());
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("", l0.items);
+    const l1 = try buffer.getLine(1);
+    defer l1.deinit();
+    try testing.expectEqualStrings("", l1.items);
+}
+
+test "buffer consecutive deletes" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abc\ndef\nghi");
+
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 3 }, .mode = .Range });
+    try testing.expectEqual(@as(usize, 3), buffer.numLines());
+    const l0 = try buffer.getLine(0);
+    defer l0.deinit();
+    try testing.expectEqualStrings("", l0.items);
+
+    try buffer.text_delete(.{ .beg = .{ .row = 1, .col = 0 }, .end = .{ .row = 1, .col = 3 }, .mode = .Range });
+    try testing.expectEqual(@as(usize, 3), buffer.numLines());
+    const l1 = try buffer.getLine(1);
+    defer l1.deinit();
+    try testing.expectEqualStrings("", l1.items);
 }
 
 test "buffer moveRight at line end" {
