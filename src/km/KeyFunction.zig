@@ -1,6 +1,6 @@
 const root = @import("../root.zig");
 const std = root.std;
-const lua = root.lua;
+const Lua = root.Lua;
 const km = root.km;
 const lib = root.lib;
 
@@ -37,19 +37,19 @@ pub fn initbuffer(func: *const fn (*Buffer, km.KeyFunctionDataValue) anyerror!vo
     };
 }
 
-pub fn initlua(L: ?*lua.State, index: lua.LuaRef) !Self {
-    if (lua.sys.lua_type(L, index) != lua.sys.LUA_TFUNCTION) {
-        return error.NotALuaFunction;
-    }
+// pub fn initlua(L: ?*Lua.State, index: Lua.LuaRef) !Self {
+//     if (Lua.sys.lua_type(L, index) != Lua.sys.LUA_TFUNCTION) {
+//         return error.NotALuaFunction;
+//     }
 
-    lua.sys.lua_pushvalue(L, index);
-    const ref = lua.sys.luaL_ref(L, lua.sys.LUA_REGISTRYINDEX);
-    if (ref <= 0) return error.CantMakeReference;
+//     Lua.sys.lua_pushvalue(L, index);
+//     const ref = Lua.sys.luaL_ref(L, Lua.sys.LUA_REGISTRYINDEX);
+//     if (ref <= 0) return error.CantMakeReference;
 
-    return .{
-        .function = .{ .lua_function = ref },
-    };
-}
+//     return .{
+//         .function = .{ .lua_function = ref },
+//     };
+// }
 
 pub fn initsetmod(mode: km.ModeId) Self {
     return .{
@@ -66,7 +66,7 @@ pub fn getdata(self: *Self, comptime T: type) ?*T {
     return null;
 }
 
-pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
+pub fn deinit(self: *Self, L: ?*Lua.State, a: std.mem.Allocator) void {
     if (self.dataptr) |ptr| ptr.deinit(a);
 
     switch (self.function) {
@@ -75,7 +75,7 @@ pub fn deinit(self: *Self, L: ?*lua.State, a: std.mem.Allocator) void {
         //     a.destroy(map);
         // },
         .lua_function => |id| {
-            lua.sys.luaL_unref(L, lua.sys.LUA_REGISTRYINDEX, id);
+            Lua.sys.luaL_unref(L, Lua.sys.LUA_REGISTRYINDEX, id);
         },
         else => {},
     }
@@ -91,10 +91,10 @@ pub fn run(self: Self, state: *State) anyerror!void {
         .lua_function => |id| {
             std.debug.assert(id > 0);
 
-            lua.sys.lua_rawgeti(state.L, lua.sys.LUA_REGISTRYINDEX, id);
+            Lua.sys.lua_rawgeti(state.L, Lua.sys.LUA_REGISTRYINDEX, id);
 
-            if (lua.sys.lua_pcall(state.L, 0, 0, 0) != 0) {
-                // nlua_error(lstate, _("Error executing vim.schedule lua callback: %.*s"));
+            if (Lua.sys.lua_pcall(state.L, 0, 0, 0) != 0) {
+                // nlua_error(lstate, _("Error executing vim.schedule Lua callback: %.*s"));
                 return error.ExecuteLuaCallback;
             }
         },
@@ -112,7 +112,7 @@ pub fn run(self: Self, state: *State) anyerror!void {
 }
 
 const FunctionAction = union(enum) {
-    lua_function: lua.LuaRef,
+    lua_function: Lua.LuaRef,
     setmod: km.ModeId,
     state: *const fn (*State, km.KeyFunctionDataValue) anyerror!void,
     buffer: *const fn (*Buffer, km.KeyFunctionDataValue) anyerror!void,

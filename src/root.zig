@@ -14,7 +14,7 @@ pub const State = @import("State.zig");
 
 pub const km = @import("km/root.zig");
 pub const lib = @import("lib/root.zig");
-pub const lua = @import("lua.zig");
+pub const Lua = @import("Lua.zig");
 pub const zss = @import("zss.zig");
 pub const keys = @import("keys/root.zig");
 pub const alloc = @import("alloc.zig");

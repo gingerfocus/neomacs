@@ -11,22 +11,22 @@ const root = @import("../root.zig");
 const std = @import("std");
 const mem = std.mem;
 
-const lua = @import("../lua.zig");
+const Lua = root.Lua;
 
 /// Bindins to the Lua C API, either static or dynamic. This module abstracts
 /// away the differences between the two.
-pub const sys = @import("syslua");
+const sys = Lua.sys;
 
 // --- Lua Functions ---------------------------------------------------------
 
-// if (lua.lua_type(L, 1) != lua.LUA_TFUNCTION) {
+// if (Lua.lua_type(L, 1) != Lua.LUA_TFUNCTION) {
 //     const msg = "vim.schedule: expected function";
-//     lua.lua_pushlstring(L, msg.ptr, msg.len);
-//     // makes a lua error
-//     return lua.lua_error(L);
+//     Lua.lua_pushlstring(L, msg.ptr, msg.len);
+//     // makes a Lua error
+//     return Lua.lua_error(L);
 // }
 
-fn nluaHelp(L: ?*lua.State) callconv(.C) c_int {
+fn nluaHelp(L: ?*Lua.State) callconv(.C) c_int {
     sys.lua_getglobal(L, "neon");
     std.debug.assert(sys.lua_istable(L, -1));
 
@@ -48,7 +48,7 @@ fn nluaHelp(L: ?*lua.State) callconv(.C) c_int {
     return 0;
 }
 
-fn nluaNotify(L: ?*lua.State) callconv(.C) c_int {
+fn nluaNotify(L: ?*Lua.State) callconv(.C) c_int {
     // const n = luajitsys.lua_gettop(L);
     if (sys.lua_isstring(L, 1) != 0) {
         // TODO: error
@@ -66,10 +66,10 @@ fn nluaNotify(L: ?*lua.State) callconv(.C) c_int {
 //
 // Returns true if the language is correctly loaded in the language map
 // int tslua_add_language(lua_State *L)
-fn tsLuaAddLanguage(L: ?*lua.State) callconv(.C) c_int {
-    const path = lua.check(L, 1, []const u8) orelse return 0;
-    const lang_name = lua.check(L, 2, []const u8) orelse return 0;
-    const symbol_name = lua.check(L, 3, []const u8) orelse return 0;
+fn tsLuaAddLanguage(L: ?*Lua.State) callconv(.C) c_int {
+    const path = Lua.check(L, 1, []const u8) orelse return 0;
+    const lang_name = Lua.check(L, 2, []const u8) orelse return 0;
+    const symbol_name = Lua.check(L, 3, []const u8) orelse return 0;
 
     _ = path; // autofix
     _ = symbol_name; // autofix
@@ -80,7 +80,7 @@ fn tsLuaAddLanguage(L: ?*lua.State) callconv(.C) c_int {
         if (std.mem.eql(u8, lang.name, lang_name)) {
             root.log(@src(), .info, "language already loaded: {s}", .{lang_name});
 
-            lua.check(L, true);
+            Lua.check(L, true);
             return 1;
         }
     }
@@ -142,7 +142,7 @@ fn tsLuaAddLanguage(L: ?*lua.State) callconv(.C) c_int {
 // if (luajitsys.lua_isnumber(L, VAL_INDEX) != 0) return 0;
 // const val = luajitsys.lua_tonumber(L, VAL_INDEX); // val
 
-pub fn optNewIndex(L: ?*lua.State) callconv(.C) c_int {
+pub fn optNewIndex(L: ?*Lua.State) callconv(.C) c_int {
     // const TBL = 1;
     const KEY = 2;
     const VAL = 3;
@@ -153,7 +153,7 @@ pub fn optNewIndex(L: ?*lua.State) callconv(.C) c_int {
 
     inline for (@typeInfo(root.State.Config).@"struct".fields) |field| {
         if (std.mem.eql(u8, field.name, key)) {
-            const val = lua.check(L, VAL, field.type) orelse return 0;
+            const val = Lua.check(L, VAL, field.type) orelse return 0;
 
             @field(root.state().config, field.name) = val;
 
@@ -167,13 +167,13 @@ pub fn optNewIndex(L: ?*lua.State) callconv(.C) c_int {
     root.log(@src(), .warn, "set(\"{s}\", ...): does not exist", .{key});
 
     // if (false) {
-    //     lua.sys.lua_getglobal(L, "rawset");
-    //     lua.sys.lua_pushvalue(L, TBL);
-    //     lua.sys.lua_pushvalue(L, KEY);
-    //     lua.sys.lua_pushvalue(L, VAL);
-    //     if (lua.sys.lua_pcall(L, 3, 0, 0) != 0) {
+    //     Lua.sys.lua_getglobal(L, "rawset");
+    //     Lua.sys.lua_pushvalue(L, TBL);
+    //     Lua.sys.lua_pushvalue(L, KEY);
+    //     Lua.sys.lua_pushvalue(L, VAL);
+    //     if (Lua.sys.lua_pcall(L, 3, 0, 0) != 0) {
     //         var errmsglen: usize = undefined;
-    //         const errmsg = lua.sys.lua_tolstring(L, -1, &errmsglen);
+    //         const errmsg = Lua.sys.lua_tolstring(L, -1, &errmsglen);
     //         root.log(@src(), .err, "could not rawset: {s}", .{errmsg[0..errmsglen]});
     //         return 0;
     //     }
@@ -182,7 +182,7 @@ pub fn optNewIndex(L: ?*lua.State) callconv(.C) c_int {
     return 0;
 }
 
-pub fn optIndex(L: ?*lua.State) callconv(.C) c_int {
+pub fn optIndex(L: ?*Lua.State) callconv(.C) c_int {
     // const TBL = 1;
     const KEY = 2; // key
 
@@ -195,7 +195,7 @@ pub fn optIndex(L: ?*lua.State) callconv(.C) c_int {
     inline for (@typeInfo(root.State.Config).@"struct".fields) |field| {
         if (std.mem.eql(u8, field.name, key)) {
             const val = @field(root.state().config, field.name);
-            lua.push(L.?, val);
+            Lua.push(L.?, val);
             return 1;
         }
     }
@@ -219,7 +219,7 @@ pub fn optIndex(L: ?*lua.State) callconv(.C) c_int {
 //     root.log(@src(), .warn, "callback", .{});
 //     return xev.CallbackAction.disarm;
 // }
-// fn nluaUiInput(L: ?*lua.State) callconv(.C) c_int {
+// fn nluaUiInput(L: ?*Lua.State) callconv(.C) c_int {
 //     root.log(@src(), .debug, "ui.input", .{});
 //
 //     const s = root.state();
@@ -236,7 +236,7 @@ pub fn optIndex(L: ?*lua.State) callconv(.C) c_int {
 //     return 0;
 // }
 
-fn nluaWinOpen(L: ?*lua.State) callconv(.C) c_int {
+fn nluaWinOpen(L: ?*Lua.State) callconv(.C) c_int {
     _ = L;
     // local win_id = vim.api.nvim_open_win(
     //      bufnr, -- buf id
@@ -259,7 +259,7 @@ fn nluaWinOpen(L: ?*lua.State) callconv(.C) c_int {
 // luajitsys.lua_newuserdata();
 
 /// Unpretty print, emulates default print function but just changes output
-pub fn print(L: ?*lua.State) callconv(.C) c_int {
+pub fn print(L: ?*Lua.State) callconv(.C) c_int {
     const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
@@ -294,11 +294,11 @@ pub fn print(L: ?*lua.State) callconv(.C) c_int {
         sys.lua_pop(L, 1);
     }
 
-    std.log.info("[lua] {s}", .{nbuf.items});
+    std.log.info("[Lua] {s}", .{nbuf.items});
     return 0;
 }
 
-fn printError(L: ?*lua.State, idx: c_int, msg: []const u8) c_int {
+fn printError(L: ?*Lua.State, idx: c_int, msg: []const u8) c_int {
     const a = std.heap.c_allocator;
 
     const fmtmsg = std.fmt.allocPrint(
@@ -312,13 +312,13 @@ fn printError(L: ?*lua.State, idx: c_int, msg: []const u8) c_int {
     return sys.lua_error(L);
 }
 
-fn nluaKeymapDel(L: ?*lua.State) callconv(.C) c_int {
+fn nluaKeymapDel(L: ?*Lua.State) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.del not implemented", .{});
     _ = L; // autofix
     return 0;
 }
 
-fn nluaKeymapSet(L: ?*lua.State) callconv(.C) c_int {
+fn nluaKeymapSet(L: ?*Lua.State) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
     _ = L; // autofix
     return 0;
@@ -326,7 +326,7 @@ fn nluaKeymapSet(L: ?*lua.State) callconv(.C) c_int {
 
 /// Pretty print
 /// vim.print
-pub fn prettyPrint(L: ?*lua.State) callconv(.C) c_int {
+pub fn prettyPrint(L: ?*Lua.State) callconv(.C) c_int {
     const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
@@ -356,7 +356,7 @@ const PrintState = struct {
     functionCount: usize,
 };
 
-fn neomacsPrintInner(L: ?*lua.State, idx: c_int, state: *PrintState) !void {
+fn neomacsPrintInner(L: ?*Lua.State, idx: c_int, state: *PrintState) !void {
     const ty = sys.lua_type(L, idx);
 
     switch (ty) {

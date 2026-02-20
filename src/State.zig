@@ -2,34 +2,41 @@ const root = @import("root.zig");
 const std = root.std;
 const scu = root.scu;
 const trm = root.trm;
-const lua = root.lua;
 const km = root.km;
 const keys = root.keys;
 
 const Buffer = root.Buffer;
 const Args = root.Args;
+const Lua = root.Lua;
 
 const Component = root.Component;
 const Backend = @import("backend/Backend.zig");
 
 const State = @This();
 
+/// Main allocator for the State
 a: std.mem.Allocator,
+
 arena: std.heap.ArenaAllocator,
+
+/// TODO: make this a list if it makes sense.
 backend: Backend,
 
+/// TODO: super depricate this. Using this is so bad.
 ch: trm.KeyEvent = @bitCast(@as(u16, 0)),
 
-L: *lua.State,
+/// The Lua state. Can be compiled down to nothing and so use internal fields at
+/// your peril.
+L: Lua,
 
 config: Config = .{},
 
-resized: bool = false,
-
-/// Also call zygot buffer sometimes
-/// TODO: i think i can go back to removing this
+/// Zygot buffer, exists so that every key function always has somethign to
+/// target
 scratchbuffer: *Buffer,
+
 buffers: std.ArrayListUnmanaged(*Buffer),
+
 /// null selects the scratch buffer
 bufferindex: ?usize,
 
@@ -39,13 +46,9 @@ components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 
 commandbuffer: std.ArrayListUnmanaged(u8) = .{},
 
+resized: bool = false,
+
 autocommands: Autocommands,
-
-// TreeSitter Parsers
-// tsmap: std.ArrayListUnmanaged(void) = .{},
-
-// loop: xev.Loop,
-// inputcallback: ?struct { *xev.Completion, xev.Async } = null,
 
 pub const Autocommands = std.StringArrayHashMapUnmanaged(std.ArrayListUnmanaged(km.KeyFunction));
 
@@ -92,7 +95,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
     return State{
         .a = a,
         .arena = std.heap.ArenaAllocator.init(a),
-        .L = lua.init(),
+        .L = Lua.init(),
 
         .backend = backend,
 
@@ -105,7 +108,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
 }
 
 pub fn setup(state: *State) !void {
-    lua.setup(state.L);
+    state.L.setup();
     try keys.init(state.a, state.keymaps);
     try makeComponents(state);
 }
@@ -246,7 +249,7 @@ pub fn deinit(state: *State) void {
 
     state.components.deinit(state.a);
 
-    lua.deinit(state.L);
+    state.L.deinit();
 
     std.log.debug("closing backend", .{});
     state.backend.deinit();

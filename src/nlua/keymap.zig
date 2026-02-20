@@ -1,17 +1,17 @@
-const lua = @import("../lua.zig");
 const root = @import("../root.zig");
+const Lua = root.Lua;
 const std = @import("std");
 
-pub fn del(L: ?*lua.State) callconv(.C) c_int {
+pub fn del(L: ?*Lua.State) callconv(.C) c_int {
     root.log(@src(), .info, "neomacs.keymap.del not implemented", .{});
-    // lua.check();
+    // Lua.check();
     _ = L; // autofix
     return 0;
 }
 
-fn getFunction(L: ?*lua.State, idx: c_int) void {
-    if (lua.sys.lua_type(L, idx) == lua.sys.LUA_TFUNCTION) {
-        // lua.sys.lua_pushre
+fn getFunction(L: ?*Lua.State, idx: c_int) void {
+    if (Lua.sys.lua_type(L, idx) == Lua.sys.LUA_TFUNCTION) {
+        // Lua.sys.lua_pushre
         return;
     } else {}
 }
@@ -19,14 +19,14 @@ fn getFunction(L: ?*lua.State, idx: c_int) void {
 const km = root.km;
 
 // vim.keyapi.set(mode, lhs, rhs, opts)
-pub fn set(L: ?*lua.State) callconv(.C) c_int {
+pub fn set(L: ?*Lua.State) callconv(.C) c_int {
     // root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
 
-    const modestr = lua.check(L, 1, []const u8) orelse {
+    const modestr = Lua.check(L, 1, []const u8) orelse {
         root.log(@src(), .err, "neomacs.keymap.set: expected mode", .{});
         return 0;
     };
-    const lhs = lua.check(L, 2, []const u8) orelse {
+    const lhs = Lua.check(L, 2, []const u8) orelse {
         root.log(@src(), .err, "neomacs.keymap.set: expected lhs", .{});
         return 0;
     };
@@ -34,8 +34,8 @@ pub fn set(L: ?*lua.State) callconv(.C) c_int {
         root.log(@src(), .err, "neomacs.keymap.set: expected rhs", .{});
         std.debug.print("error: {any}\n", .{err});
 
-        lua.sys.lua_pushstring(L, "vim.schedule: expected function");
-        return lua.sys.lua_error(L);
+        Lua.sys.lua_pushstring(L, "vim.schedule: expected function");
+        return Lua.sys.lua_error(L);
         // return 0; // 1?
     };
 

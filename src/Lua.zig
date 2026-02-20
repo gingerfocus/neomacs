@@ -1,42 +1,41 @@
-pub const sys = @import("syslua");
+const root = @import("root.zig");
+const std = root.std;
 
 // const kennel = @import("kennel/root.zig");
+pub const sys = @import("syslua");
+
+const nlua = @import("nlua/root.zig");
 const options = @import("options");
 
-const std = @import("std");
-const root = @import("root.zig");
-const nlua = @import("nlua/root.zig");
+const Lua = @This();
 
-// TODO: find the runtime path in zig code when setting up the opts
-const SYSINIT =
-    \\local runtime = os.getenv("NEONRUNTIME")
-    \\if not runtime then
-    \\    local home = os.getenv("HOME")
-    \\    runtime = home .. "/.local/share/neon"
-    \\end
-    \\neon.opt.runtime = runtime
-    \\package.path = runtime .. "/?.lua;" .. package.path
-    \\package.path = runtime .. "/?/init.lua;" .. package.path
-    \\require("rt").startup()
-;
+const compiledin = options.uselua;
 
-// TODO: move to lua file
+pub const InnerState = sys.lua_State;
+
+/// For backwards compatibilty, idealy removed over time
+pub const State = sys.lua_State;
+
 pub const LuaRef = c_int;
 
-// TODO: make this an opaque struct with associated methods
-pub const State = sys.lua_State;
-// pub const State = opaque {
-//    fn todo() void {}
-// };
+enabled: if (compiledin) bool else void,
+state: if (compiledin) *InnerState else void,
 
-pub fn init() *State {
+pub fn init(enabled: bool) Lua {
+    if (!compiledin) return .{ .enabled = void, .state = void };
+    if (!enabled) return .{ .enabled = false, .state = false };
+
     root.log(@src(), .debug, "creating lua state", .{});
 
     const L = sys.luaL_newstate() orelse unreachable;
-    return L;
+    return .{ .enabled = true, .state = L };
 }
 
-pub fn setup(L: *State) void {
+pub fn setup(self: *Lua) void {
+    if (!compiledin) return;
+    if (!self.enabled) return;
+
+    const L = self.state;
     sys.luaL_openlibs(L);
 
     // const a = root.alloc.galloc();
@@ -116,8 +115,11 @@ pub fn setup(L: *State) void {
 
 }
 
-pub fn deinit(L: *State) void {
-    sys.lua_close(L);
+pub fn deinit(self: Lua) void {
+    if (!compiledin) return;
+    if (!self.enabled) return;
+
+    sys.lua_close(self.state);
 }
 
 // TODO: i dont like this
@@ -128,7 +130,7 @@ fn tmpCString(str: []const u8) [:0]const u8 {
     return static[0..str.len :0];
 }
 
-pub fn run(L: *State, cmd: [:0]const u8) !void {
+pub fn run(L: *InnerState, cmd: [:0]const u8) !void {
     var iter = std.mem.splitScalar(u8, cmd, ' ');
 
     // var isCommand = true;
@@ -199,7 +201,7 @@ pub fn run(L: *State, cmd: [:0]const u8) !void {
 }
 
 // https://raw.githubusercontent.com/daurnimator/zig-autolua/refs/heads/master/src/autolua.zig
-pub fn push(L: ?*State, value: anytype) void {
+pub fn push(L: ?*InnerState, value: anytype) void {
     const Value = @TypeOf(value);
     const typeInfo = @typeInfo(Value);
 
@@ -246,7 +248,7 @@ pub fn push(L: ?*State, value: anytype) void {
 }
 
 /// Gets idx as a type T, if you are not sure will match then use ?T
-pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
+pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
     const luat = sys.lua_type(L, idx);
 
     switch (@typeInfo(T)) {
@@ -318,13 +320,13 @@ pub fn check(L: ?*State, idx: c_int, comptime T: type) ?T {
 }
 
 /// Wraps an arbitrary function in a Lua C-API using version
-pub fn wrap(comptime func: fn (L: *State) anyerror!c_int) sys.lua_CFunction {
+pub fn wrap(comptime func: fn (L: *InnerState) anyerror!c_int) sys.lua_CFunction {
     // const Args: type = std.meta.ArgsTuple(@TypeOf(func));
 
     // See https://github.com/ziglang/zig/issues/229
     return struct {
-        fn thunk(Lua: ?*State) callconv(.C) c_int {
-            const L = Lua orelse unreachable;
+        fn thunk(lua: ?*InnerState) callconv(.C) c_int {
+            const L = lua orelse unreachable;
 
             return func(L) catch |err| {
                 var buf: [512]u8 = undefined;
@@ -350,3 +352,15 @@ pub fn wrap(comptime func: fn (L: *State) anyerror!c_int) sys.lua_CFunction {
     }.thunk;
 }
 
+// TODO: find the runtime path in zig code when setting up the opts
+const SYSINIT =
+    \\local runtime = os.getenv("NEONRUNTIME")
+    \\if not runtime then
+    \\    local home = os.getenv("HOME")
+    \\    runtime = home .. "/.local/share/neon"
+    \\end
+    \\neon.opt.runtime = runtime
+    \\package.path = runtime .. "/?.lua;" .. package.path
+    \\package.path = runtime .. "/?/init.lua;" .. package.path
+    \\require("rt").startup()
+;
