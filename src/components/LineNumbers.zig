@@ -7,7 +7,6 @@ const Backend = root.Backend;
 const Color = Backend.Color;
 const View = root.Component.View;
 
-
 pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) void {
     // TODO: clear each time
 
@@ -17,7 +16,7 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     const row_render_start = std.math.sub(usize, buffer.row + state.config.scrolloff, view.h) catch 0;
 
     var renderRow: usize = row_render_start;
-    while (renderRow < buffer.lines.items.len and renderRow < row_render_start + view.h) : (renderRow += 1) {
+    while (renderRow < buffer.numLines() and renderRow < row_render_start + view.h) : (renderRow += 1) {
         const realRow = buffer.row;
         const lineNumber = if (true) blk: {
             const res = if (realRow > renderRow)

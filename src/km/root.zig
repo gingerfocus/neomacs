@@ -36,14 +36,6 @@ pub const ModeId = struct {
         return mode;
     }
 
-    test "ModeId.from" {
-        try std.testing.expectEqual(ModeId.Null, ModeId.from(""));
-        try std.testing.expectEqual(ModeId.Normal, ModeId.from("n"));
-        try std.testing.expectEqual(ModeId.Insert, ModeId.from("i"));
-        try std.testing.expectEqual(ModeId.Visual, ModeId.from("v"));
-        try std.testing.expectEqual(ModeId.Command, ModeId.from("c"));
-    }
-
     // // MUST always be one greater than the last one above
     // var static: u16 = 4;
     //
@@ -64,3 +56,11 @@ pub const KeyFunctionDataValue = struct {
         return null;
     }
 };
+
+test "ModeId.from" {
+    try std.testing.expectEqual(ModeId.Null, ModeId.from(""));
+    try std.testing.expectEqual(ModeId.Normal, ModeId.from("n"));
+    try std.testing.expectEqual(ModeId.Insert, ModeId.from("i"));
+    try std.testing.expectEqual(ModeId.Visual, ModeId.from("v"));
+    try std.testing.expectEqual(ModeId.Command, ModeId.from("c"));
+}

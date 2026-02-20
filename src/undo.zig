@@ -2,6 +2,9 @@ const root = @import("root.zig");
 const std = root.std;
 const lib = root.lib;
 const Buffer = root.Buffer;
+const testing = std.testing;
+
+const undo = @This();
 
 pub const UndoAction = struct {
     /// An action to be preformed after as part of the same undo group.
@@ -13,7 +16,7 @@ pub const UndoAction = struct {
             text: []const u8,
         },
         delete: struct {
-            start: lib.Vec2,
+            beg: lib.Vec2,
             end: lib.Vec2,
             text: []const u8,
         },
@@ -28,16 +31,16 @@ pub const UndoAction = struct {
                 buffer.text_insert(insert.position, insert.text) catch {};
             },
             .delete => |*delete| {
-                buffer.text_delete(.{ .start = delete.start, .end = delete.end }) catch {}; // TODO: handle error
+                buffer.text_delete(.{ .beg = delete.beg, .end = delete.end }) catch {}; // TODO: handle error
             },
         }
     }
 
-    fn invert(undoaction: UndoAction) UndoAction {
+    pub fn invert(undoaction: UndoAction) UndoAction {
         return switch (undoaction.data) {
             .insert => |*insert| .{
                 .data = .{ .delete = .{
-                    .start = insert.position,
+                    .beg = insert.position,
                     .end = .{
                         .row = insert.position.row,
                         .col = insert.position.col + insert.text.len,
@@ -47,7 +50,7 @@ pub const UndoAction = struct {
             },
             .delete => |*delete| .{
                 .data = .{ .insert = .{
-                    .position = delete.start,
+                    .position = delete.beg,
                     .text = delete.text,
                 } },
             },
@@ -96,10 +99,10 @@ pub const UndoHistory = struct {
         try self.undos.append(self.allocator, action);
     }
 
-    pub fn recordDelete(self: *UndoHistory, start: lib.Vec2, end: lib.Vec2, deleted_text: []const u8) !void {
+    pub fn recordDelete(self: *UndoHistory, beg: lib.Vec2, end: lib.Vec2, deleted_text: []const u8) !void {
         const action = UndoAction{
             .data = .{ .delete = .{
-                .start = start,
+                .beg = beg,
                 .end = end,
                 .text = try self.allocator.dupe(u8, deleted_text),
             } },
@@ -127,3 +130,5 @@ pub const UndoHistory = struct {
         }
     }
 };
+
+

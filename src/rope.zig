@@ -49,6 +49,7 @@ const Node = struct {
     child: [2]?*Node = .{ null, null },
     nodes: u64 = 1,
     size: u64 = 0,
+    lines: u64 = 0,
     len: u8 = 0,
     data: [CAP_BYTES]u8 = undefined,
 
@@ -59,9 +60,11 @@ const Node = struct {
     fn update(self: *Node) void {
         self.size = self.len;
         self.nodes = 1;
+        self.lines = std.mem.count(u8, self.data[0..self.len], "\n");
         for (self.child) |ch| if (ch) |c| {
             self.size += c.size;
             self.nodes += c.nodes;
+            self.lines += c.lines;
         };
     }
 
@@ -214,6 +217,7 @@ pub const Rope = struct {
     root: ?*Node = null,
     suf_len: u8 = 0,
     suf_buf: [MIN_BYTES - 1]u8 = undefined,
+    lines: u64 = 0,
 
     /// Create a new, pre-balanced rope from a byte slice.
     pub fn create(allocator: Allocator, bytes: []const u8) !*Rope {
@@ -224,10 +228,12 @@ pub const Rope = struct {
         // Use only a suffix if the rope is too small.
         if (bytes.len < MIN_BYTES) {
             rope.suf_len = @intCast(bytes.len);
+            rope.lines = std.mem.count(u8, bytes, "\n");
             @memcpy(rope.suf_buf[0..bytes.len], bytes);
             return rope;
         }
         rope.root = try createTree(allocator, bytes);
+        rope.lines = std.mem.count(u8, bytes, "\n");
         return rope;
     }
 
@@ -241,6 +247,10 @@ pub const Rope = struct {
 
     pub fn len(self: *const Rope) u64 {
         return self.suf_len + if (self.root) |r| r.size else 0;
+    }
+
+    pub fn line_count(self: *const Rope) u64 {
+        return self.lines + if (self.root) |r| r.lines else 0;
     }
 
     pub fn empty(self: *const Rope) bool {
@@ -263,15 +273,15 @@ pub const Rope = struct {
         std.debug.assert(self.allocator.vtable == other.allocator.vtable);
 
         if (other.root == null) {
-            // Concatenate a small buffer onto the end of self.
             const total = self.suf_len + other.suf_len;
             if (total < MIN_BYTES) {
                 @memcpy(self.suf_buf[self.suf_len..total], other.suf_buf[0..other.suf_len]);
                 self.suf_len = total;
+                self.lines += other.lines;
             } else {
                 std.debug.assert(total <= CAP_BYTES);
                 const node = try self.allocator.create(Node);
-                node.* = .{ .len = total };
+                node.* = .{ .len = total, .lines = self.lines + other.lines };
                 memcpy(node.data[0..self.suf_len], self.suf_buf[0..self.suf_len]);
                 memcpy(node.data[self.suf_len..], other.suf_buf[0..other.suf_len]);
 
@@ -279,9 +289,9 @@ pub const Rope = struct {
                 node.update();
                 self.root = node;
                 self.suf_len = 0;
+                self.lines = 0;
             }
         } else {
-            // Concatenate our suffix with the start of the other rope's root.
             _ = other.get(0); // splay
             var root = other.root.?;
             std.debug.assert(root.child[0] == null);
@@ -289,6 +299,7 @@ pub const Rope = struct {
             if (total < CAP_BYTES) {
                 root.len += self.suf_len;
                 concat_front(root.data[0..root.len], self.suf_buf[0..self.suf_len]);
+                root.lines += self.lines;
             } else {
                 std.debug.assert(root.len >= MIN_BYTES);
                 const node = try self.allocator.create(Node);
@@ -298,6 +309,7 @@ pub const Rope = struct {
                 memcpy(node.data[self.suf_len..], root.data[0 .. MIN_BYTES - self.suf_len]);
                 memcpy(root.data[0..], root.data[MIN_BYTES - self.suf_len .. root.len]);
                 root.len -= MIN_BYTES - self.suf_len;
+                root.lines -= std.mem.count(u8, root.data[0 .. MIN_BYTES - self.suf_len], "\n");
                 root.update();
 
                 Node.connect(node, root, 1);
@@ -309,6 +321,8 @@ pub const Rope = struct {
             root.update();
 
             other.root = root;
+            self.lines = other.lines;
+            other.lines = 0;
             std.mem.swap(Rope, self, other);
         }
         other.destroy();
@@ -415,46 +429,82 @@ pub const Rope = struct {
         return rope;
     }
 
-    /// Todo: create an optimization for small strings
-    pub fn insert(self: *Rope, index: u64, bytes: []const u8) !void {
-        const other = try Rope.create(self.allocator, bytes);
+    /// Insert bytes at the given index. Invalid indices are clamped to valid range.
+    /// Errors are logged and operation may be partially complete.
+    pub fn insert(self: *Rope, index: u64, bytes: []const u8) void {
+        if (bytes.len == 0) return;
 
-        if (index == 0) {
-            other.merge(self) catch |err| {
-                other.destroy();
-                return err;
-            };
-            self.* = other.*;
+        const rlen = self.len();
+        const effective_index = if (index > rlen) blk: {
+            std.log.warn("rope.insert: invalid index {} > len {}, clamping to {}", .{ index, rlen, rlen });
+            break :blk rlen;
+        } else index;
+
+        const other = Rope.create(self.allocator, bytes) catch |err| {
+            std.log.err("rope.insert: failed to create rope: {}", .{err});
             return;
-        } else if (index == self.len()) {
+        };
+
+        if (effective_index == rlen) {
             self.merge(other) catch |err| {
+                std.log.err("rope.insert: merge failed: {}", .{err});
                 other.destroy();
-                return err;
             };
         } else {
-            const righthand = try self.split(index);
-            try self.merge(other);
-            try self.merge(righthand);
+            const righthand = self.split(effective_index) catch |err| {
+                std.log.err("rope.insert: split failed: {}", .{err});
+                other.destroy();
+                return;
+            };
+            self.merge(other) catch |err| {
+                std.log.err("rope.insert: merge failed: {}", .{err});
+                other.destroy();
+                righthand.destroy();
+                return;
+            };
+            self.merge(righthand) catch |err| {
+                std.log.err("rope.insert: merge righthand failed: {}", .{err});
+                righthand.destroy();
+            };
         }
     }
 
     /// Delete a range of bytes from a rope.
-    pub fn delete_range(self: *Rope, start: usize, end: usize) !void {
+    /// Invalid indices are clamped to valid range. Errors are logged and operation may be partially complete.
+    pub fn delete_range(self: *Rope, start: usize, end: usize) void {
         const rlen = self.len();
-        std.debug.assert(rlen > 0);
+        if (rlen == 0) return;
 
-        const s = @min(start, rlen);
-        const e = @min(end, rlen);
+        const s = if (start > rlen) blk: {
+            std.log.warn("rope.delete_range: invalid start {} > len {}, clamping to 0", .{ start, rlen });
+            break :blk @as(usize, 0);
+        } else start;
+
+        const e = if (end > rlen) blk: {
+            std.log.warn("rope.delete_range: invalid end {} > len {}, clamping to {}", .{ end, rlen, rlen });
+            break :blk rlen;
+        } else end;
+
         if (s == 0 and e == rlen) {
-            // Special case: Delete the entire rope.
             self.destroy();
         } else if (s < e) {
-            const rope2 = try self.split(s);
-            const rope3 = try rope2.split(e - s);
+            const rope2 = self.split(s) catch |err| {
+                std.log.err("rope.delete_range: split failed: {}", .{err});
+                return;
+            };
+            const rope3 = rope2.split(e - s) catch |err| {
+                std.log.err("rope.delete_range: split failed: {}", .{err});
+                rope2.destroy();
+                return;
+            };
 
-            try self.merge(rope3);
+            self.merge(rope3) catch |err| {
+                std.log.err("rope.delete_range: merge failed: {}", .{err});
+                rope2.destroy();
+                rope3.destroy();
+                return;
+            };
 
-            // can be done async
             rope2.destroy();
         }
     }
@@ -493,7 +543,7 @@ pub const Rope = struct {
     }
 
     /// Get a byte of the rope, also returning any remaining contiguous bytes.
-    fn get_scan(self: *Rope, i: u64) ?[]u8 {
+    pub fn get_scan(self: *Rope, i: u64) ?[]u8 {
         const length = self.len();
         if (i >= length) {
             return null;

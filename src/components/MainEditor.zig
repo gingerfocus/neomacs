@@ -28,10 +28,10 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     const buffer = state.getCurrentBuffer();
     const row_render_start = std.math.sub(usize, buffer.row + state.config.scrolloff, view.h) catch 0;
 
+    var line_buf: [256]u8 = undefined;
     var renderRow: usize = row_render_start;
-    while (renderRow < buffer.lines.items.len and renderRow < row_render_start + view.h) : (renderRow += 1) {
-        const line = buffer.lines.items[renderRow];
-        const bufdata = line.items;
+    while (renderRow < buffer.numLines() and renderRow < row_render_start + view.h) : (renderRow += 1) {
+        const bufdata = buffer.getLineBytes(renderRow, &line_buf);
 
         for (bufdata, 0..) |ch, c| {
             writer.draw(
@@ -46,13 +46,13 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
     }
 
     if (buffer.target) |visual| {
-        var cur = visual.start;
+        var cur = visual.beg;
         const end = visual.end;
         while (true) {
             if (cur.row > end.row) break;
             if (cur.row == end.row and cur.col >= end.col) break;
 
-            const items = buffer.lines.items[cur.row].items;
+            const items = buffer.getLineBytes(cur.row, &line_buf);
             writer.draw(
                 .{ .col = @as(usize, @intCast(view.x)) + 1 + cur.col, .row = @as(usize, @intCast(view.y)) + cur.row - row_render_start },
                 .{

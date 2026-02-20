@@ -49,9 +49,9 @@ pub fn init(
 
 fn deleteBufferCharacter(state: *State, _: km.KeyFunctionDataValue) !void {
     const buffer = state.getCurrentBuffer();
-    const end = buffer.position();
-    const start = buffer.moveLeft(end, 1);
-    try buffer.text_delete(.{ .start = start, .end = end });
+    const beg = buffer.position();
+    const end = buffer.moveLeft(beg, 1);
+    try buffer.text_delete(.{ .beg = beg , .end = end });
 }
 
 fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
@@ -103,12 +103,12 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
     //             var undo: Undo = Undo{
     //                 .type = @as(c_uint, @bitCast(@as(c_int, 0))),
     //                 .data = @import("std").mem.zeroes(Data),
-    //                 .start = @import("std").mem.zeroes(usize),
+    //                 .end = @import("std").mem.zeroes(usize),
     //                 .end = @import("std").mem.zeroes(usize),
     //             };
     //             _ = &undo;
     //             undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-    //             undo.start = buffer.*.cursor;
+    //             undo.end = buffer.*.cursor;
     //             state.*.cur_undo = undo;
     //             if (!false) break;
     //         }
@@ -145,12 +145,12 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
     //                 var undo: Undo = Undo{
     //                     .type = @as(c_uint, @bitCast(@as(c_int, 0))),
     //                     .data = @import("std").mem.zeroes(Data),
-    //                     .start = @import("std").mem.zeroes(usize),
+    //                     .end = @import("std").mem.zeroes(usize),
     //                     .end = @import("std").mem.zeroes(usize),
     //                 };
     //                 _ = &undo;
     //                 undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-    //                 undo.start = buffer.*.cursor;
+    //                 undo.end = buffer.*.cursor;
     //                 state.*.cur_undo = undo;
     //                 if (!false) break;
     //             }
@@ -199,12 +199,12 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
     //         var undo: Undo = Undo{
     //             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
     //             .data = @import("std").mem.zeroes(Data),
-    //             .start = @import("std").mem.zeroes(usize),
+    //             .end = @import("std").mem.zeroes(usize),
     //             .end = @import("std").mem.zeroes(usize),
     //         };
     //         _ = &undo;
     //         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-    //         undo.start = buffer.*.cursor -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
+    //         undo.end = buffer.*.cursor -% @as(usize, @bitCast(@as(c_long, @as(c_int, 1))));
     //         state.*.cur_undo = undo;
     //         if (!false) break;
     //     }
@@ -214,12 +214,12 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
     //         var undo: Undo = Undo{
     //             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
     //             .data = @import("std").mem.zeroes(Data),
-    //             .start = @import("std").mem.zeroes(usize),
+    //             .end = @import("std").mem.zeroes(usize),
     //             .end = @import("std").mem.zeroes(usize),
     //         };
     //         _ = &undo;
     //         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-    //         undo.start = buffer.*.cursor;
+    //         undo.end = buffer.*.cursor;
     //         state.*.cur_undo = undo;
     //         if (!false) break;
     //     }
@@ -228,12 +228,12 @@ fn initInsertKeys(a: std.mem.Allocator, insert: *km.Keymap.Appender) !void {
     //         var undo: Undo = Undo{
     //             .type = @as(c_uint, @bitCast(@as(c_int, 0))),
     //             .data = @import("std").mem.zeroes(Data),
-    //             .start = @import("std").mem.zeroes(usize),
+    //             .end = @import("std").mem.zeroes(usize),
     //             .end = @import("std").mem.zeroes(usize),
     //         };
     //         _ = &undo;
     //         undo.type = @as(c_uint, @bitCast(DELETE_MULT_CHAR));
-    //         undo.start = buffer.*.cursor;
+    //         undo.end = buffer.*.cursor;
     //         state.*.cur_undo = undo;
     //         if (!false) break;
     //     }
@@ -248,7 +248,7 @@ pub fn initVisualKeys() !void {
     //         state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
     //         frontend_cursor_visible(@as(c_int, 1));
     //         state.*.buffer.*.visual = Visual{
-    //             .start = @as(usize, @bitCast(@as(c_long, @as(c_int, 0)))),
+    //             .end = @as(usize, @bitCast(@as(c_long, @as(c_int, 0)))),
     //             .end = @import("std").mem.zeroes(usize),
     //             .is_line = 0,
     //         };
@@ -265,26 +265,26 @@ pub fn initVisualKeys() !void {
     // },
     // @as(c_int, 100), @as(c_int, 120) => {
     //     {
-    //         var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+    //         var cond: c_int = @intFromBool(buffer.*.visual.end > buffer.*.visual.end);
     //         _ = &cond;
-    //         var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //         _ = &start;
-    //         var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
+    //         _ = &end;
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
     //         _ = &end;
     //         while (true) {
     //             var undo: Undo = Undo{
     //                 .type = @as(c_uint, @bitCast(@as(c_int, 0))),
     //                 .data = @import("std").mem.zeroes(Data),
-    //                 .start = @import("std").mem.zeroes(usize),
+    //                 .end = @import("std").mem.zeroes(usize),
     //                 .end = @import("std").mem.zeroes(usize),
     //             };
     //             _ = &undo;
     //             undo.type = @as(c_uint, @bitCast(INSERT_CHARS));
-    //             undo.start = start;
+    //             undo.end = end;
     //             state.*.cur_undo = undo;
     //             if (!false) break;
     //         }
-    //         buffer_delete_selection(buffer, state, start, end);
+    //         buffer_delete_selection(buffer, state, end, end);
     //         undo_push(state, &state.*.undo_stack, state.*.cur_undo);
     //         state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
     //         frontend_cursor_visible(@as(c_int, 1));
@@ -293,15 +293,15 @@ pub fn initVisualKeys() !void {
     // },
     // @as(c_int, 62) => {
     //     {
-    //         var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+    //         var cond: c_int = @intFromBool(buffer.*.visual.end > buffer.*.visual.end);
     //         _ = &cond;
-    //         var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //         _ = &start;
-    //         var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
+    //         _ = &end;
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
     //         _ = &end;
     //         var position: usize = buffer.*.cursor +% @as(usize, @bitCast(@as(c_long, state.*.config.indent)));
     //         _ = &position;
-    //         var row: usize = index_get_row(buffer, start);
+    //         var row: usize = index_get_row(buffer, end);
     //         _ = &row;
     //         var end_row: usize = index_get_row(buffer, end);
     //         _ = &end_row;
@@ -310,7 +310,7 @@ pub fn initVisualKeys() !void {
     //             _ = &i;
     //             while (i <= end_row) : (i +%= 1) {
     //                 buffer_calculate_rows(buffer);
-    //                 buffer.*.cursor = buffer.*.rows.data[i].start;
+    //                 buffer.*.cursor = buffer.*.rows.data[i].end;
     //                 if (state.*.config.indent > @as(c_int, 0)) {
     //                     {
     //                         var i_1: usize = 0;
@@ -332,13 +332,13 @@ pub fn initVisualKeys() !void {
     // },
     // @as(c_int, 60) => {
     //     {
-    //         var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+    //         var cond: c_int = @intFromBool(buffer.*.visual.end > buffer.*.visual.end);
     //         _ = &cond;
-    //         var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //         _ = &start;
-    //         var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
     //         _ = &end;
-    //         var row: usize = index_get_row(buffer, start);
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
+    //         _ = &end;
+    //         var row: usize = index_get_row(buffer, end);
     //         _ = &row;
     //         var end_row: usize = index_get_row(buffer, end);
     //         _ = &end_row;
@@ -349,7 +349,7 @@ pub fn initVisualKeys() !void {
     //             _ = &i;
     //             while (i <= end_row) : (i +%= 1) {
     //                 buffer_calculate_rows(buffer);
-    //                 buffer.*.cursor = buffer.*.rows.data[i].start;
+    //                 buffer.*.cursor = buffer.*.rows.data[i].end;
     //                 if (state.*.config.indent > @as(c_int, 0)) {
     //                     {
     //                         var j: usize = 0;
@@ -385,14 +385,14 @@ pub fn initVisualKeys() !void {
     // @as(c_int, 121) => {
     //     {
     //         reset_command(state.*.clipboard.str, &state.*.clipboard.len);
-    //         var cond: c_int = @intFromBool(buffer.*.visual.start > buffer.*.visual.end);
+    //         var cond: c_int = @intFromBool(buffer.*.visual.end > buffer.*.visual.end);
     //         _ = &cond;
-    //         var start: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.start;
-    //         _ = &start;
-    //         var end: usize = if (cond != 0) buffer.*.visual.start else buffer.*.visual.end;
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
     //         _ = &end;
-    //         buffer_yank_selection(buffer, state, start, end);
-    //         buffer.*.cursor = start;
+    //         var end: usize = if (cond != 0) buffer.*.visual.end else buffer.*.visual.end;
+    //         _ = &end;
+    //         buffer_yank_selection(buffer, state, end, end);
+    //         buffer.*.cursor = end;
     //         state.*.config.mode = @as(c_uint, @bitCast(NORMAL));
     //         frontend_cursor_visible(@as(c_int, 1));
     //         break;
@@ -402,9 +402,9 @@ pub fn initVisualKeys() !void {
     //     {
     //         if (buffer.*.visual.is_line != 0) {
     //             buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].end;
-    //             if (buffer.*.visual.start >= buffer.*.visual.end) {
-    //                 buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].start;
-    //                 buffer.*.visual.start = buffer.*.rows.data[index_get_row(buffer, buffer.*.visual.start)].end;
+    //             if (buffer.*.visual.end >= buffer.*.visual.end) {
+    //                 buffer.*.visual.end = buffer.*.rows.data[buffer_get_row(buffer)].end;
+    //                 buffer.*.visual.end = buffer.*.rows.data[index_get_row(buffer, buffer.*.visual.end)].end;
     //             }
     //         } else {
     //             buffer.*.visual.end = buffer.*.cursor;

@@ -2,11 +2,10 @@
 - [ ] visual rendering for non-range selections is wrong
 
 # For 0.1.2
-- [ ] More motions
-  - [ ] W/E/B
-  - [ ] a/i "(){}[]"
+- [X] Motions W/E/B + a/i
+- [x] Undo
+- [ ] Test Suite
 - [ ] Fix t/f motions getting stuck
-- [ ] Undo
 - [ ] Build on Windows + MacOS
 
 # For 0.2.0
@@ -19,6 +18,9 @@
 - [ ] Native Fennel Support
 - [ ] Component events
   - [ ] Auto commands
+  
+# Improvments
+- [ ] a/i commands for any delimiter
 
 # Refactors
 - [x] move repeat structure to buffer

@@ -4,32 +4,19 @@ const lib = root.lib;
 const km = root.km;
 const undo = @import("undo.zig");
 const rope = @import("rope.zig");
-
 const State = root.State;
+const testing = std.testing;
 
 const Buffer = @This();
-const LineStructure = struct { beg: usize, end: usize };
+pub const LineStructure = struct { beg: usize, end: usize };
 
 alloc: std.mem.Allocator,
 
 /// Unique id for this buffer, never changes once created
 id: usize,
 
-// File mode
-// mode: ModeId = ModeId.Normal,
-
-/// Motion keys have two ways in which they select text, a region and a
-/// point. A motion can set this structure to not null to indicate what it
-/// wants. Then a selector runs using this data. The default one just sets the
-/// cursor to target position. Some other common ones are `d` which deletes
-/// text in the selection. The can also be user defined.
 target: ?Visual = null,
 
-/// literal data in the buffer
-lines: std.ArrayListUnmanaged(Line),
-
-/// As a long term pivot strategy I will try to manage both the rope and the
-/// lines structure until I can remove one
 content: *rope.Rope,
 contentlines: std.ArrayListUnmanaged(LineStructure) = .{},
 
@@ -39,14 +26,6 @@ undoing: bool = false,
 row: usize = 0,
 col: usize = 0,
 
-// undos: Undo_Stack,
-// redos: Undo_Stack,
-// undo: Undo,
-
-/// Row and Col in buffer
-// cursor: Cursor,
-// desired: lib.Vec2 = .{ .row = 0, .col = 0 },
-
 filename: []const u8,
 hasbackingfile: bool,
 
@@ -54,39 +33,36 @@ global_keymap: *km.Keymap,
 local_keymap: km.Keymap,
 
 input_state: km.KeySequence = .{
-    // TODO: make this always be in sync with the buffer mode
     .mode = km.ModeId.Normal,
 },
 mode: km.ModeId = km.ModeId.Normal,
 
 repeating: Repeating = .{},
 
-pub const Line = std.ArrayListUnmanaged(u8);
-
 /// This, alongside [`Visual`] should be the main way to interact with the
 /// buffer and hopefully be largely opaque structures to allow me to change the
 /// api over time
-const Cursor = lib.Vec2; // @Vector(2, usize)
+pub const Cursor = lib.Vec2;
 
 pub const VisualMode = Visual.Mode;
 pub const Visual = struct {
     pub const Mode = enum { Range, Line, Block };
 
     mode: Visual.Mode = .Range,
-    start: lib.Vec2,
+    beg: lib.Vec2,
     end: lib.Vec2,
 
     /// often called by consumers to not have to deal with inversted selections
     pub fn normalize(target: Visual) Visual {
-        var start = target.start;
+        var beg = target.beg;
         var end = target.end;
 
-        if (end.cmp(start) == .lt) std.mem.swap(lib.Vec2, &start, &end);
+        if (end.cmp(beg) == .lt) std.mem.swap(lib.Vec2, &beg, &end);
 
-        const targ = Visual{ .mode = target.mode, .start = start, .end = end };
+        const targ = Visual{ .mode = target.mode, .beg = beg, .end = end };
 
-        std.debug.assert(targ.start.row <= targ.end.row);
-        if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
+        std.debug.assert(targ.beg.row <= targ.end.row);
+        if (targ.beg.row == targ.end.row) std.debug.assert(targ.beg.col <= targ.end.col);
 
         return targ;
     }
@@ -117,24 +93,18 @@ pub const Repeating = struct {
 
 pub fn init(
     a: std.mem.Allocator,
-    global_keymap: *km.Keymap,
+    keymaps: *km.Keymap,
     filename: []const u8,
 ) !Buffer {
     const roper = try rope.Rope.create(a, "");
     var roperlines = std.ArrayListUnmanaged(LineStructure){};
     var index: usize = 0;
 
-    var lines = std.ArrayList(Line).init(a);
-
     if (std.fs.cwd().openFile(filename, .{})) |file| {
         defer file.close();
 
         while (true) {
             const line = try file.reader().readUntilDelimiterOrEofAlloc(a, '\n', 128 * 1024) orelse break;
-            // if (line.len == 0) break;
-
-            const l = Line.fromOwnedSlice(line);
-            try lines.append(l);
 
             try roper.append(line);
             try roperlines.append(a, .{ .beg = index, .end = index + line.len });
@@ -142,29 +112,60 @@ pub fn init(
         }
     } else |err| root.log(@src(), .debug, "failed to open file: {}", .{err});
 
+    if (roperlines.items.len == 0) {
+        try roperlines.append(a, .{ .beg = 0, .end = 0 });
+    }
+
     return Buffer{
         .id = idgen.next(),
         .filename = filename,
         .hasbackingfile = true,
-
-        .lines = lines.moveToUnmanaged(),
 
         .content = roper,
         .contentlines = roperlines,
 
         .undos = undo.UndoHistory.init(a),
         .undoing = false,
-        .global_keymap = global_keymap,
+        .global_keymap = keymaps,
         .local_keymap = km.Keymap.init(a),
         .alloc = a,
     };
 }
 
+// pub fn initString(
+//     a: std.mem.Allocator,
+//     global_keymap: *km.Keymap,
+//     filename: []const u8,
+//     content: []const u8,
+// ) !Buffer {
+//     const roper = try rope.Rope.create(a, "");
+//     try roper.append(content);
+
+//     var roperlines = std.ArrayListUnmanaged(LineStructure){};
+
+//     try roperlines.append(a, .{ .beg = index, .end = index + line.len });
+
+//     var lines = std.ArrayList(Line).init(a);
+
+//     return Buffer{
+//         .id = idgen.next(),
+//         .filename = filename,
+//         .hasbackingfile = true,
+
+//         .lines = lines.moveToUnmanaged(),
+
+//         .content = roper,
+//         .contentlines = roperlines,
+
+//         .undos = undo.UndoHistory.init(a),
+//         .undoing = false,
+//         .global_keymap = global_keymap,
+//         .local_keymap = km.Keymap.init(a),
+//         .alloc = a,
+//     };
+// }
+
 pub fn deinit(buffer: *Buffer) void {
-    for (buffer.lines.items) |*line| {
-        line.deinit(buffer.alloc);
-    }
-    buffer.lines.deinit(buffer.alloc);
     buffer.content.destroy();
     buffer.contentlines.deinit(buffer.alloc);
 
@@ -189,36 +190,90 @@ pub fn setMode(buffer: *Buffer, mode: km.ModeId) void {
     buffer.target = null;
 }
 
-pub fn updateTarget(buffer: *Buffer, mode: Visual.Mode, start: lib.Vec2, end: lib.Vec2) void {
+pub fn updateTarget(buffer: *Buffer, mode: Visual.Mode, beg: lib.Vec2, end: lib.Vec2) void {
     if (buffer.target) |*t| {
-        // if (start.cmp(t.start) == .lt) t.start = start;
+        // if (beg.cmp(t.beg) == .lt) t.beg = beg;
 
         t.end = end;
         t.mode = mode;
     } else {
         buffer.target = .{
             .mode = mode,
-            .start = start,
+            .beg = beg,
             .end = end,
         };
     }
 }
 
-/// Takes a point `start` and moves it right `count` units in the buffers space
-pub fn moveRight(buffer: *const Buffer, start: Cursor, count: usize) lib.Vec2 {
-    var end = start;
+pub fn numLines(buffer: *const Buffer) usize {
+    return buffer.contentlines.items.len;
+}
+
+pub fn lineCount(buffer: *const Buffer) usize {
+    return @intCast(buffer.content.line_count());
+}
+
+pub fn getLine(buffer: *const Buffer, row: usize) !std.ArrayList(u8) {
+    var result = std.ArrayList(u8).init(buffer.alloc);
+    if (row >= buffer.contentlines.items.len) return result;
+    const line = buffer.contentlines.items[row];
+    const len = line.end - line.beg;
+    if (len == 0) return result;
+    var slice = buffer.content.chunks(line.beg, line.end);
+    while (slice.next()) |chunk| {
+        try result.appendSlice(chunk);
+    }
+    return result;
+}
+
+pub fn getLineBytes(buffer: *const Buffer, row: usize, out_buf: []u8) []u8 {
+    if (row >= buffer.contentlines.items.len) return &.{};
+    const line = buffer.contentlines.items[row];
+    const len = line.end - line.beg;
+    if (len == 0) return &.{};
+    var slice = buffer.content.chunks(line.beg, line.end);
+    var remaining = len;
+    var offset: usize = 0;
+    while (slice.next()) |chunk| {
+        const copy_len = @min(chunk.len, remaining);
+        @memcpy(out_buf[offset .. offset + copy_len], chunk[0..copy_len]);
+        offset += copy_len;
+        remaining -= copy_len;
+        if (remaining == 0) break;
+    }
+    return out_buf[0..len];
+}
+
+pub fn getLineLen(buffer: *const Buffer, row: usize) usize {
+    if (row >= buffer.contentlines.items.len) return 0;
+    const line = buffer.contentlines.items[row];
+    return line.end - line.beg;
+}
+
+pub fn getChar(buffer: *const Buffer, row: usize, col: usize) ?u8 {
+    if (row >= buffer.contentlines.items.len) return null;
+    const line = buffer.contentlines.items[row];
+    if (col >= line.end - line.beg) return null;
+    const index = line.beg + col;
+    return buffer.content.get(index);
+}
+
+/// Takes a point `beg` and moves it right `count` units in the buffers space
+pub fn moveRight(buffer: *const Buffer, beg: Cursor, count: usize) lib.Vec2 {
+    var end = beg;
 
     var c = count;
     while (c > 0) {
-        if (end.row >= buffer.lines.items.len) break;
-        if (end.col + c >= buffer.lines.items[end.row].items.len) {
-            c -= buffer.lines.items[end.row].items.len - end.col;
-            if (end.row < buffer.lines.items.len - 1) {
+        const num_lines = buffer.numLines();
+        if (end.row >= num_lines) break;
+        const line_len = buffer.getLineLen(end.row);
+        if (end.col + c >= line_len) {
+            c -= line_len - end.col;
+            if (end.row < num_lines - 1) {
                 end.col = 0;
                 end.row += 1;
             } else {
-                // no where left to go
-                end.col = buffer.lines.items[end.row].items.len - 1;
+                end.col = if (line_len > 0) line_len - 1 else 0;
                 break;
             }
         } else {
@@ -230,8 +285,8 @@ pub fn moveRight(buffer: *const Buffer, start: Cursor, count: usize) lib.Vec2 {
     return end;
 }
 
-pub fn moveLeft(buffer: *const Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
-    var end = start;
+pub fn moveLeft(buffer: *const Buffer, beg: lib.Vec2, count: usize) lib.Vec2 {
+    var end = beg;
 
     var c = count;
     while (c > 0) {
@@ -242,14 +297,13 @@ pub fn moveLeft(buffer: *const Buffer, start: lib.Vec2, count: usize) lib.Vec2 {
             c -= end.col + 1;
             if (end.row > 0) {
                 end.row -= 1;
-                end.col = buffer.lines.items[end.row].items.len;
+                end.col = buffer.getLineLen(end.row);
             } else {
-                end.col = 0; // can't go left anymore
+                end.col = 0;
                 c = 0;
             }
         }
     }
-    // buffer.desired = end;
 
     return end;
 }
@@ -260,144 +314,103 @@ pub fn save(buffer: *Buffer) !void {
     const f = try std.fs.cwd().createFile(buffer.filename, .{});
     defer f.close();
 
-    for (buffer.lines.items) |line| {
-        try f.writeAll(line.items);
+    var chunks = buffer.content.chunks(0, buffer.content.len());
+    while (chunks.next()) |chunk| {
+        try f.writeAll(chunk);
         try f.writer().writeByte('\n');
     }
 }
 
 pub fn text_insert(buffer: *Buffer, cursor: Cursor, text: []const u8) !void {
-    var hasnewline: bool = false;
-    for (text) |ch| {
-        hasnewline = hasnewline or (ch == '\n');
+    const index = getIndex(buffer, cursor);
+    buffer.content.insert(index, text);
 
-        // compat while switching to rope
-        try buffer.__old_lines_insert_character(cursor, ch);
+    try recalculate_contentlines(buffer);
+}
+
+fn recalculate_contentlines(buffer: *Buffer) !void {
+    buffer.contentlines.clearRetainingCapacity();
+
+    if (buffer.content.len() == 0) {
+        try buffer.contentlines.append(buffer.alloc, .{ .beg = 0, .end = 0 });
+        return;
     }
 
-    const index = getIndex(buffer, cursor);
-    try buffer.content.insert(index, text);
+    var byte_index: usize = 0;
+    var line_beg: usize = 0;
 
-    if (hasnewline) {
-        root.log(@src(), .warn, "NYI", .{});
+    while (byte_index < buffer.content.len()) {
+        const slice = buffer.content.get_scan(byte_index) orelse break;
+        for (slice, 0..) |ch, i| {
+            if (ch == '\n') {
+                try buffer.contentlines.append(buffer.alloc, .{
+                    .beg = line_beg,
+                    .end = byte_index + i,
+                });
+                line_beg = byte_index + i + 1;
+            }
+        }
+        byte_index += slice.len;
+    }
 
-        // pub fn recalculate_rows(buffer: *Buffer) !void {
-        //     buffer.contentlines.clearRetainingCapacity();
-        //     var chunks = buffer.content.chunks(0, buffer.content.len());
-        //     var index: usize = 0;
-        //     while (chunks.next()) |chunk| {
-        //         var lines = std.mem.splitScalar(u8, chunk, '\n');
-        //         while (lines.next()) |line| {
-        //             try buffer.contentlines.append(buffer.alloc, .{ .beg = index, .end = index + line.len });
-        //             index += line.len;
-        //         }
-        //     }
-        // }
-    } else {
-        shift_indices(buffer, cursor, text.len);
+    if (line_beg < buffer.content.len()) {
+        try buffer.contentlines.append(buffer.alloc, .{
+            .beg = line_beg,
+            .end = buffer.content.len(),
+        });
+    }
+
+    if (buffer.contentlines.items.len == 0) {
+        try buffer.contentlines.append(buffer.alloc, .{ .beg = 0, .end = 0 });
     }
 }
 
-/// TODO: there is problem when you hvae
-/// ```
-///  afa
-/// |aaf
-/// ```
-/// the cursor moves but the lines arnt combined
-///
+/// This function is inclusive on the lower bound and exclusive on the upper
+/// bound.
 pub fn text_delete(buffer: *Buffer, target: Visual) !void {
-    root.log(@src(), .warn, "TODO: rope support", .{});
     const targ = target.normalize();
 
     if (!buffer.undoing) {
         const text_to_delete = buffer.gettarget(target) catch {
-            // TODO: handle error, for now just don't record undo
             return;
         };
         defer text_to_delete.deinit();
-        buffer.undos.recordDelete(targ.start, targ.end, text_to_delete.items) catch {}; // TODO: handle error
+        buffer.undos.recordDelete(targ.beg, targ.end, text_to_delete.items) catch {};
     }
 
-    std.debug.assert(targ.start.row <= targ.end.row);
-    if (targ.start.row == targ.end.row) std.debug.assert(targ.start.col <= targ.end.col);
+    std.debug.assert(targ.beg.row <= targ.end.row);
+    if (targ.beg.row == targ.end.row) std.debug.assert(targ.beg.col <= targ.end.col);
 
-    const a = buffer.alloc;
-    root.log(@src(), .debug, "delete motion", .{});
+    const beg_index = getIndex(buffer, targ.beg);
+    const end_index = getIndex(buffer, targ.end);
 
-    var remove_range_begin: ?usize = null;
-    var remove_range_len: usize = 0;
+    buffer.content.delete_range(beg_index, end_index);
 
-    std.log.info("delete motion, target: {any}", .{targ});
-    var row: usize = targ.start.row;
-    while (row <= targ.end.row) : (row += 1) {
-        const line: *Buffer.Line = &buffer.lines.items[row];
+    try recalculate_contentlines(buffer);
 
-        var start = switch (targ.mode) {
-            .Line => 0,
-            .Range => if (row == targ.start.row) targ.start.col else 0,
-            .Block => targ.start.col,
-        };
-        start = @min(start, line.items.len);
-
-        const end = switch (targ.mode) {
-            .Line => line.items.len,
-            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
-            .Block => targ.end.col,
-        };
-
-        const iswholeline = switch (targ.mode) {
-            .Line => true,
-            // its not the only row and its the whole row
-            .Range => (targ.start.row != targ.end.row) and start == 0 and end == line.items.len,
-            .Block => false,
-        };
-
-        std.log.info("row: {d}, start: {d}, end: {d}, iswholeline: {}", .{ row, start, end, iswholeline });
-
-        if (iswholeline) {
-            if (remove_range_begin) |_| {
-                remove_range_len += 1;
-            } else {
-                remove_range_begin = row;
-                remove_range_len = 1;
-            }
-            line.deinit(a);
-        } else {
-            line.replaceRangeAssumeCapacity(start, end - start, &.{});
-        }
-    }
-
-    if (remove_range_begin) |rrange| {
-        buffer.lines.replaceRangeAssumeCapacity(rrange, remove_range_len, &.{});
-    }
-
-    buffer.movecursor(targ.start);
+    buffer.movecursor(targ.beg);
 }
 
 pub fn text_replace(buffer: *Buffer, target: Visual, ch: u8) !void {
     const targ = target.normalize();
 
-    var row: usize = targ.start.row;
-    while (row <= targ.end.row) : (row += 1) {
-        const line: *Buffer.Line = &buffer.lines.items[row];
+    const start_index = getIndex(buffer, targ.beg);
+    const end_index = getIndex(buffer, .{ .row = targ.end.row, .col = targ.end.col + 1 });
 
-        var start = switch (targ.mode) {
-            .Line => 0,
-            .Range => if (row == targ.start.row) targ.start.col else 0,
-            .Block => targ.start.col,
-        };
-        start = @min(start, line.items.len);
-
-        const end = switch (targ.mode) {
-            .Line => line.items.len,
-            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
-            .Block => targ.end.col,
-        };
-
-        for (line.items[start..end]) |*och| {
-            och.* = ch;
-        }
+    var chunks = buffer.content.chunks(start_index, end_index);
+    var buf: [256]u8 = undefined;
+    var offset: usize = 0;
+    while (chunks.next()) |chunk| {
+        const copy_len = @min(chunk.len, buf.len - offset);
+        @memset(buf[offset .. offset + copy_len], ch);
+        offset += copy_len;
     }
+
+    buffer.content.delete_range(start_index, end_index);
+    const replacement = buf[0..offset];
+    buffer.content.insert(start_index, replacement);
+
+    try recalculate_contentlines(buffer);
 }
 
 pub fn text_change(buffer: *Buffer, target: Visual, text: []const u8) !void {
@@ -415,26 +428,14 @@ pub fn gettarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
 
     var buf = std.ArrayList(u8).init(buffer.alloc);
 
-    var row: usize = targ.start.row;
-    while (row <= targ.end.row) : (row += 1) {
-        if (row != targ.start.row) try buf.append('\n');
+    // TODO: handle targ.mode
 
-        const line: *Buffer.Line = &buffer.lines.items[row];
+    const start_index = getIndex(buffer, targ.beg);
+    const end_index = getIndex(buffer, .{ .row = targ.end.row, .col = targ.end.col });
 
-        var start = switch (targ.mode) {
-            .Line => 0,
-            .Range => if (row == targ.start.row) targ.start.col else 0,
-            .Block => targ.start.col,
-        };
-        start = @min(start, line.items.len);
-
-        const end = switch (targ.mode) {
-            .Line => line.items.len,
-            .Range => if (row == targ.end.row) @min(targ.end.col, line.items.len) else line.items.len,
-            .Block => targ.end.col,
-        };
-
-        try buf.appendSlice(line.items[start..end]);
+    var chunks = buffer.content.chunks(start_index, end_index);
+    while (chunks.next()) |chunk| {
+        try buf.appendSlice(chunk);
     }
 
     return buf;
@@ -482,39 +483,359 @@ fn shift_indices(buffer: *Buffer, cursor: Cursor, count: usize) void {
     }
 }
 
-/// DEPRICATED: just insert the text
-fn __old_lines_insert_newline(buffer: *Buffer, a: std.mem.Allocator) !void {
-    var line = &buffer.lines.items[buffer.row];
+test "buffer insert character at end" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
 
-    const after = try a.dupe(u8, line.items[buffer.col..]);
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
 
-    line.items.len = buffer.col;
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
 
-    const nl = Line{ .items = after, .capacity = after.len };
-
-    buffer.row += 1;
-    buffer.col = 0;
-
-    try buffer.lines.insert(a, buffer.row, nl);
-
-    // TODO: indent the cursor
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("hello", line0.items);
 }
 
-/// DEPRICATED: see text_insert
-fn __old_lines_insert_character(buffer: *Buffer, cursor: Cursor, ch: u8) !void {
-    if (ch == '\n') {
-        root.log(@src(), .warn, "`insert_character` should not be used for newlines", .{});
-        try buffer.__old_lines_insert_newline(buffer.alloc);
-        return;
-    }
+test "buffer insert multiple characters" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
 
-    if (!buffer.undoing) {
-        try buffer.undos.recordInsert(buffer.position(), &.{ch});
-    }
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
 
-    var line = &buffer.lines.items[cursor.row];
-    try line.insert(buffer.alloc, cursor.col, ch);
-    buffer.col += 1;
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "abc");
+    try buffer.text_insert(.{ .row = 0, .col = 3 }, "def");
 
-    // state.cur_undo.end = buffer.cursor;
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("abcdef", line0.items);
+}
+
+test "buffer insert newline" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+
+    try testing.expectEqual(@as(usize, 2), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("hello", line0.items);
+    const line1 = try buffer.getLine(1);
+    defer line1.deinit();
+    try testing.expectEqualStrings("world", line1.items);
+}
+
+test "buffer insert newline in middle" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "helloworld");
+    try buffer.text_insert(.{ .row = 0, .col = 5 }, "\n");
+
+    try testing.expectEqual(@as(usize, 2), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("hello", line0.items);
+    const line1 = try buffer.getLine(1);
+    defer line1.deinit();
+    try testing.expectEqualStrings("world", line1.items);
+}
+
+test "buffer delete single character" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 1 }, .end = .{ .row = 0, .col = 2 }, .mode = .Range });
+
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("hllo", line0.items);
+}
+
+
+test "linewise delete works" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 5 }, .mode = .Line });
+
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("world", line0.items);
+}
+
+test "buffer delete across lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+    try buffer.text_delete(.{ .beg = .{ .row = 0, .col = 3 }, .end = .{ .row = 1, .col = 3 }, .mode = .Range });
+
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("helld", line0.items);
+}
+
+test "buffer line count" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "line1\nline2");
+    try testing.expectEqual(@as(usize, 2), buffer.numLines());
+}
+
+test "buffer getLineLen" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try testing.expectEqual(@as(usize, 5), buffer.getLineLen(0));
+
+    try buffer.text_insert(.{ .row = 0, .col = 5 }, "\nworld");
+    try testing.expectEqual(@as(usize, 5), buffer.getLineLen(0));
+    try testing.expectEqual(@as(usize, 5), buffer.getLineLen(1));
+}
+
+test "buffer moveRight at line end" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+
+    const end = buffer.moveRight(.{ .row = 0, .col = 3 }, 10);
+    try testing.expectEqual(@as(usize, 0), end.row);
+    try testing.expectEqual(@as(usize, 4), end.col);
+}
+
+test "buffer moveRight across lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "ab\ncd");
+
+    const end = buffer.moveRight(.{ .row = 0, .col = 0 }, 5);
+    try testing.expectEqual(@as(usize, 1), end.row);
+    try testing.expectEqual(@as(usize, 1), end.col);
+}
+
+test "buffer moveLeft at line beg" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+
+    const end = buffer.moveLeft(.{ .row = 0, .col = 3 }, 5);
+    try testing.expectEqual(@as(usize, 0), end.row);
+    try testing.expectEqual(@as(usize, 0), end.col);
+}
+
+test "buffer moveLeft across lines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "ab\ncd");
+
+    const end = buffer.moveLeft(.{ .row = 1, .col = 1 }, 3);
+    try testing.expectEqual(@as(usize, 0), end.row);
+    try testing.expectEqual(@as(usize, 1), end.col);
+}
+
+test "buffer empty buffer" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+    try testing.expectEqual(@as(usize, 0), buffer.getLineLen(0));
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("", line0.items);
+}
+
+test "buffer single char buffer" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "a");
+
+    try testing.expectEqual(@as(usize, 1), buffer.numLines());
+    try testing.expectEqual(@as(usize, 1), buffer.getLineLen(0));
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("a", line0.items);
+}
+
+test "buffer many newlines" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "a\nb\nc\nd\ne");
+
+    try testing.expectEqual(@as(usize, 5), buffer.numLines());
+    const line0 = try buffer.getLine(0);
+    defer line0.deinit();
+    try testing.expectEqualStrings("a", line0.items);
+    const line1 = try buffer.getLine(1);
+    defer line1.deinit();
+    try testing.expectEqualStrings("b", line1.items);
+    const line2 = try buffer.getLine(2);
+    defer line2.deinit();
+    try testing.expectEqualStrings("c", line2.items);
+    const line3 = try buffer.getLine(3);
+    defer line3.deinit();
+    try testing.expectEqualStrings("d", line3.items);
+    const line4 = try buffer.getLine(4);
+    defer line4.deinit();
+    try testing.expectEqualStrings("e", line4.items);
+}
+
+test "buffer gettarget single line" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello world");
+
+    const target = try buffer.gettarget(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 0, .col = 5 }, .mode = .Range });
+    defer target.deinit();
+
+    try testing.expectEqualStrings("hello", target.items);
+}
+
+test "buffer gettarget multi line" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello\nworld");
+
+    const target = try buffer.gettarget(.{ .beg = .{ .row = 0, .col = 0 }, .end = .{ .row = 1, .col = 5 }, .mode = .Range });
+    defer target.deinit();
+
+    try testing.expectEqualStrings("hello\nworld", target.items);
+}
+
+test "buffer rope len" {
+    const a = testing.allocator;
+    const global_keymap = try a.create(km.Keymap);
+    defer a.destroy(global_keymap);
+    global_keymap.* = km.Keymap.init(a);
+    defer global_keymap.deinit();
+
+    var buffer = try Buffer.init(a, global_keymap, "/dev/null");
+    defer buffer.deinit();
+
+    try buffer.text_insert(.{ .row = 0, .col = 0 }, "hello");
+    try testing.expectEqual(@as(u64, 5), buffer.content.len());
+
+    try buffer.text_insert(.{ .row = 0, .col = 5 }, " world");
+    try testing.expectEqual(@as(u64, 11), buffer.content.len());
 }

@@ -75,10 +75,6 @@ pub fn setstate(s: *State) void {
     static.state = s;
 }
 
-test "all" {
-    _ = std.testing.refAllDecls(@This());
-}
-
 //-----------------------------------------------------------------------------
 
 pub fn main() u8 {
@@ -167,4 +163,8 @@ fn neomacs() !void {
     // );
     // _ = allocator.deinit();
 
+}
+
+test "all" {
+    _ = std.testing.refAllDecls(@This());
 }

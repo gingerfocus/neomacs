@@ -248,16 +248,16 @@ const targeters = struct {
     fn jump_letter(buffer: *Buffer, ctx: km.KeyFunctionDataValue) !void {
         const ch = ctx.character.character;
 
-        const start = buffer.position();
-        var end = start;
+        const beg = buffer.position();
+        var end = beg;
 
-        while (buffer.lines.items[end.row].items[end.col] != ch) {
+        while (buffer.getChar(end.row, end.col) != null and buffer.getChar(end.row, end.col).? != ch) {
             end = buffer.moveRight(end, 1);
             // no match found
-            if (end.row >= buffer.lines.items.len) return;
+            if (end.row >= buffer.numLines()) return;
         }
 
-        buffer.updateTarget(Buffer.Visual.Mode.Range, start, end);
+        buffer.updateTarget(Buffer.Visual.Mode.Range, beg, end);
     }
 
     /// Selects `count` full lines starting from the current cursor position.
@@ -265,16 +265,16 @@ const targeters = struct {
         const count = state.takeRepeating();
         const buffer = state.getCurrentBuffer();
 
-        const start = lib.Vec2{ .row = buffer.row, .col = 0 };
+        const beg = lib.Vec2{ .row = buffer.row, .col = 0 };
 
-        const row = @min(buffer.row + count, buffer.lines.items.len - 1);
+        const row = @min(buffer.row + count, buffer.numLines() - 1);
 
         buffer.target = .{
             .mode = .Line,
-            .start = start,
+            .beg = beg,
             .end = .{
                 .row = row,
-                .col = buffer.lines.items[row].items.len,
+                .col = buffer.getLineLen(row),
             },
         };
     }
@@ -283,12 +283,12 @@ const targeters = struct {
         const buffer = state.getCurrentBuffer();
         const count = state.takeRepeating();
 
-        const start = buffer.position();
-        var end = start;
-        end.row = @min(start.row + count, buffer.lines.items.len - 1);
-        end.col = @min(end.col, buffer.lines.items[end.row].items.len);
+        const beg = buffer.position();
+        var end = beg;
+        end.row = @min(beg.row + count, buffer.numLines() - 1);
+        end.col = @min(end.col, buffer.getLineLen(end.row));
 
-        buffer.updateTarget(Buffer.VisualMode.Line, start, end);
+        buffer.updateTarget(Buffer.VisualMode.Line, beg, end);
     }
 
     fn target_up_linewise(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -298,7 +298,7 @@ const targeters = struct {
 
         buffer.row = if (buffer.row < count) 0 else buffer.row - count;
 
-        buffer.col = @min(buffer.col, buffer.lines.items[buffer.row].items.len);
+        buffer.col = @min(buffer.col, buffer.getLineLen(buffer.row));
         // buffer.updatePostionKeepRow();
     }
 
@@ -310,8 +310,8 @@ const targeters = struct {
         if (buffer.target) |*t| {
             t.end = buffer.moveRight(t.end, count);
         } else {
-            const start = buffer.position();
-            buffer.target = .{ .start = start, .end = buffer.moveRight(start, count) };
+            const beg = buffer.position();
+            buffer.target = .{ .beg = beg, .end = buffer.moveRight(beg, count) };
         }
     }
 
@@ -319,8 +319,8 @@ const targeters = struct {
         const buffer = state.getCurrentBuffer();
         const count = state.takeRepeating();
 
-        const start = buffer.position();
-        buffer.target = .{ .start = start, .end = buffer.moveLeft(start, count) };
+        const beg = buffer.position();
+        buffer.target = .{ .beg = beg, .end = buffer.moveLeft(beg, count) };
     }
 
     fn target_top(state: *State, _: km.KeyFunctionDataValue) !void {
@@ -329,7 +329,7 @@ const targeters = struct {
 
         buffer.target = .{
             .mode = .Line,
-            .start = buffer.position(),
+            .beg = buffer.position(),
             .end = .{ .row = count - 1, .col = 0 },
         };
         // buffer.updatePostionKeepRow();
@@ -338,15 +338,15 @@ const targeters = struct {
 
     fn target_bottom(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-        const start = buffer.position();
-        var end = start;
+        const beg = buffer.position();
+        var end = beg;
 
         // yeah the G motion is weird
         end.row =
             if (buffer.repeating.some()) |count| count - 1 // eh
-            else buffer.lines.items.len - 1;
+            else buffer.numLines() - 1;
 
-        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
+        buffer.updateTarget(Buffer.VisualMode.Range, beg, end);
     }
 
     /// TODO: make a word selector and then just get the end. also can be used
@@ -355,26 +355,26 @@ const targeters = struct {
         const buffer = state.getCurrentBuffer();
         const count = state.takeRepeating();
 
-        const start = buffer.position();
-        var end = start;
+        const beg = buffer.position();
+        var end = beg;
 
         var i: u32 = 0;
         while (i < count) : (i += 1) {
             end = buffer.moveRight(end, 1);
-            while (end.row < buffer.lines.items.len and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+            while (end.row < buffer.numLines() and std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?)) {
                 end = buffer.moveRight(end, 1);
             }
-            if (end.row >= buffer.lines.items.len) {
+            if (end.row >= buffer.numLines()) {
                 end = buffer.moveLeft(end, 1);
                 break;
             }
 
-            const is_word = isWordChar(buffer.lines.items[end.row].items[end.col]);
-            while (end.row < buffer.lines.items.len and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+            const is_word = isWordChar(buffer.getChar(end.row, end.col).?);
+            while (end.row < buffer.numLines() and !std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?)) {
                 const next_pos = buffer.moveRight(end, 1);
-                if (next_pos.row >= buffer.lines.items.len or
-                    std.ascii.isWhitespace(buffer.lines.items[next_pos.row].items[next_pos.col]) or
-                    is_word != isWordChar(buffer.lines.items[next_pos.row].items[next_pos.col]))
+                if (next_pos.row >= buffer.numLines() or
+                    std.ascii.isWhitespace(buffer.getChar(next_pos.row, next_pos.col).?) or
+                    is_word != isWordChar(buffer.getChar(next_pos.row, next_pos.col).?))
                 {
                     break;
                 }
@@ -382,7 +382,7 @@ const targeters = struct {
             }
         }
 
-        buffer.updateTarget(Buffer.VisualMode.Range, start, end);
+        buffer.updateTarget(Buffer.VisualMode.Range, beg, end);
     }
 
     /// TODO: this is not correct, it should loop on more than just
@@ -394,19 +394,19 @@ const targeters = struct {
         const start = buffer.position();
         var end = start;
 
-        var inword = std.ascii.isAlphanumeric(buffer.lines.items[start.row].items[start.col]);
+        var inword = std.ascii.isAlphanumeric(buffer.getChar(start.row, start.col).?);
         var loop = true;
         while (loop) {
             end = buffer.moveRight(end, 1);
 
             if (inword) {
-                inword = !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col]);
+                inword = !std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?);
             }
 
             if (inword) {
-                loop = std.ascii.isAlphanumeric(buffer.lines.items[end.row].items[end.col]);
+                loop = std.ascii.isAlphanumeric(buffer.getChar(end.row, end.col).?);
             } else {
-                loop = std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col]);
+                loop = std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?);
             }
 
             // TODO: this can infinitly loop
@@ -425,15 +425,15 @@ const targeters = struct {
         var i: u32 = 0;
         while (i < count) : (i += 1) {
             end = buffer.moveLeft(end, 1);
-            while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+            while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?)) {
                 end = buffer.moveLeft(end, 1);
             }
 
-            const is_word = isWordChar(buffer.lines.items[end.row].items[end.col]);
-            while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+            const is_word = isWordChar(buffer.getChar(end.row, end.col).?);
+            while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?)) {
                 const prev_pos = buffer.moveLeft(end, 1);
-                if (std.ascii.isWhitespace(buffer.lines.items[prev_pos.row].items[prev_pos.col]) or
-                    is_word != isWordChar(buffer.lines.items[prev_pos.row].items[prev_pos.col]))
+                if (std.ascii.isWhitespace(buffer.getChar(prev_pos.row, prev_pos.col).?) or
+                    is_word != isWordChar(buffer.getChar(prev_pos.row, prev_pos.col).?))
                 {
                     break;
                 }
@@ -454,13 +454,13 @@ const targeters = struct {
     //     var i: u32 = 0;
     //     while (i < count) : (i += 1) {
     //         end = buffer.moveLeft(end, 1);
-    //         while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+    //         while ((end.row > 0 or end.col > 0) and std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?)) {
     //             end = buffer.moveLeft(end, 1);
     //         }
     //
-    //         while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.lines.items[end.row].items[end.col])) {
+    //         while ((end.row > 0 or end.col > 0) and !std.ascii.isWhitespace(buffer.getChar(end.row, end.col).?)) {
     //             const prev_pos = buffer.moveLeft(end, 1);
-    //             if (std.ascii.isWhitespace(buffer.lines.items[prev_pos.row].items[prev_pos.col])) {
+    //             if (std.ascii.isWhitespace(buffer.getChar(prev_pos.row, prev_pos.col).?)) {
     //                 break;
     //             }
     //             end = prev_pos;
@@ -478,9 +478,9 @@ const targeters = struct {
         var end = buffer.position();
 
         // move count-1, rows down
-        end.row = @min(end.row - (count - 1), buffer.lines.items.len - 1);
+        end.row = @min(end.row - (count - 1), buffer.numLines() - 1);
         // move to end of line
-        end.col = buffer.lines.items[buffer.row].items.len;
+        end.col = buffer.getLineLen(buffer.row);
 
         return end;
     }
@@ -596,7 +596,7 @@ const inserts = struct {
 
         try buffer.text_insert(buffer.position(), &.{'\n'});
 
-        root.log(@src(), .debug, "number of lines: {d}", .{buffer.lines.items.len});
+        root.log(@src(), .debug, "number of lines: {d}", .{buffer.numLines()});
 
         buffer.row = @max(0, buffer.row - 1);
 
@@ -606,9 +606,9 @@ const inserts = struct {
 
     fn below(state: *State, _: km.KeyFunctionDataValue) !void {
         const buffer = state.getCurrentBuffer();
-        const line = &buffer.lines.items[buffer.row];
+        const line_len = buffer.getLineLen(buffer.row);
 
-        buffer.col = line.items.len;
+        buffer.col = line_len;
         try buffer.text_insert(buffer.position(), &.{'\n'});
 
         buffer.repeating.reset();
@@ -625,7 +625,7 @@ const visuals = struct {
                 const cur = buffer.position();
 
                 buffer.setMode(ModeId.Visual);
-                buffer.target = .{ .mode = mode, .start = cur, .end = cur };
+                buffer.target = .{ .mode = mode, .beg = cur, .end = cur };
             }
         }.set;
     }
@@ -672,7 +672,7 @@ const functions = struct {
         } else {
             const start = buffer.position();
             const end = targeters.end_of_line(buffer, count);
-            try buffer.text_delete(.{ .start = start, .end = end });
+            try buffer.text_delete(.{ .beg = start, .end = end });
         }
     }
 
@@ -685,7 +685,7 @@ const functions = struct {
         } else {
             const start = buffer.position();
             const end = targeters.end_of_line(buffer, count);
-            try buffer.text_delete(.{ .start = start, .end = end });
+            try buffer.text_delete(.{ .beg = start, .end = end });
         }
         buffer.setMode(ModeId.Insert);
     }
@@ -702,7 +702,7 @@ const functions = struct {
             for (0..count) |_| {
                 end = buffer.moveRight(end, 1);
             }
-            break :blk Buffer.Visual{ .start = start, .end = end };
+            break :blk Buffer.Visual{ .beg = start, .end = end };
         };
         try buffer.text_replace(target, ch.character);
     }
