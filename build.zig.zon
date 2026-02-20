@@ -12,10 +12,6 @@
         "build.zig.zon",
     },
     .dependencies = .{
-        // .graphi = .{
-        //     .url = "https://github.com/gingerfocus/graphi/archive/e2e08244a1c55db5df95db088158901280c68f6b.tar.gz",
-        //     .hash = "graphi-0.1.0-gpZJC2RdAAA3kOAu3V5KLmB6yY2eeoOksS9uDl7Hldqh",
-        // },
         .terminal = .{
             .url = "https://github.com/gingerfocus/thermit/archive/9dcbb096a0561b12850eaf452c2372af1502cbc7.tar.gz",
             .hash = "thermit-0.1.0-wTQBCPCxAACMrHzjqEfbfvOHNI-lHuqIjYKm6OWm39zK",
@@ -30,18 +26,10 @@
             .hash = "wgpu_native_zig-6.2.0-B9jeDMszAwDC_kDLa9gZMZp1NNQ6VE7blZ7OEcBUXycW",
             .lazy = true,
         },
-        // .libxev = .{
-        //     .url = "https://github.com/mitchellh/libxev/archive/5647630d7bff969414a0edc24c03c30aff34b101.tar.gz",
-        //     .hash = "libxev-0.0.0-86vtc4b1EgCl0Kvo2Ixmjfl5PgAaJmvCXRIn_n89nCaR",
-        //     .lazy = true,
-        // },
-        // .zigrc = .{
-        //     .url = "https://github.com/Aandreba/zigrc/archive/refs/tags/1.0.0.tar.gz",
-        //     .hash = "zigrc-1.0.0-lENlW5HIAADbYDdbz3y2nJEodEelv8MIG2W2f63An9fl",
-        // },
-        // .@"tree-sitter" = .{
-        //     .url = "git+https://github.com/tree-sitter/zig-tree-sitter.git#b4b72c903e69998fc88e27e154a5e3cc9166551b",
-        //     .hash = "tree_sitter-0.25.0-8heIf51vAQConvVIgvm-9mVIbqh7yabZYqPXfOpS3YoG",
-        // },
+        .@"tree-sitter" = .{
+            .url = "git+https://github.com/tree-sitter/zig-tree-sitter.git#b4b72c903e69998fc88e27e154a5e3cc9166551b",
+            .hash = "tree_sitter-0.25.0-8heIf51vAQConvVIgvm-9mVIbqh7yabZYqPXfOpS3YoG",
+            .lazy = true,
+        },
     },
 }

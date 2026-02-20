@@ -1,5 +1,6 @@
-# Known Bugs
-- [ ] visual rendering for non-range selections is wrong
+# Bugs
+- [ ] Rendering for visual selections is wrong
+- [ ] Many crashes...
 
 # For 0.1.2
 - [X] Motions W/E/B + a/i
@@ -7,28 +8,23 @@
 - [X] Test Suite
 - [X] Fix t/f motions
 - [X] Implement F/T motions
-- [ ] Build on Windows + MacOS
-- [ ] Update to Newest Zig
+- [ ] Update to Zig 0.16
 - [ ] Fix Rope Crashes
 
-# For 0.2.0
+# For 0.2
 - [ ] Lua API
   - [ ] Window Split
   - [ ] Make an example plugin
     - [ ] Oil/Netrw/Dired/Neotree alternative
     - [ ] Packager
-- [ ] R mode
 - [ ] Events and auto-comamnds
+- [ ] Build on MacOS
+- [ ] Around/Inside accept *any* delimiter
+- [ ] R mode
 - [ ] Native Fennel Support
-  
-# Improvments
-- [ ] a/i commands for any delimiter
 
 # Refactors
-- [x] move repeat structure to buffer
-- [ ] make log better 
-  - [ ] use builtin stacktrace 
-  - [x] dynamically choose backend
+- [ ] log with builtin stacktrace
 - [ ] event loop (wait for zig async)
 - [ ] remove command line??
 - [ ] remove row and col from Buffer (move to curosr object)
@@ -36,8 +32,7 @@
 - [ ] reuse motion keys map (dont call initMotionKeys on most submaps)
 - [ ] remove xkb dependency for wayland
 
-# Later
-- [x] Wayland Keyrepeat
+# For 1.0
 - [ ] Lsp
 - [ ] Swap Files
 - [ ] Fix window backend sizing
@@ -57,8 +52,6 @@
   - [ ] rework state object to handle missing/unconfigured resources
   - [ ] remove zss.zig file, should just be a consequence of the above
 - [ ] C/Wasi Api
-
-# Much Later
 - [ ] Shader support
   - [ ] Shaders from Lua
 - [ ] Pdf support
@@ -71,7 +64,7 @@
 - [ ] file co-operation
 - [ ] Static compile Wayland+Wgpu backend
 
-# Mission Features
+# Missing Features
 Here I add features that are missing in this editor that are in vim. Many of
 them will be marked as not planned but it think it is a good idea to have a
 list. Also they can be implemented in user space.
@@ -96,3 +89,4 @@ separate arg list is just not needed.
 ## Commands
 - gf
 - g<c-g>
+

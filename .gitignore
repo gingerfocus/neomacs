@@ -3,22 +3,13 @@
 /zig-out
 /.direnv
 /result
-/.envrc
 
 /docs/*.pdf
 
 # logs
 /neomacs.log
 
-/sub/vfoot
-/sub/futureproof 
-/sub/graphi 
-/sub/imvr 
 /sub/luma
-/sub/surf 
-/sub/zimv
-/sub/cmus
-/sub/lnk
-/sub/vsurf
+/sub/surf
 
 activate-windows.png
