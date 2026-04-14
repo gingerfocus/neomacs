@@ -22,11 +22,17 @@
 - [ ] Around/Inside accept *any* delimiter
 - [ ] R mode
 - [ ] Native Fennel Support
+- [ ] Fennel Support
 
-# Refactors
+# Improvments / Refactors
 - [ ] log with builtin stacktrace
+- [ ] a/i commands for any delimiter
+- [x] move repeat structure to buffer
+- [ ] make log better 
+  - [ ] use builtin stacktrace 
+  - [x] dynamically choose backend
 - [ ] event loop (wait for zig async)
-- [ ] remove command line??
+- [ ] remove command line. Do emacs M-x type thing
 - [ ] remove row and col from Buffer (move to curosr object)
   - [ ] remove calls to feild names in other files
 - [ ] reuse motion keys map (dont call initMotionKeys on most submaps)
@@ -39,14 +45,14 @@
 - [ ] Hardware Acceleration
   - [ ] Drop gtk backend
 - [ ] Batch Rendering Primitives
-- [ ] Better renering of text
+- [ ] Better Text Rendering
 - [ ] Font Support
 - [ ] Marks
 - [ ] Vim `s` or Flash `s`?
 - [ ] `z` commands
   - [ ] folds
 - [ ] swaping the start and end position visual selection
-- [ ] Rope Buffers / CRDT / VSR
+- [ ] Rope Buffers / CRDT / Viewstamped Replication
 - [ ] Multi Backend
 - [ ] Total runtime configuration to make paging truely zero cost
   - [ ] rework state object to handle missing/unconfigured resources
