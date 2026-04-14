@@ -51,6 +51,10 @@
             pkgs.cloc
             # wgpu-utils
             pkgs.zls_0_14
+
+            # For Kennel linking
+            # quickjs
+            # python3
           ]
           ++ [
             zig.packages."${system}"."0.14.0"

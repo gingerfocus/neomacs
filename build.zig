@@ -15,7 +15,6 @@ pub fn build(b: *std.Build) !void {
     const argstaticlua = b.option(bool, "static-lua", "complile lua statically") orelse static;
     const staticlua = if (static) true else argstaticlua;
 
-    // const xevdocs = b.option(bool, "xev-docs", "emit docs for xev-docs") orelse true;
     // const runtimeVar = b.option([]const u8, "runtime", "set the runtime directory");
 
     const options = b.addOptions();
@@ -104,23 +103,6 @@ pub fn build(b: *std.Build) !void {
 
     // ---------
 
-    // const xev = b.dependency("libxev", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    //     .@"emit-man-pages" = true,
-    // });
-    // neon.addImport("xev", xev.module("xev"));
-
-    // ---------
-
-    // const zigrc = b.dependency("zigrc", .{
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // neon.addImport("zigrc", zigrc.artifact("zig-rc").root_module);
-
-    // ---------
-
     const neomacsExe = b.addExecutable(.{
         .name = "neon",
         .root_module = neon,
@@ -130,12 +112,12 @@ pub fn build(b: *std.Build) !void {
     // install neon as default
     b.installArtifact(neomacsExe);
 
-    const neomacs_exe_run = b.addRunArtifact(neomacsExe);
-    if (b.args) |args| neomacs_exe_run.addArgs(args) else {
+    const neomacsExeRun = b.addRunArtifact(neomacsExe);
+    if (b.args) |args| neomacsExeRun.addArgs(args) else {
         // open a demo file
-        neomacs_exe_run.addArg("README.md");
+        neomacsExeRun.addArg("README.md");
     }
-    run_step.dependOn(&neomacs_exe_run.step);
+    run_step.dependOn(&neomacsExeRun.step);
 
     // -------------------------------------------------------------------------
 
@@ -156,7 +138,7 @@ pub fn build(b: *std.Build) !void {
     install_step.dependOn(&runtime.step);
 
     // TODO: make this be the output runtime dir not input
-    try neomacs_exe_run.getEnvMap().put("NEONRUNTIME", runtime.options.source_dir.getPath(b));
+    try neomacsExeRun.getEnvMap().put("NEONRUNTIME", runtime.options.source_dir.getPath(b));
 
     // -------------------------------------------------------------------------
 
@@ -173,7 +155,6 @@ pub fn build(b: *std.Build) !void {
     testStep.dependOn(&run_unit_tests.step);
 
     // -------------------------------------------------------------------------
-    //
     // const usekennel = b.option(bool, "usekennel", "compile the with support for literate programming") orelse true;
     //
     // const kennel = b.addModule("kennel", .{
@@ -185,43 +166,9 @@ pub fn build(b: *std.Build) !void {
     // if (usekennel) {
     //     neon.addImport("kennel", kennel);
     // }
-    //
     // -------------------------------------------------------------------------
 
-    // TODO: man pages to share/man/man1
-
-    const docsStep = b.step("docs", "");
-
-    const timeline = b.addSystemCommand(&.{ "typst", "compile" });
-    timeline.addFileArg(b.path("etc/docs/timeline.typ"));
-    const timelinePdf = timeline.addOutputFileArg("timeline.pdf");
-
-    const timelineInstall = b.addInstallFile(timelinePdf, "share/docs/timeline.pdf");
-
-    docsStep.dependOn(&timelineInstall.step);
-
-    // -------------------------------------------------------------------------
-    const lynx = b.addExecutable(.{
-        .name = "lynx",
-        .root_source_file = b.path("src/bin/lynx.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    check.dependOn(&lynx.step);
-
-    addBuildAndRunSteps(b, "lynx", lynx);
-
-    // -------------------------------------------------------------------------
-    // const exstep = b.step("ex", "");
-    // const exExe = b.addExecutable(.{
-    //     .name = "ex",
-    //     .root_source_file = b.path("src/bin/ex.zig"),
-    //     .target = target,
-    //     .optimize = optimize,
-    // });
-    // exExe.root_module.addImport("thermit", terminal.module("thermit"));
-    // const exRun = b.addRunArtifact(exExe);
-    // exstep.dependOn(&exRun.step);
+    // const docsStep = b.step("docs", "");
 }
 
 fn addBuildAndRunSteps(

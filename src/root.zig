@@ -4,76 +4,19 @@ pub const std = @import("std");
 
 pub const scu = @import("scured");
 pub const trm = @import("thermit");
-// pub const xev = @import("xev");
 
 pub const Args = @import("Args.zig");
 pub const Backend = @import("backend/Backend.zig");
 pub const Buffer = @import("Buffer.zig");
+pub const Component = @import("Component.zig");
+pub const Lua = @import("Lua.zig");
 pub const State = @import("State.zig");
-// pub const Config = State.Config;
 
 pub const km = @import("km/root.zig");
 pub const lib = @import("lib/root.zig");
-pub const Lua = @import("Lua.zig");
 pub const zss = @import("zss.zig");
 pub const keys = @import("keys/root.zig");
 pub const alloc = @import("alloc.zig");
-pub const Component = @import("Component.zig");
-
-// pub const ts = @cImport({ @cInclude("tree_sitter/api.h"); });
-
-fn logfn(
-    comptime message_level: std.log.Level,
-    comptime scope: @TypeOf(.enum_literal),
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    if (scu.log.file) |_| {
-        scu.log.toFile(message_level, scope, format, args);
-    } else {
-        std.log.defaultLog(message_level, scope, format, args);
-    }
-}
-pub const std_options: std.Options = .{
-    .logFn = logfn,
-};
-
-//-----------------------------------------------------------------------------
-
-/// Log a message with the given format string and arguments using the source
-/// location of the caller as the log message prefix.
-pub fn log(
-    comptime srcloc: std.builtin.SourceLocation,
-    comptime level: std.log.Level,
-    comptime format: []const u8,
-    args: anytype,
-) void {
-    const scope = .default;
-
-    // TODO: make an implementation that does that the src struct
-    // @returnAddress()
-    // var iter = std.debug.StackIterator.init(null, null);
-
-    if (comptime !std.log.logEnabled(level, scope)) return;
-
-    const fmt = std.fmt.comptimePrint("[{s}:{d}]: ", .{ srcloc.file, srcloc.line });
-    std.options.logFn(level, scope, fmt ++ format, args);
-}
-
-const static = struct {
-    var hasstate: bool = false;
-    var state: *State = undefined;
-};
-
-pub inline fn state() *State {
-    std.debug.assert(static.hasstate);
-    return static.state;
-}
-
-pub fn setstate(s: *State) void {
-    static.hasstate = true;
-    static.state = s;
-}
 
 //-----------------------------------------------------------------------------
 
@@ -164,6 +107,61 @@ fn neomacs() !void {
     // _ = allocator.deinit();
 
 }
+
+fn logfn(
+    comptime message_level: std.log.Level,
+    comptime scope: @TypeOf(.enum_literal),
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    if (scu.log.file) |_| {
+        scu.log.toFile(message_level, scope, format, args);
+    } else {
+        std.log.defaultLog(message_level, scope, format, args);
+    }
+}
+pub const std_options: std.Options = .{
+    .logFn = logfn,
+};
+
+//-----------------------------------------------------------------------------
+
+/// Log a message with the given format string and arguments using the source
+/// location of the caller as the log message prefix.
+pub fn log(
+    comptime srcloc: std.builtin.SourceLocation,
+    comptime level: std.log.Level,
+    comptime format: []const u8,
+    args: anytype,
+) void {
+    const scope = .default;
+
+    // TODO: make an implementation that does that the src struct
+    // @returnAddress()
+    // var iter = std.debug.StackIterator.init(null, null);
+
+    if (comptime !std.log.logEnabled(level, scope)) return;
+
+    const fmt = std.fmt.comptimePrint("[{s}:{d}]: ", .{ srcloc.file, srcloc.line });
+    std.options.logFn(level, scope, fmt ++ format, args);
+}
+
+const static = struct {
+    var hasstate: bool = false;
+    var state: *State = undefined;
+};
+
+pub inline fn state() *State {
+    std.debug.assert(static.hasstate);
+    return static.state;
+}
+
+pub fn setstate(s: *State) void {
+    static.hasstate = true;
+    static.state = s;
+}
+
+//-----------------------------------------------------------------------------
 
 test "all" {
     _ = std.testing.refAllDecls(@This());

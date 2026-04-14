@@ -1,3 +1,4 @@
+// TODO: use std.c.dlopen(path: ?[*:0]const u8, mode: either type)
 const std = @import("std");
 
 pub const CodeBlock = struct {

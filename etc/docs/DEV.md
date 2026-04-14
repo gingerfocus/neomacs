@@ -55,3 +55,29 @@ pub const lib = @import("lib/root.zig");
 ```
 
 Prefer accessing them via `root.ModuleName` rather than directly import.
+
+# Development
+see [TODO.md](./etc/docs/TODO.md) for random ideas I have.
+
+## Tests
+run all tests:
+```bash
+zig build test --summary all
+```
+
+## Lines of Code
+I want to limit the scope of this project. I have a hard cap of 10k lines of
+code and am currently at ~8500. This means I will likely have to do a great
+refactor or descoping soon.
+
+Lua code does not count.
+
+$ for f in $(find src/ -name '*.zig'); do echo "$(wc -l < $f)" "$f"; done
+
+$ find src/ -name '*.zig' | xargs cat | wc -l
+8555
+
+## Why
+I want to easily allow for complex rendering for plugins. In addition, by
+keeping the scope of the project low I think I can make a powerful editor.
+
