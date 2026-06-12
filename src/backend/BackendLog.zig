@@ -65,8 +65,8 @@ const thunk = struct {
             .Text => |ch| {
                 self.buffer[pos.row * WIDTH + pos.col] = ch;
             },
-            .Image => |_| {},
-            .Shader => |_| {},
+            .Image => {},
+            .Shader => {},
             .None => {},
         }
     }

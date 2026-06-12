@@ -95,14 +95,13 @@ pub fn init(
 ) !Buffer {
     var roper = try Rope.init(a, "");
 
-    if (std.fs.cwd().openFile(filename, .{})) |file| {
-        defer file.close();
+    if (std.Io.Dir.cwd().openFile(root.io, filename, .{})) |file| {
+        defer file.close(root.io);
 
-        while (true) {
-            const line = try file.reader().readUntilDelimiterOrEofAlloc(a, '\n', 128 * 1024) orelse break;
-            try roper.append(a, line);
-            try roper.append(a, "\n");
-        }
+        var rbuf: [4096]u8 = undefined;
+        var rd = file.reader(root.io, &rbuf);
+        const data = try rd.allocRemainingAlignedSentinel(a, 0, 128 * 1024);
+        try roper.append(a, data[0 .. data.len - 1]);
     } else |err| root.log(@src(), .debug, "failed to open file: {}", .{err});
 
     return Buffer{
@@ -198,14 +197,14 @@ pub fn getRowData(buffer: *const Buffer, row: usize) Rope.RowData {
     return buffer.content.getRowData(@intCast(row));
 }
 
-pub fn getLine(buffer: *const Buffer, row: usize) !std.ArrayList(u8) {
-    var result = std.ArrayList(u8).init(buffer.alloc);
+pub fn getLine(buffer: *const Buffer, row: usize) !std.ArrayListUnmanaged(u8) {
+    var result: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
     const line = buffer.getRowData(row);
     const len = line.end - line.beg;
     if (len == 0) return result;
-    var slice = buffer.content.chunks(line.beg, line.end);
+    var slice = try buffer.content.chunks(line.beg, line.end);
     while (slice.next()) |chunk| {
-        try result.appendSlice(chunk);
+        try result.appendSlice(buffer.alloc, chunk);
     }
     return result;
 }
@@ -275,13 +274,15 @@ pub fn moveLeft(buffer: *const Buffer, beg: lib.Vec2, count: usize) lib.Vec2 {
 pub fn save(buffer: *Buffer) !void {
     const filename = buffer.filename orelse return;
 
-    const f = try std.fs.cwd().createFile(filename, .{});
-    defer f.close();
+    const f = try std.Io.Dir.cwd().createFile(root.io, filename, .{});
+    defer f.close(root.io);
 
-    var chunks = buffer.content.chunks(0, buffer.content.getLen());
+    var chunks = try buffer.content.chunks(0, buffer.content.getLen());
+    var buf: [4096]u8 = undefined;
     while (chunks.next()) |chunk| {
-        try f.writeAll(chunk);
-        try f.writer().writeByte('\n');
+        var wr = f.writer(root.io, &buf);
+        try wr.interface.writeAll(chunk);
+        try wr.interface.writeByte('\n');
     }
 }
 
@@ -296,10 +297,10 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
     const targ = target.normalize();
 
     if (!buffer.undoing) {
-        const text_to_delete = buffer.getTarget(target) catch {
+        var text_to_delete = buffer.getTarget(target) catch {
             return;
         };
-        defer text_to_delete.deinit();
+        defer text_to_delete.deinit(buffer.alloc);
         buffer.undos.recordDelete(targ.beg, targ.end, text_to_delete.items) catch {};
     }
 
@@ -312,14 +313,14 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
             if (del_beg.row == del_end.row) std.debug.assert(del_beg.col <= del_end.col);
             const beg_index = getIndex(buffer, del_beg);
             const end_index = getIndex(buffer, del_end);
-            try buffer.content.delete(beg_index, end_index);
+            try buffer.content.delete(buffer.alloc, beg_index, end_index);
         },
         .Line => {
             del_beg = .{ .row = del_beg.row, .col = 0 };
             del_end = .{ .row = del_end.row + 1, .col = 0 };
             const beg_index = getIndex(buffer, del_beg);
             const end_index = getIndex(buffer, del_end);
-            try buffer.content.delete(beg_index, end_index);
+            try buffer.content.delete(buffer.alloc, beg_index, end_index);
         },
         .Block => {
             // TODO: implement some sort of multicursor for this
@@ -335,7 +336,7 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
                 if (sc < ec) {
                     const beg_idx = getIndex(buffer, .{ .row = start_row, .col = sc });
                     const end_idx = getIndex(buffer, .{ .row = start_row, .col = ec });
-                    try buffer.content.delete(beg_idx, end_idx);
+                    try buffer.content.delete(buffer.alloc, beg_idx, end_idx);
                 }
             } else {
                 var row = end_row;
@@ -346,7 +347,7 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
                     if (sc < ec) {
                         const beg_idx = getIndex(buffer, .{ .row = row, .col = sc });
                         const end_idx = getIndex(buffer, .{ .row = row, .col = ec });
-                        try buffer.content.delete(beg_idx, end_idx);
+                        try buffer.content.delete(buffer.alloc, beg_idx, end_idx);
                     }
                 }
                 {
@@ -356,7 +357,7 @@ pub fn text_delete(buffer: *Buffer, target: Visual) !void {
                     if (sc < ec) {
                         const beg_idx = getIndex(buffer, .{ .row = start_row, .col = sc });
                         const end_idx = getIndex(buffer, .{ .row = start_row, .col = ec });
-                        try buffer.content.delete(beg_idx, end_idx);
+                        try buffer.content.delete(buffer.alloc, beg_idx, end_idx);
                     }
                 }
             }
@@ -373,7 +374,7 @@ pub fn text_replace(buffer: *Buffer, target: Visual, ch: u8) !void {
     const start_index = getIndex(buffer, targ.beg);
     const end_index = getIndex(buffer, .{ .row = targ.end.row, .col = targ.end.col + 1 });
 
-    var chunks = buffer.content.chunks(start_index, end_index);
+    var chunks = try buffer.content.chunks(start_index, end_index);
     var buf: [256]u8 = undefined;
     var offset: usize = 0;
     while (chunks.next()) |chunk| {
@@ -382,7 +383,7 @@ pub fn text_replace(buffer: *Buffer, target: Visual, ch: u8) !void {
         offset += copy_len;
     }
 
-    try buffer.content.delete(start_index, end_index);
+    try buffer.content.delete(buffer.alloc, start_index, end_index);
     const replacement = buf[0..offset];
     try buffer.content.insert(buffer.alloc, start_index, replacement);
 }
@@ -397,36 +398,36 @@ pub fn text_change(buffer: *Buffer, target: Visual, text: []const u8) !void {
 
 /// I dont like this function as it is too vague, I think proviing a yank
 /// functionality might be it
-pub fn getTarget(buffer: *Buffer, target: Visual) !std.ArrayList(u8) {
+pub fn getTarget(buffer: *Buffer, target: Visual) !std.ArrayListUnmanaged(u8) {
     const targ = target.normalize();
 
-    var buf = std.ArrayList(u8).init(buffer.alloc);
+    var buf: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 };
 
     switch (targ.mode) {
         .Range => {
             const start_index = getIndex(buffer, targ.beg);
             const end_index = getIndex(buffer, targ.end);
-            var chunks = buffer.content.chunks(start_index, end_index);
+            var chunks = try buffer.content.chunks(start_index, end_index);
             while (chunks.next()) |chunk| {
-                try buf.appendSlice(chunk);
+                try buf.appendSlice(buffer.alloc, chunk);
             }
         },
         .Line => {
             for (targ.beg.row..targ.end.row + 1) |row| {
-                if (row > targ.beg.row) try buf.append('\n');
-                const line = try buffer.getLine(row);
-                defer line.deinit();
-                try buf.appendSlice(line.items);
+                if (row > targ.beg.row) try buf.append(buffer.alloc, '\n');
+                var line = try buffer.getLine(row);
+                defer line.deinit(buffer.alloc);
+                try buf.appendSlice(buffer.alloc, line.items);
             }
         },
         .Block => {
             for (targ.beg.row..targ.end.row + 1) |row| {
-                if (row > targ.beg.row) try buf.append('\n');
-                const line = try buffer.getLine(row);
-                defer line.deinit();
+                if (row > targ.beg.row) try buf.append(buffer.alloc, '\n');
+                var line = try buffer.getLine(row);
+                defer line.deinit(buffer.alloc);
                 const start = @min(targ.beg.col, line.items.len);
                 const end = @min(targ.end.col, line.items.len);
-                if (start < end) try buf.appendSlice(line.items[start..end]);
+                if (start < end) try buf.appendSlice(buffer.alloc, line.items[start..end]);
             }
         },
     }

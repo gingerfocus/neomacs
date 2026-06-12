@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn alloc(a: *std.mem.Allocator, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.C) ?*anyopaque {
+pub fn alloc(a: *std.mem.Allocator, ptr: ?*anyopaque, osize: usize, nsize: usize) callconv(.c) ?*anyopaque {
     std.log.info("alloc (ptr={*}, old={d}, new={d})", .{ ptr, osize, nsize });
 
     if (nsize == 0) {

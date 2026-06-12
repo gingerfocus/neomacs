@@ -19,7 +19,7 @@ pub const BackendType = union(enum) {
 pub const Operation = enum { None, Page, Terminal };
 
 const InputArgs = struct {
-    progname: [*:0]const u8,
+    progname: []const u8,
     help: ?[]const u8 = null,
     dosnapshot: ?[]const u8 = null,
 
@@ -42,43 +42,38 @@ const InputArgs = struct {
     config: ?[]const u8 = null,
 };
 
-pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
-    // TODO: std.process.args()
-    // const args = try std.process.argsAlloc(a);
-    // defer std.process.argsFree(a, args);
+pub fn parse(a: std.mem.Allocator, init: std.process.Init) !Args {
+    const argv = try init.minimal.args.toSlice(a);
+    defer a.free(argv);
+    var inputs = InputArgs{ .progname = argv[0] };
 
-    var i: usize = 0;
+    var files: std.ArrayListUnmanaged([]const u8) = .{ .items = &.{}, .capacity = 0 };
+    defer files.deinit(a);
 
-    var inputs = InputArgs{ .progname = args[i] };
-    i += 1;
-
-    var files = std.ArrayList([]const u8).init(a);
-    defer files.deinit();
-
-    while (i < args.len) {
-        const arg = mem.span(args[i]);
-        i += 1;
+    var i: usize = 1;
+    while (i < argv.len) : (i += 1) {
+        const arg = argv[i];
 
         if (arg.len == 0) continue;
 
         if (mem.eql(u8, arg, "-h")) {
-            inputs.help = try getHelpPage(a, "tutor");
+            inputs.help = try getHelpPage(a, init, "tutor");
             continue;
         }
 
         if (mem.eql(u8, arg, "--help")) {
-            if (i >= args.len) {
-                inputs.help = try getHelpPage(a, "tutor");
+            if (i >= argv.len) {
+                inputs.help = try getHelpPage(a, init, "tutor");
                 continue;
             }
-            inputs.help = try getHelpPage(a, args[i]);
+            inputs.help = try getHelpPage(a, init, argv[i]);
             i += 1;
             continue;
         }
 
         if (mem.eql(u8, arg, "-c") or mem.eql(u8, arg, "--config")) {
-            if (i >= args.len) continue;
-            inputs.config = try a.dupe(u8, std.mem.span(args[i]));
+            if (i >= argv.len) continue;
+            inputs.config = try a.dupe(u8, argv[i]);
             i += 1;
             continue;
         }
@@ -109,15 +104,15 @@ pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
         }
 
         if (mem.eql(u8, arg, "-R") or mem.eql(u8, arg, "--render-to-file")) {
-            if (i >= args.len) continue;
-            inputs.dosnapshot = try a.dupe(u8, std.mem.span(args[i]));
+            if (i >= argv.len) continue;
+            inputs.dosnapshot = try a.dupe(u8, argv[i]);
             i += 1;
             continue;
         }
 
         const narg = try a.dupe(u8, arg);
         // if it doesnt match an argument try to use it as a file
-        try files.append(narg);
+        try files.append(a, narg);
     }
 
     // -- Now Convert it to our output Args ----------------------------------
@@ -159,13 +154,13 @@ pub fn parse(a: std.mem.Allocator, args: []const [*:0]const u8) !Args {
     }
 
     if (inputs.help) |filename| {
-        try files.append(filename);
+        try files.append(a, filename);
     }
 
     return Args{
         .operation = operation,
         .backend = backend,
-        .files = try files.toOwnedSlice(),
+        .files = try files.toOwnedSlice(a),
     };
 }
 
@@ -179,12 +174,9 @@ pub fn deinit(self: Args, a: std.mem.Allocator) void {
     a.free(self.files);
 }
 
-fn getHelpPage(a: std.mem.Allocator, page: [*:0]const u8) ![]const u8 {
-    const env = std.posix.getenv("HOME") orelse return error.NoHome;
-
-    const help_page = try std.fmt.allocPrint(a, "{s}/.local/share/neomacs/help/{s}", .{ env, page });
-
-    return help_page;
+fn getHelpPage(a: std.mem.Allocator, init: std.process.Init, page: []const u8) ![]const u8 {
+    const home = init.environ_map.get("HOME") orelse return error.NoHome;
+    return try std.fmt.allocPrint(a, "{s}/.local/share/neomacs/help/{s}", .{ home, page });
 }
 
 // test "parse --terminal long option" {

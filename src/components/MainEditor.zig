@@ -30,9 +30,9 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
 
     var renderRow: usize = row_render_start;
     while (renderRow < buffer.numLines() and renderRow < row_render_start + view.h) : (renderRow += 1) {
-        const bufdata = buffer.getLine(renderRow) catch @panic("oom");
+        var bufdata = buffer.getLine(renderRow) catch @panic("oom");
         const items = bufdata.items;
-        defer bufdata.deinit();
+        defer bufdata.deinit(buffer.alloc);
 
         for (items, 0..) |ch, c| {
             writer.draw(
@@ -53,9 +53,9 @@ pub fn render(self: *anyopaque, state: *State, writer: *Backend, view: View) voi
             if (cur.row > end.row) break;
             if (cur.row == end.row and cur.col >= end.col) break;
 
-            const bufdata = buffer.getLine(cur.row) catch @panic("oom");
+            var bufdata = buffer.getLine(cur.row) catch @panic("oom");
             const items = bufdata.items;
-            defer bufdata.deinit();
+            defer bufdata.deinit(buffer.alloc);
 
             writer.draw(
                 .{ .col = @as(usize, @intCast(view.x)) + 1 + cur.col, .row = @as(usize, @intCast(view.y)) + cur.row - row_render_start },

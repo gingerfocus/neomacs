@@ -13,12 +13,12 @@
     },
     .dependencies = .{
         .terminal = .{
-            .url = "https://github.com/gingerfocus/thermit/archive/9dcbb096a0561b12850eaf452c2372af1502cbc7.tar.gz",
-            .hash = "thermit-0.1.0-wTQBCPCxAACMrHzjqEfbfvOHNI-lHuqIjYKm6OWm39zK",
+            .url = "https://github.com/gingerfocus/thermit/archive/6ee896bb90d377eb4d5a12ddfea08eb7ed38b694.tar.gz",
+            .hash = "thermit-0.1.0-wTQBCEizAADugpfYHoTIPKDci7NA2D5GAwVeGIbnHJbO",
         },
         .@"luajit-build" = .{
-            .url = "https://github.com/sackosoft/zig-luajit-build/archive/205386cedc14c919eaed387f9c12156c3ef3d43c.tar.gz",
-            .hash = "luajit_build-1.1.1-HFjoU2o7AABxdkMbYn4spnXyUICP5lnM9bqhx83JFAuw",
+            .url = "https://github.com/sackosoft/zig-luajit-build/archive/83801ee5c76938eb8704de6ae667437e63744588.tar.gz",
+            .hash = "luajit_build-1.1.8-HFjoU8lBAABZOIYvsm0OATsjlN0Fye4QYA86RuTy6uzl",
             .lazy = true,
         },
         .@"wgpu-native" = .{

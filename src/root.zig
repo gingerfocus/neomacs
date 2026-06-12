@@ -18,14 +18,18 @@ pub const zss = @import("zss.zig");
 pub const keys = @import("keys/root.zig");
 pub const alloc = @import("alloc.zig");
 
+pub var io: std.Io = undefined;
+
 //-----------------------------------------------------------------------------
 
-pub fn main() u8 {
+pub fn main(init: std.process.Init) u8 {
     alloc.init();
+    root.io = init.io;
+    scu.log.io = init.io;
 
-    defer if (scu.log.file) |file| file.close();
+    defer if (scu.log.file) |file| file.close(root.io);
 
-    neomacs() catch |err| {
+    neomacs(init) catch |err| {
         std.debug.print("Some unrecoverable error occorred. Check log file for details.\n", .{});
         root.log(@src(), .err, "Error: {}\n", .{err});
         if (@errorReturnTrace()) |stacktrace| {
@@ -47,20 +51,20 @@ pub fn main() u8 {
 
 //-----------------------------------------------------------------------------
 
-fn neomacs() !void {
+fn neomacs(init: std.process.Init) !void {
     const a = root.alloc.allocator();
 
     // root.log(@src(), .debug, "~~~~~~~=== starting (main void) =================~~~~~~~~~~~~~~~~~~~~~\n\n", .{});
 
-    const args = try Args.parse(a, std.os.argv);
+    const args = try Args.parse(a, init);
     defer args.deinit(a);
 
     // run just the terminal pager when comfigured to do so
     if (args.operation == .Page) {
         if (args.files.len != 1) return;
 
-        const f = std.fs.File{ .handle = try std.posix.open(args.files[0], .{}, 0) };
-        defer f.close();
+        const f = try std.Io.Dir.cwd().openFile(init.io, args.files[0], .{});
+        defer f.close(init.io);
         try zss.page(f);
         return;
     }

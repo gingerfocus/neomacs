@@ -24,26 +24,26 @@ pub fn galloc() *std.mem.Allocator {
 
 // ----------------------------------------------------------------------------
 
-fn malloc(size: usize) callconv(.C) ?*anyopaque {
+fn malloc(size: usize) callconv(.c) ?*anyopaque {
     // if (size == 0) return @as(*anyopaque, @ptrFromInt(math.maxInt(usize)));
 
     const ptr = galloc.rawAlloc(size, .@"1", @returnAddress()) orelse return null;
     return @as(*anyopaque, @ptrCast(ptr));
 }
 
-fn calloc(size: usize, count: usize) callconv(.C) ?*anyopaque {
+fn calloc(size: usize, count: usize) callconv(.c) ?*anyopaque {
     _ = count; // autofix
     _ = size; // autofix
     return null;
 }
 
-fn realloc(ptr: ?*anyopaque, size: usize) callconv(.C) ?*anyopaque {
+fn realloc(ptr: ?*anyopaque, size: usize) callconv(.c) ?*anyopaque {
     _ = ptr; // autofix
     _ = size; // autofix
     return null;
 }
 
-fn free(ptr: ?*anyopaque) callconv(.C) void {
+fn free(ptr: ?*anyopaque) callconv(.c) void {
     _ = ptr; // autofix
 }
 

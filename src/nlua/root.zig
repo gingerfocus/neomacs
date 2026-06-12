@@ -26,7 +26,7 @@ const sys = Lua.sys;
 //     return Lua.lua_error(L);
 // }
 
-fn nluaHelp(L: ?*Lua.State) callconv(.C) c_int {
+fn nluaHelp(L: ?*Lua.State) callconv(.c) c_int {
     sys.lua_getglobal(L, "neon");
     std.debug.assert(sys.lua_istable(L, -1));
 
@@ -48,7 +48,7 @@ fn nluaHelp(L: ?*Lua.State) callconv(.C) c_int {
     return 0;
 }
 
-fn nluaNotify(L: ?*Lua.State) callconv(.C) c_int {
+fn nluaNotify(L: ?*Lua.State) callconv(.c) c_int {
     // const n = luajitsys.lua_gettop(L);
     if (sys.lua_isstring(L, 1) != 0) {
         // TODO: error
@@ -66,7 +66,7 @@ fn nluaNotify(L: ?*Lua.State) callconv(.C) c_int {
 //
 // Returns true if the language is correctly loaded in the language map
 // int tslua_add_language(lua_State *L)
-fn tsLuaAddLanguage(L: ?*Lua.State) callconv(.C) c_int {
+fn tsLuaAddLanguage(L: ?*Lua.State) callconv(.c) c_int {
     const path = Lua.check(L, 1, []const u8) orelse return 0;
     const lang_name = Lua.check(L, 2, []const u8) orelse return 0;
     const symbol_name = Lua.check(L, 3, []const u8) orelse return 0;
@@ -142,7 +142,7 @@ fn tsLuaAddLanguage(L: ?*Lua.State) callconv(.C) c_int {
 // if (luajitsys.lua_isnumber(L, VAL_INDEX) != 0) return 0;
 // const val = luajitsys.lua_tonumber(L, VAL_INDEX); // val
 
-pub fn optNewIndex(L: ?*Lua.State) callconv(.C) c_int {
+pub fn optNewIndex(L: ?*Lua.State) callconv(.c) c_int {
     // const TBL = 1;
     const KEY = 2;
     const VAL = 3;
@@ -182,7 +182,7 @@ pub fn optNewIndex(L: ?*Lua.State) callconv(.C) c_int {
     return 0;
 }
 
-pub fn optIndex(L: ?*Lua.State) callconv(.C) c_int {
+pub fn optIndex(L: ?*Lua.State) callconv(.c) c_int {
     // const TBL = 1;
     const KEY = 2; // key
 
@@ -219,7 +219,7 @@ pub fn optIndex(L: ?*Lua.State) callconv(.C) c_int {
 //     root.log(@src(), .warn, "callback", .{});
 //     return xev.CallbackAction.disarm;
 // }
-// fn nluaUiInput(L: ?*Lua.State) callconv(.C) c_int {
+// fn nluaUiInput(L: ?*Lua.State) callconv(.c) c_int {
 //     root.log(@src(), .debug, "ui.input", .{});
 //
 //     const s = root.state();
@@ -236,7 +236,7 @@ pub fn optIndex(L: ?*Lua.State) callconv(.C) c_int {
 //     return 0;
 // }
 
-fn nluaWinOpen(L: ?*Lua.State) callconv(.C) c_int {
+fn nluaWinOpen(L: ?*Lua.State) callconv(.c) c_int {
     _ = L;
     // local win_id = vim.api.nvim_open_win(
     //      bufnr, -- buf id
@@ -259,12 +259,12 @@ fn nluaWinOpen(L: ?*Lua.State) callconv(.C) c_int {
 // luajitsys.lua_newuserdata();
 
 /// Unpretty print, emulates default print function but just changes output
-pub fn print(L: ?*Lua.State) callconv(.C) c_int {
+pub fn print(L: ?*Lua.State) callconv(.c) c_int {
     const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
-    var nbuf = std.ArrayList(u8).initCapacity(a, 80) catch unreachable;
-    defer nbuf.deinit();
+    var nbuf = std.ArrayListUnmanaged(u8).initCapacity(a, 80) catch unreachable;
+    defer nbuf.deinit(a);
 
     sys.lua_getglobal(L, "tostring");
 
@@ -312,13 +312,13 @@ fn printError(L: ?*Lua.State, idx: c_int, msg: []const u8) c_int {
     return sys.lua_error(L);
 }
 
-fn nluaKeymapDel(L: ?*Lua.State) callconv(.C) c_int {
+fn nluaKeymapDel(L: ?*Lua.State) callconv(.c) c_int {
     root.log(@src(), .info, "neomacs.keymap.del not implemented", .{});
     _ = L; // autofix
     return 0;
 }
 
-fn nluaKeymapSet(L: ?*Lua.State) callconv(.C) c_int {
+fn nluaKeymapSet(L: ?*Lua.State) callconv(.c) c_int {
     root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
     _ = L; // autofix
     return 0;
@@ -326,7 +326,7 @@ fn nluaKeymapSet(L: ?*Lua.State) callconv(.C) c_int {
 
 /// Pretty print
 /// vim.print
-pub fn prettyPrint(L: ?*Lua.State) callconv(.C) c_int {
+pub fn prettyPrint(L: ?*Lua.State) callconv(.c) c_int {
     const nargs = sys.lua_gettop(L);
 
     const a = std.heap.c_allocator;
@@ -336,6 +336,7 @@ pub fn prettyPrint(L: ?*Lua.State) callconv(.C) c_int {
 
     var state = PrintState{
         .buf = &nbuf,
+        .a = a,
         .indent = 0,
         .functionCount = 0,
     };
@@ -352,7 +353,8 @@ pub fn prettyPrint(L: ?*Lua.State) callconv(.C) c_int {
 
 const PrintState = struct {
     indent: usize,
-    buf: *std.ArrayList(u8),
+    a: std.mem.Allocator,
+    buf: *std.ArrayListUnmanaged(u8),
     functionCount: usize,
 };
 
@@ -360,7 +362,7 @@ fn neomacsPrintInner(L: ?*Lua.State, idx: c_int, state: *PrintState) !void {
     const ty = sys.lua_type(L, idx);
 
     switch (ty) {
-        sys.LUA_TNIL => try state.buf.appendSlice("nil"),
+        sys.LUA_TNIL => try state.buf.appendSlice(state.a, "nil"),
         sys.LUA_TSTRING => {
             var len: usize = undefined;
             const ptr = sys.lua_tolstring(L, idx, &len);

@@ -1,16 +1,7 @@
 {
   inputs.nixpkgs.url = "nixpkgs"; # "nixpkgs";
-  inputs.zig.url = "github:mitchellh/zig-overlay/6f9a3c160daca2a701a638a7ea7b0e675c1a1848";
-  inputs.zig.inputs.nixpkgs.follows = "nixpkgs";
-  # inputs.zls.url = "github:zigtools/zls/7485feeeda45d1ad09422ae83af73307ab9e6c9e";
-  # inputs.zls.inputs.nixpkgs.follows = "nixpkgs";
 
-  outputs = {
-    self,
-    nixpkgs,
-    zig,
-    # zls,
-  }: let
+  outputs = { self, nixpkgs }: let
     lib = nixpkgs.lib;
     systems = ["aarch64-linux" "x86_64-linux"];
     eachSystem = f:
@@ -30,10 +21,10 @@
       neon = self.packages."${system}";
     in {
       devShells.default = pkgs.mkShell {
-        inputsFrom = with neon; [neomacs zss];
+        inputsFrom = with neon; [neomacs];
 
         packages =
-          [
+          with pkgs; [
             pkgs.pkg-config
             pkgs.zon2nix
 
@@ -50,15 +41,11 @@
             pkgs.lua-language-server
             pkgs.cloc
             # wgpu-utils
-            pkgs.zls_0_14
+            # pkgs.zls_0_14
 
             # For Kennel linking
             # quickjs
             # python3
-          ]
-          ++ [
-            zig.packages."${system}"."0.14.0"
-            # zls.packages."${system}".default
           ];
 
         # HACK: Allow for local development despite presence of zig.hook
@@ -74,7 +61,6 @@
       packages = {
         default = neon.neomacs;
         neomacs = pkgs.callPackage ./neomacs.nix {};
-        zss = pkgs.callPackage ./zss.nix {};
       };
     });
 }

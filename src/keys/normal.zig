@@ -696,15 +696,18 @@ const functions = struct {
         _ = state.takeRepeating();
         const buffer = state.getCurrentBuffer();
         if (buffer.target) |target| {
-            const selection = try buffer.getTarget(target);
-            defer selection.deinit();
+            var selection = try buffer.getTarget(target);
+            defer selection.deinit(buffer.alloc);
 
             root.log(@src(), .debug, "yank: {s}", .{selection.items});
 
             // TODO: the wayland server supplies this but i dont want to worry
             // about that
-            var child = std.process.Child.init(&.{ "wl-copy", selection.items }, state.a);
-            try child.spawn();
+            var child = std.process.spawn(root.io, .{ .allocator = state.a, .argv = &.{ "wl-copy", selection.items } }) catch {
+                root.log(@src(), .err, "failed to spawn wl-copy", .{});
+                buffer.target = null;
+                return;
+            };
             _ = try child.wait();
 
             // TODO: this should reset by something else

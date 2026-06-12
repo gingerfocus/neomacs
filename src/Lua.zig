@@ -233,7 +233,7 @@ pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
             }
             return A;
         },
-        .pointer => |_| switch (T) {
+        .pointer => switch (T) {
             *anyopaque => {
                 return sys.lua_topointer(L, idx);
             },
@@ -260,7 +260,7 @@ pub fn check(L: ?*InnerState, idx: c_int, comptime T: type) ?T {
 
 pub fn wrap(comptime func: fn (L: *InnerState) anyerror!c_int) sys.lua_CFunction {
     return struct {
-        fn thunk(lua: ?*InnerState) callconv(.C) c_int {
+        fn thunk(lua: ?*InnerState) callconv(.c) c_int {
             const L = lua orelse unreachable;
 
             return func(L) catch |err| {

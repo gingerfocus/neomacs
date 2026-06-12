@@ -3,7 +3,7 @@ const std = @import("std");
 const root = @import("../root.zig");
 const Lua = root.Lua;
 
-pub fn write(_: ?*Lua.State) callconv(.C) c_int {
+pub fn write(_: ?*Lua.State) callconv(.c) c_int {
     const state = root.state();
 
     const buffer = state.getCurrentBuffer();
@@ -16,7 +16,7 @@ pub fn write(_: ?*Lua.State) callconv(.C) c_int {
     return 0;
 }
 
-pub fn open(L: ?*Lua.State) callconv(.C) c_int {
+pub fn open(L: ?*Lua.State) callconv(.c) c_int {
     const state = root.state();
 
     root.log(@src(), .err, "opne", .{});
@@ -44,23 +44,23 @@ pub fn open(L: ?*Lua.State) callconv(.C) c_int {
     return 0;
 }
 
-pub fn next(_: ?*Lua.State) callconv(.C) c_int {
+pub fn next(_: ?*Lua.State) callconv(.c) c_int {
     root.state().bufferNext();
     return 0;
 }
 
-pub fn prev(_: ?*Lua.State) callconv(.C) c_int {
+pub fn prev(_: ?*Lua.State) callconv(.c) c_int {
     root.state().bufferPrev();
     return 0;
 }
 
-pub fn name(L: ?*Lua.State) callconv(.C) c_int {
+pub fn name(L: ?*Lua.State) callconv(.c) c_int {
     const state = root.state();
     const buffer = state.getCurrentBuffer();
     Lua.push(L, buffer.filename orelse "*unnamed*");
     return 1;
 }
 
-pub fn create(_: ?*Lua.State) callconv(.C) c_int {
+pub fn create(_: ?*Lua.State) callconv(.c) c_int {
     @panic("not implemented");
 }

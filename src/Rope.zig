@@ -47,6 +47,10 @@ dataLength: Index = 0,
 /// This nodes contribution to [`newlines`].
 dataLines: u64 = 0,
 
+pub fn create(alloc: std.mem.Allocator, bytes: []const u8) !*Rope {
+    return Rope.init(alloc, bytes);
+}
+
 /// Creates a new tree with initial content.
 ///
 /// Uses recursion.
@@ -108,7 +112,7 @@ pub fn deinit(self: *Rope, alloc: std.mem.Allocator) void {
 
 /// Total amount of characters in left subtree
 pub fn weight(self: *const Rope) u64 {
-    if (self.childern[0]) |left| left.length else 0;
+    return if (self.childern[0]) |left| left.length else 0;
 }
 
 /// Gets the length in bytes of the Rope
@@ -128,54 +132,57 @@ pub fn getLineCount(self: *const Rope) u64 {
 /// Gets the byte range for a given row index.
 ///
 /// Returns the start and end byte positions of the row.
-/// If the row index is out of bounds, returns the last row's data.
+/// If the row index is out of bounds, returns the last valid row's data.
 /// Time complexity: O(log n).
 pub fn getRowData(self: *const Rope, row: u64) RowData {
-    _ = self;
-    _ = row;
+    if (self.length == 0) return RowData{ .beg = 0, .end = 0 };
 
-    @panic("todo");
+    const clamped_row = @min(row, self.newlines);
 
-    // if (self.rnode == null) {
-    //     return RowData{ .beg = 0, .end = 0 };
-    // }
+    const beg = if (clamped_row == 0) @as(u64, 0) else self.findNewlinePos(clamped_row -| 1) + 1;
+    const end = if (clamped_row >= self.newlines) self.length else self.findNewlinePos(clamped_row);
 
-    // const totalLines = self.rnode.?.internalLines;
-    // const clampedRow = if (row > totalLines) totalLines else row;
+    return RowData{ .beg = beg, .end = end };
+}
 
-    // var currentRow: u64 = 0;
-    // var byteOffset: u64 = 0;
+fn findNewlinePos(self: *const Rope, nth: u64) u64 {
+    std.debug.assert(nth < self.newlines);
+    var current = self;
+    var remaining: u64 = nth;
+    var byte_offset: u64 = 0;
 
-    // var stack: [64]*Rope = undefined;
-    // var sp: usize = 0;
+    while (true) {
+        if (current.childern[0]) |l| {
+            if (remaining < l.newlines) {
+                current = l;
+                continue;
+            }
+            remaining -= l.newlines;
+            byte_offset += l.length;
+        }
 
-    // stack[sp] = self.rnode.?;
-    // sp += 1;
+        if (remaining < current.dataLines) {
+            const buf = current.data();
+            var count: u64 = 0;
+            for (buf, 0..) |ch, i| {
+                if (ch == '\n') {
+                    if (count == remaining) {
+                        return byte_offset + @as(u64, @intCast(i));
+                    }
+                    count += 1;
+                }
+            }
+            unreachable;
+        }
+        remaining -= current.dataLines;
+        byte_offset += current.dataLength;
 
-    // while (sp > 0) {
-    //     sp -= 1;
-    //     const node = stack[sp];
-
-    //     if (node.childern[0]) |l| {
-    //         stack[sp] = node.childern[1].?;
-    //         sp += 1;
-    //         stack[sp] = l;
-    //         sp += 1;
-    //         continue;
-    //     }
-
-    //     if (node.childern[1]) |r| {
-    //         stack[sp] = r;
-    //         sp += 1;
-    //     }
-    // }
-
-    // return RowData{ .beg = 0, .end = self.rnode.?.contentSize };
+        current = current.childern[1].?;
+    }
 }
 
 pub fn empty(self: *const Rope) bool {
-    // return self.length == 0;
-    return self.dataLength == 0;
+    return self.length == 0;
 }
 
 pub fn append(self: *Rope, alloc: std.mem.Allocator, string: []const u8) !void {
@@ -212,11 +219,101 @@ pub fn merge(self: *Rope, other: *Rope) !void {
 /// and including the index will be returned as a new rope.
 ///
 /// On out-of-memory error, the rope is not modified.
-pub fn split(self: *Rope, index: u64) !*Rope {
-    _ = self;
-    _ = index;
+pub fn split(self: *Rope, alloc: std.mem.Allocator, index: u64) !*Rope {
+    std.debug.assert(index <= self.length);
 
-    @panic("TODO");
+    if (index == self.length) {
+        return Rope.init(alloc, "");
+    }
+
+    if (index == 0) {
+        const right = try alloc.create(Rope);
+        right.* = self.*;
+        right.parent = null;
+        self.* = .{};
+        return right;
+    }
+
+    // Find the leaf node containing position `index` within local data
+    const split_node, const pos_in_data = findLeafAndPos(self, index);
+    const local: usize = @intCast(pos_in_data);
+
+    // Build the right-side rope from everything at and after the split point
+    const right = try alloc.create(Rope);
+    errdefer alloc.destroy(right);
+    right.* = .{};
+
+    const right_data = split_node.dataBuffer[local..split_node.dataLength];
+    @memcpy(right.dataBuffer[0..right_data.len], right_data);
+    right.dataLength = right_data.len;
+    right.dataLines = @intCast(std.mem.count(u8, right_data, "\n"));
+
+    split_node.dataLength = local;
+    split_node.dataLines = @intCast(std.mem.count(u8, split_node.dataBuffer[0..local], "\n"));
+
+    // right gets split_node's old right subtree
+    if (split_node.childern[1]) |rc| {
+        rc.parent = right;
+    }
+    right.childern[1] = split_node.childern[1];
+    split_node.childern[1] = null;
+    right.update();
+
+    // Walk up: for ancestors where split_node was reached via left child,
+    // move ancestor's data and right subtree to the right side
+    var node: *Rope = split_node;
+    while (node.parent) |pa| {
+        const is_left_child = pa.childern[0] == node;
+        node = pa;
+
+        if (is_left_child) {
+            // pa's data and right subtree are >= index
+            if (pa.childern[1]) |rc| {
+                rc.parent = null;
+                pa.childern[1] = null;
+                const data_frag = try Rope.init(alloc, pa.data());
+                errdefer data_frag.deinit(alloc);
+                try right.merge(data_frag);
+                try right.merge(rc);
+                pa.dataLength = 0;
+                pa.dataLines = 0;
+            } else if (pa.dataLength > 0) {
+                const data_frag = try Rope.init(alloc, pa.data());
+                errdefer data_frag.deinit(alloc);
+                try right.merge(data_frag);
+                pa.dataLength = 0;
+                pa.dataLines = 0;
+            }
+        }
+    }
+
+    // Update all ancestors from the split point to root
+    var upd: *Rope = split_node;
+    while (true) {
+        upd.update();
+        upd = upd.parent orelse break;
+    }
+
+    return right;
+}
+
+fn findLeafAndPos(self: *Rope, index: u64) struct { *Rope, u64 } {
+    var current = self;
+    var remaining: u64 = index;
+
+    while (true) {
+        const w = current.weight();
+        if (remaining < w) {
+            current = current.childern[0].?;
+            continue;
+        }
+        const local = remaining - w;
+        if (local < current.dataLength) {
+            return .{ current, local };
+        }
+        remaining = local - current.dataLength;
+        current = current.childern[1].?;
+    }
 }
 
 /// Insert bytes at the given index. Invalid indices are clamped to valid range.
@@ -227,14 +324,14 @@ pub fn insert(self: *Rope, alloc: std.mem.Allocator, index: u64, bytes: []const 
     const rlen = self.getLen();
     const effective_index = if (index > rlen) rlen else index;
 
-    var other = try Rope.init(alloc, bytes);
-    errdefer other.destroy();
+    const other = try Rope.init(alloc, bytes);
+    errdefer alloc.destroy(other);
 
     if (effective_index == rlen) {
         try self.merge(other);
     } else {
-        var righthand = try self.split(effective_index);
-        errdefer righthand.destroy();
+        var righthand = try self.split(alloc, effective_index);
+        errdefer righthand.deinit(alloc);
         try self.merge(other);
 
         // TODO: if this fails it is UB to destroy the other rope
@@ -245,7 +342,7 @@ pub fn insert(self: *Rope, alloc: std.mem.Allocator, index: u64, bytes: []const 
 /// Delete a range of bytes from a rope.
 /// Invalid indices are clamped to valid range. Errors are logged and operation
 /// may be partially complete.
-pub fn delete(self: *Rope, beg: usize, end: usize) !void {
+pub fn delete(self: *Rope, alloc: std.mem.Allocator, beg: usize, end: usize) !void {
     const rlen = self.getLen();
     const effective_beg = if (beg > rlen) rlen else beg;
     const effective_end = if (end > rlen) rlen else end;
@@ -253,13 +350,13 @@ pub fn delete(self: *Rope, beg: usize, end: usize) !void {
     if (effective_beg >= effective_end) return;
 
     var emptyRope = Rope{};
-    try self.splice(&emptyRope, effective_beg, effective_end);
-    // emptyRope.deinit(a);
+    try self.splice(alloc, &emptyRope, effective_beg, effective_end);
 }
 
 /// Swap the bytes of the subrange of a rope with another rope.
 pub fn splice(
     self: *Rope,
+    alloc: std.mem.Allocator,
     /// The input and output rope
     swap: *Rope,
     /// The start index of the swap
@@ -271,8 +368,8 @@ pub fn splice(
     std.debug.assert(end <= self.getLen());
     std.debug.assert(beg <= end);
 
-    const content = try self.split(beg);
-    const tail = try content.split(end - beg);
+    const content = try self.split(alloc, beg);
+    const tail = try content.split(alloc, end - beg);
 
     std.mem.swap(Rope, content, swap);
 
@@ -284,40 +381,79 @@ pub fn splice(
 
 /// Get a byte of the rope.
 pub fn get(self: *const Rope, i: u64) ?u8 {
-    _ = self;
-    _ = i;
+    if (i >= self.length) return null;
 
-    @panic("TODO");
+    var current = self;
+    var remaining: u64 = i;
+
+    while (true) {
+        const w = current.weight();
+        if (remaining < w) {
+            current = current.childern[0].?;
+            continue;
+        }
+        const local = remaining - w;
+        if (local < current.dataLength) {
+            return current.dataBuffer[local];
+        }
+        remaining = local - current.dataLength;
+        current = current.childern[1].?;
+    }
+}
+
+/// Write the rope content to a writer.
+pub fn writeTo(self: *const Rope, writer: anytype) !void {
+    if (self.childern[0]) |l| try l.writeTo(writer);
+    try writer.writeAll(self.data());
+    if (self.childern[1]) |r| try r.writeTo(writer);
 }
 
 /// Write the rope to a stream as chunks
-pub fn format(self: *Rope, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
-    _ = self;
+pub fn format(self: *const Rope, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
     _ = fmt;
     _ = options;
-    _ = writer;
-
-    @panic("TODO");
+    try self.writeTo(writer);
 }
 
-/// Iterator over data in the rope.
-pub fn chunks(self: *const Rope, beg: usize, end: usize) Chunks {
-    _ = self;
-    _ = beg;
-    _ = end;
-
-    @panic("TODO");
+/// Iterator over contiguous chunks of data in the rope range [beg, end).
+pub fn chunks(self: *const Rope, beg: u64, end: u64) !Chunks {
+    return Chunks.init(self, beg, end);
 }
 
 pub const Chunks = struct {
-    rope: *Rope,
-    beg: usize,
-    end: usize,
+    rope: *const Rope,
+    beg: u64,
+    end: u64,
+    pos: u64,
 
-    var static: [128]u8 = undefined;
-    pub fn next(self: *Chunks) ?[]u8 {
-        _ = self;
-        @panic("TODO");
+    pub fn init(rope: *const Rope, beg: u64, end: u64) !Chunks {
+        std.debug.assert(beg <= end);
+        std.debug.assert(end <= rope.length);
+        return Chunks{ .rope = rope, .beg = beg, .end = end, .pos = beg };
+    }
+
+    pub fn next(self: *Chunks) ?[]const u8 {
+        if (self.pos >= self.end) return null;
+
+        const current_pos = self.pos;
+        var found_pos: u64 = current_pos;
+        var current = self.rope;
+        while (true) {
+            const w = current.weight();
+            if (found_pos < w) {
+                current = current.childern[0].?;
+                continue;
+            }
+            const local = found_pos - w;
+            if (local < current.dataLength) {
+                const start_within: usize = @intCast(local);
+                const max_end: usize = @intCast(@min(self.end, current_pos + (current.dataLength - local)));
+                self.pos = current_pos + (max_end - start_within);
+                return current.dataBuffer[start_within..max_end];
+            }
+            found_pos = local - current.dataLength;
+            current = current.childern[1].?;
+        }
     }
 };
 
@@ -348,7 +484,7 @@ fn rot(self: *Rope) void {
     self.update();
 }
 
-fn data(self: *Rope) []u8 {
+fn data(self: *const Rope) []const u8 {
     return self.dataBuffer[0..self.dataLength];
 }
 
@@ -361,12 +497,12 @@ fn update(self: *Rope) void {
 
     if (self.childern[0]) |l| {
         self.length += l.length;
-        self.newlines = l.newlines;
+        self.newlines += l.newlines;
     }
 
     if (self.childern[1]) |r| {
         self.length += r.length;
-        self.newlines = r.newlines;
+        self.newlines += r.newlines;
     }
 }
 
@@ -393,13 +529,10 @@ fn splay(self: *Rope) void {
 const testing = std.testing;
 
 test "rope getRowData for 3 lines debug" {
-    if (true) return error.SkipZigTest;
-
     const a = testing.allocator;
     var r = try Rope.init(a, "line1\nline2\nline3");
     defer r.deinit(a);
 
-    // This test will show the actual row data in the test output
     const row0 = r.getRowData(0);
     try testing.expectEqual(@as(u64, 0), row0.beg);
     try testing.expectEqual(@as(u64, 5), row0.end);
@@ -410,8 +543,6 @@ test "rope getRowData for 3 lines debug" {
 }
 
 test "rope getRowData empty" {
-    if (true) return error.SkipZigTest;
-
     const a = testing.allocator;
     var rope = try Rope.init(a, "");
     defer rope.deinit(a);
@@ -422,13 +553,10 @@ test "rope getRowData empty" {
 }
 
 test "rope getRowData single line" {
-    if (true) return error.SkipZigTest;
-
     const a = testing.allocator;
     var rope = try Rope.init(a, "hello");
     defer rope.deinit(a);
 
-    // getLineCount returns newline count (0 newlines in "hello")
     try testing.expectEqual(@as(u64, 0), rope.getLineCount());
 
     const row0 = rope.getRowData(0);
@@ -441,13 +569,10 @@ test "rope getRowData single line" {
 }
 
 test "rope getRowData multiple lines" {
-    if (true) return error.SkipZigTest;
-
     const a = testing.allocator;
     var rope = try Rope.init(a, "hello\nworld\nfoo");
     defer rope.deinit(a);
 
-    // 2 newlines = 3 lines
     try testing.expectEqual(@as(u64, 2), rope.getLineCount());
 
     const row0 = rope.getRowData(0);
@@ -464,13 +589,11 @@ test "rope getRowData multiple lines" {
 }
 
 test "rope getRowData with newlines at end" {
-    if (true) return error.SkipZigTest;
-
     const a = testing.allocator;
     var rope = try Rope.init(a, "line1\nline2\n");
     defer rope.deinit(a);
 
-    try testing.expectEqual(@as(u64, 3), rope.getLineCount());
+    try testing.expectEqual(@as(u64, 2), rope.getLineCount());
 
     const row0 = rope.getRowData(0);
     try testing.expectEqual(@as(u64, 0), row0.beg);
@@ -478,7 +601,6 @@ test "rope getRowData with newlines at end" {
 
     const row1 = rope.getRowData(1);
     try testing.expectEqual(@as(u64, 6), row1.beg);
-    // "line2" is 5 chars, so end = 6 + 5 = 11
     try testing.expectEqual(@as(u64, 11), row1.end);
 }
 
@@ -487,16 +609,15 @@ test "rope getRowData after insert" {
     var rope = try Rope.init(a, "abc\ndef");
     defer rope.deinit(a);
 
-    // 1 newline = 2 lines
     try testing.expectEqual(@as(u64, 1), rope.getLineCount());
 
-    // const row0 = rope.getRowData(0);
-    // try testing.expectEqual(@as(u64, 0), row0.beg);
-    // try testing.expectEqual(@as(u64, 3), row0.end);
+    const row0 = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 3), row0.end);
 
-    // const row1 = rope.getRowData(1);
-    // try testing.expectEqual(@as(u64, 4), row1.beg);
-    // try testing.expectEqual(@as(u64, 7), row1.end);
+    const row1 = rope.getRowData(1);
+    try testing.expectEqual(@as(u64, 4), row1.beg);
+    try testing.expectEqual(@as(u64, 7), row1.end);
 }
 
 test "rope getRowData after delete" {
@@ -506,14 +627,12 @@ test "rope getRowData after delete" {
 
     try testing.expectEqual(@as(u64, 4), rope.getLineCount());
 
-    // try rope.delete(5, 6);
-    // try testing.expectEqual(@as(u64, 3), rope.getLineCount());
+    try rope.delete(a, 5, 6);
+    try testing.expectEqual(@as(u64, 3), rope.getLineCount());
 
-    // // After deleting the newline, we should have "helloworld" with 0 newlines
-    // // But due to potential issues, just verify row data is consistent
-    // const row0 = rope.getRowData(0);
-    // try testing.expectEqual(@as(u64, 0), row0.beg);
-    // try testing.expectEqual(@as(u64, 10), row0.end);
+    const row0 = rope.getRowData(0);
+    try testing.expectEqual(@as(u64, 0), row0.beg);
+    try testing.expectEqual(@as(u64, 10), row0.end);
 }
 
 test "line count of long long string" {

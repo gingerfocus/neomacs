@@ -2,7 +2,7 @@ const root = @import("../root.zig");
 const Lua = root.Lua;
 const std = @import("std");
 
-pub fn del(L: ?*Lua.State) callconv(.C) c_int {
+pub fn del(L: ?*Lua.State) callconv(.c) c_int {
     root.log(@src(), .info, "neomacs.keymap.del not implemented", .{});
     // Lua.check();
     _ = L; // autofix
@@ -19,7 +19,7 @@ fn getFunction(L: ?*Lua.State, idx: c_int) void {
 const km = root.km;
 
 // vim.keyapi.set(mode, lhs, rhs, opts)
-pub fn set(L: ?*Lua.State) callconv(.C) c_int {
+pub fn set(L: ?*Lua.State) callconv(.c) c_int {
     // root.log(@src(), .info, "neomacs.keymap.set not implemented", .{});
 
     const modestr = Lua.check(L, 1, []const u8) orelse {

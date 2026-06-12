@@ -2,7 +2,7 @@
   lib,
   stdenv,
   callPackage,
-  zig,
+  # zig,
   luajit,
   tree-sitter,
   tree-sitter-grammars,
@@ -22,7 +22,7 @@ stdenv.mkDerivation {
   pname = "neomacs";
   version = "0.1.0";
 
-  src = ./..;
+  src = ./../..;
 
   buildInputs = [
     ## Basic Dependencies
@@ -50,6 +50,6 @@ stdenv.mkDerivation {
     # tree-sitter-grammars.tree-sitter-zig
   ];
 
-  nativeBuildInputs = [zig.hook];
-  zigBuildFlags = ["--system" "${callPackage ./neomacs-zig-zon.nix {}}" "-Dstatic=false"];
+  # nativeBuildInputs = [zig.hook];
+  # zigBuildFlags = ["--system" "${callPackage ./neomacs-zig-zon.nix {}}" "-Dstatic=false"];
 }

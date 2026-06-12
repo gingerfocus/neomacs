@@ -44,7 +44,7 @@ keymaps: *km.Keymap,
 
 components: std.AutoArrayHashMapUnmanaged(usize, Mountable) = .{},
 
-commandbuffer: std.ArrayListUnmanaged(u8) = .{},
+commandbuffer: std.ArrayListUnmanaged(u8) = .{ .items = &.{}, .capacity = 0 },
 
 resized: bool = false,
 
@@ -58,7 +58,7 @@ pub fn init(a: std.mem.Allocator, args: Args) anyerror!State {
     // stdout or a file
 
     if (backend.stdout) {
-        const logFile = std.fs.cwd().createFile("neomacs.log", .{}) catch null;
+        const logFile = std.Io.Dir.cwd().createFile(root.io, "neomacs.log", .{}) catch null;
         scu.log.file = logFile;
 
         root.log(@src(), .info, "using stdout backend", .{});

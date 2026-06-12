@@ -52,11 +52,11 @@ const thunk = struct {
         if (node.foreground) |fg| cell.fg = fg;
         switch (node.content) {
             .Text => |ch| cell.symbol = ch,
-            .Image => |_| {
+            .Image => {
                 root.log(@src(), .warn, "cant draw images on terminal backend", .{});
                 cell.symbol = '';
             },
-            .Shader => |_| {},
+            .Shader => {},
             .None => {},
         }
 
